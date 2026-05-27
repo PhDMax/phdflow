@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Generated CSS (rebuild with: npm run build:css)
+src/tailwind.out.css
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# User data (stored in AppData, never in project folder)
+data/
+
+# Claude Code internal files
+.claude/
+
+# Electron logs
+electron-log.txt
+*.log

@@ -1,0 +1,73 @@
+{
+  "name": "phd-command-center",
+  "version": "0.3.0",
+  "description": "The PhD Command Center — free, local-first research tool",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --inspect",
+    "build:css": "npx @tailwindcss/cli -i src/input.css -o src/tailwind.out.css --minify",
+    "build": "npm run build:css && electron-builder --win"
+  },
+  "dependencies": {
+    "nodemailer": "^8.0.9",
+    "pdf-lib": "^1.17.1",
+    "pdf-parse": "^1.1.1",
+    "rss-parser": "^3.13.0"
+  },
+  "author": "PhDFlow",
+  "license": "MIT",
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.0",
+    "electron": "^35.0.0",
+    "electron-builder": "^26.8.1",
+    "tailwindcss": "^4.3.0"
+  },
+  "build": {
+    "appId": "com.phdflow.commandcenter",
+    "productName": "PhD Command Center",
+    "copyright": "Copyright © 2025 PhDFlow",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "node_modules/**/*",
+      "!node_modules/electron/**/*",
+      "!node_modules/electron-builder/**/*",
+      "!node_modules/@tailwindcss/**/*",
+      "!node_modules/tailwindcss/**/*",
+      "!src/input.css"
+    ],
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "PhD Command Center"
+    },
+    "portable": {
+      "artifactName": "PhD-Command-Center-Portable-${version}.exe"
+    }
+  }
+}

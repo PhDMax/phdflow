@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: https:; connect-src https: wss:"/>
+  <title>PhD Command Center</title>
+  <link rel="stylesheet" href="tailwind.out.css"/>
+  <!-- marked.js for markdown notes — bundled locally -->
+  <script src="marked.min.js"></script>
+  <style>
+    *{box-sizing:border-box}
+    body{font-family:'Segoe UI',system-ui,sans-serif}
+    .nav-btn.active{background:#3730a3;color:white}
+    .nav-btn:not(.active):hover{background:#1e293b;color:#e2e8f0}
+    .nav-section{color:#64748b;font-size:.65rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:.5rem .75rem .25rem}
+    ::-webkit-scrollbar{width:5px;height:5px}
+    ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px}
+    ::-webkit-scrollbar-track{background:transparent}
+    #toast{transition:opacity .3s ease}
+    .badge-high{background:#dcfce7;color:#166534}
+    .badge-mid{background:#fef9c3;color:#854d0e}
+    .badge-low{background:#fee2e2;color:#991b1b}
+    .badge-none{background:#f1f5f9;color:#475569}
+    .prose h1,.prose h2,.prose h3{font-weight:700;margin:.75rem 0 .35rem}
+    .prose h1{font-size:1.4rem}.prose h2{font-size:1.2rem}.prose h3{font-size:1rem}
+    .prose p{margin:.4rem 0;line-height:1.6}
+    .prose code{background:#f1f5f9;padding:.1rem .35rem;border-radius:.25rem;font-size:.85em;font-family:monospace}
+    .prose pre{background:#1e293b;color:#e2e8f0;padding:1rem;border-radius:.5rem;overflow-x:auto;margin:.75rem 0}
+    .prose pre code{background:none;padding:0;color:inherit}
+    .prose ul,.prose ol{padding-left:1.5rem;margin:.4rem 0}
+    .prose li{margin:.2rem 0}
+    .prose blockquote{border-left:3px solid #6366f1;padding-left:.75rem;color:#64748b;margin:.5rem 0}
+    .drop-zone.dragover{border-color:#6366f1;background:#eef2ff}
+    .priority-high{border-left:3px solid #ef4444}
+    .priority-medium{border-left:3px solid #f59e0b}
+    .priority-low{border-left:3px solid #22c55e}
+    .event-milestone{background:#eef2ff;color:#3730a3}
+    .event-deadline{background:#fee2e2;color:#991b1b}
+    .event-meeting{background:#dbeafe;color:#1e40af}
+    .event-course{background:#dcfce7;color:#166534}
+    .event-exam{background:#ffedd5;color:#9a3412}
+    .wb-card{position:absolute;cursor:move;user-select:none;min-width:160px;max-width:240px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .spin{animation:spin .7s linear infinite}
+  </style>
+</head>
+<body class="flex h-screen overflow-hidden bg-slate-900">
+
+<!-- ══ Sidebar ══════════════════════════════════════════════════════════════ -->
+<aside class="w-52 flex-shrink-0 bg-slate-900 border-r border-slate-700/60 flex flex-col overflow-y-auto">
+  <!-- Logo -->
+  <div class="px-4 py-4 border-b border-slate-700/60">
+    <div class="flex items-center gap-2.5">
+      <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center font-bold text-white text-sm select-none">⚗</div>
+      <div>
+        <div class="text-white font-bold text-sm leading-tight">PhD Command Center</div>
+        <div class="text-slate-500 text-xs">v0.3 · free &amp; open</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nav -->
+  <nav class="flex-1 p-1.5">
+    <button id="nav-dashboard" onclick="showView('dashboard')" class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left mb-1">🏠 Dashboard</button>
+    <div class="nav-section">Research</div>
+    <button id="nav-projects"  onclick="showView('projects')"  class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left">📋 Projects</button>
+    <button id="nav-library"   onclick="showView('library')"   class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left">📚 Paper Library</button>
+    <button id="nav-grants"    onclick="showView('grants')"    class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left">✍️ Grant Writing</button>
+    <button id="nav-news"      onclick="showView('news')"      class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left">📡 Literature Feed</button>
+
+    <div class="nav-section mt-2">Workspace</div>
+    <button id="nav-notes"     onclick="showView('notes')"     class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left">📝 Notes</button>
+    <button id="nav-whiteboard" onclick="showView('whiteboard')" class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left">🎨 Whiteboard</button>
+    <button id="nav-utilities" onclick="showView('utilities')" class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left">🔧 Utilities</button>
+
+    <div class="nav-section mt-2">Network</div>
+    <button id="nav-discover"  onclick="showView('discover')"  class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left">🔍 Discover</button>
+    <button id="nav-contacts"  onclick="showView('contacts')"  class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left">👥 Contacts</button>
+
+    <div class="nav-section mt-2">Planning</div>
+    <button id="nav-calendar"  onclick="showView('calendar')"  class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left">📅 Calendar</button>
+    <button id="nav-todos"     onclick="showView('todos')"     class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left">✅ To-Do List</button>
+
+    <div class="nav-section mt-2">Other</div>
+    <button id="nav-feedback"  onclick="showView('feedback')"  class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left">💬 Feedback</button>
+    <button id="nav-settings"  onclick="showView('settings')"  class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left">⚙️ Settings</button>
+  </nav>
+
+  <!-- Profile + Lock -->
+  <div class="p-3 border-t border-slate-700/60 flex items-center gap-2">
+    <div id="profile-avatar" class="w-7 h-7 bg-indigo-600 rounded-full flex items-center justify-center text-white text-xs font-bold select-none flex-shrink-0">?</div>
+    <span id="profile-name" class="text-slate-400 text-xs truncate flex-1">Not set up</span>
+    <button onclick="lockApp()" title="Lock app" class="text-slate-600 hover:text-slate-300 transition-colors flex-shrink-0 text-sm leading-none">🔒</button>
+  </div>
+</aside>
+
+<!-- ══ Main Content ══════════════════════════════════════════════════════════ -->
+<main id="view-content" class="flex-1 overflow-hidden bg-slate-50 flex flex-col">
+  <!-- Views are injected here by renderer.js -->
+</main>
+
+<!-- ══ Global Modal Container ═══════════════════════════════════════════════ -->
+<div id="modal-overlay" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+  <div id="modal-box" class="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto relative">
+    <button onclick="closeModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 text-lg leading-none">✕</button>
+    <div id="modal-content"></div>
+  </div>
+</div>
+
+<!-- ══ Toast ═════════════════════════════════════════════════════════════════ -->
+<div id="toast" class="hidden fixed bottom-6 right-6 px-5 py-3 rounded-xl shadow-lg text-sm font-medium z-[200] max-w-sm pointer-events-none"></div>
+
+<!-- ══ Scripts ════════════════════════════════════════════════════════════════ -->
+<!-- ══ Login / Lock Overlay ══════════════════════════════════════════════════ -->
+<div id="login-overlay" style="display:flex;position:fixed;inset:0;background:#0f172a;align-items:center;justify-content:center;padding:1rem;z-index:9999">
+  <div style="width:100%;max-width:380px">
+    <!-- Branding -->
+    <div style="text-align:center;margin-bottom:2rem">
+      <div style="width:4rem;height:4rem;background:#4f46e5;border-radius:1rem;display:flex;align-items:center;justify-content:center;font-size:1.875rem;margin:0 auto .875rem;box-shadow:0 8px 32px rgba(79,70,229,.35)">⚗️</div>
+      <h1 style="font-size:1.375rem;font-weight:700;color:#f1f5f9;letter-spacing:-.02em;margin:0">PhD Command Center</h1>
+      <p id="login-version" style="color:#475569;font-size:.7rem;margin:.2rem 0 0">Loading…</p>
+    </div>
+    <!-- Card (content injected by renderer.js) -->
+    <div id="login-card" style="background:#1e293b;border:1px solid rgba(148,163,184,.12);border-radius:1rem;padding:1.5rem;box-shadow:0 25px 60px rgba(0,0,0,.6)">
+      <div style="display:flex;align-items:center;justify-content:center;padding:1.75rem 0">
+        <div class="spin" style="width:1.25rem;height:1.25rem;border:2px solid #6366f1;border-top-color:transparent;border-radius:9999px"></div>
+      </div>
+    </div>
+    <!-- Update banner -->
+    <div id="login-update" style="margin-top:.875rem;text-align:center;min-height:2.25rem"></div>
+  </div>
+</div>
+
+<script src="renderer.js"></script>
+<script src="views/dashboard.js"></script>
+<script src="views/projects.js"></script>
+<script src="views/library.js"></script>
+<script src="views/contacts.js"></script>
+<script src="views/notes.js"></script>
+<script src="views/calendar.js"></script>
+<script src="views/todos.js"></script>
+<script src="views/grants.js"></script>
+<script src="views/news.js"></script>
+<script src="views/whiteboard.js"></script>
+<script src="views/utilities.js"></script>
+<script src="views/discover.js"></script>
+<script src="views/feedback.js"></script>
+<script src="views/settings.js"></script>
+</body>
+</html>

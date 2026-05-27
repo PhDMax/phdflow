@@ -1,0 +1,218 @@
+// ══ Dashboard View ════════════════════════════════════════════════════════════
+
+function render_dashboard() {
+  const vc = document.getElementById('view-content')
+  const now   = new Date()
+  const today = now.toISOString().split('T')[0]
+  const in14  = new Date(now.getTime() + 14 * 864e5).toISOString().split('T')[0]
+  const in30  = new Date(now.getTime() + 30 * 864e5).toISOString().split('T')[0]
+  const name  = state.profile?.name?.split(' ')[0] || 'Researcher'
+  const hour  = now.getHours()
+  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
+  const dateStr = now.toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' })
+
+  // ── Data slices ──────────────────────────────────────────────────────────────
+  const upcoming = [...state.events]
+    .filter(e => e.date >= today)
+    .sort((a,b) => a.date.localeCompare(b.date))
+    .slice(0,7)
+
+  const overdueTodos = state.todos
+    .filter(t => t.status !== 'done' && t.dueDate && t.dueDate < today)
+    .sort((a,b) => a.dueDate.localeCompare(b.dueDate))
+
+  const dueSoonTodos = state.todos
+    .filter(t => t.status !== 'done' && t.dueDate && t.dueDate >= today && t.dueDate <= in14)
+    .sort((a,b) => {
+      if (a.dueDate !== b.dueDate) return a.dueDate.localeCompare(b.dueDate)
+      const p = {high:0,medium:1,low:2}; return (p[a.priority]||2)-(p[b.priority]||2)
+    })
+
+  const activeProjects = state.projects
+    .filter(p => p.status === 'active' || p.status === 'planning')
+    .slice(0, 4)
+
+  const openGrants = state.grants
+    .filter(g => g.status !== 'awarded' && g.status !== 'rejected')
+    .sort((a,b) => {
+      if (!a.deadline && !b.deadline) return 0
+      if (!a.deadline) return 1; if (!b.deadline) return -1
+      return a.deadline.localeCompare(b.deadline)
+    })
+    .slice(0, 4)
+
+  const recentPapers = [...state.papers]
+    .sort((a,b) => (b.addedAt||'').localeCompare(a.addedAt||''))
+    .slice(0, 4)
+
+  // ── Derived counts ───────────────────────────────────────────────────────────
+  const overdueCount = overdueTodos.length
+
+  vc.innerHTML = `
+  <div class="flex-1 overflow-y-auto bg-slate-50">
+
+    <!-- ── Header ──────────────────────────────────────────────────────────── -->
+    <div class="bg-white border-b border-slate-200 px-6 py-5">
+      <div class="flex items-end justify-between">
+        <div>
+          <p class="text-xs text-slate-400 mb-0.5">${dateStr}</p>
+          <h1 class="text-xl font-bold text-slate-900">${greeting}, ${esc(name)} 👋</h1>
+          ${overdueCount > 0
+            ? `<p class="text-xs text-red-600 mt-1 font-medium">⚠️ You have ${overdueCount} overdue task${overdueCount>1?'s':''}</p>`
+            : `<p class="text-xs text-slate-400 mt-1">Here's your research overview for today</p>`}
+        </div>
+        <button onclick="showView('calendar')" class="text-xs text-indigo-600 hover:underline">Open Calendar →</button>
+      </div>
+
+    </div>
+
+    <!-- ── Main Grid ────────────────────────────────────────────────────────── -->
+    <div class="p-6 grid grid-cols-2 gap-5">
+
+      <!-- LEFT COLUMN -->
+      <div class="space-y-5">
+
+        <!-- Upcoming events & deadlines -->
+        <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+          <div class="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
+            <h3 class="text-sm font-bold text-slate-800">📅 Upcoming Events &amp; Deadlines</h3>
+            <button onclick="showView('calendar')" class="text-xs text-indigo-500 hover:underline">View calendar →</button>
+          </div>
+          ${upcoming.length === 0
+            ? `<div class="px-5 py-8 text-center text-slate-400 text-sm">No upcoming events.<br/><button onclick="showView('calendar')" class="text-indigo-500 hover:underline mt-1">Add one →</button></div>`
+            : `<div class="divide-y divide-slate-50">
+              ${upcoming.map(e => {
+                const daysAway = Math.round((new Date(e.date) - now) / 864e5)
+                const when = daysAway === 0 ? 'Today' : daysAway === 1 ? 'Tomorrow' : `In ${daysAway}d`
+                const urgent = daysAway <= 2
+                const typeColors = {
+                  milestone:'bg-indigo-100 text-indigo-700',
+                  deadline:'bg-red-100 text-red-700',
+                  meeting:'bg-blue-100 text-blue-700',
+                  course:'bg-green-100 text-green-700',
+                  exam:'bg-orange-100 text-orange-700',
+                }
+                const chip = typeColors[e.type] || 'bg-slate-100 text-slate-600'
+                return `
+                <div class="px-5 py-3 flex items-center gap-3 hover:bg-slate-50 transition-colors">
+                  <div class="text-center min-w-[2.5rem]">
+                    <div class="text-xs font-bold ${urgent ? 'text-red-600' : 'text-indigo-600'}">${when}</div>
+                    <div class="text-xs text-slate-400">${new Date(e.date).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</div>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="text-sm font-medium text-slate-800 truncate">${esc(e.title)}</div>
+                    ${e.description ? `<div class="text-xs text-slate-400 truncate">${esc(e.description)}</div>` : ''}
+                  </div>
+                  <span class="text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${chip}">${e.type||'event'}</span>
+                </div>`
+              }).join('')}
+            </div>`}
+        </div>
+
+        <!-- Active projects -->
+        <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+          <div class="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
+            <h3 class="text-sm font-bold text-slate-800">📋 Active Projects</h3>
+            <button onclick="showView('projects')" class="text-xs text-indigo-500 hover:underline">All projects →</button>
+          </div>
+          ${activeProjects.length === 0
+            ? `<div class="px-5 py-8 text-center text-slate-400 text-sm">No active projects.<br/><button onclick="showView('projects')" class="text-indigo-500 hover:underline mt-1">Create one →</button></div>`
+            : `<div class="divide-y divide-slate-50">
+              ${activeProjects.map(p => {
+                const prog = p.progress || 0
+                const barColor = prog >= 75 ? 'bg-green-500' : prog >= 40 ? 'bg-indigo-500' : 'bg-amber-400'
+                const dot = p.color || '#6366f1'
+                return `
+                <div class="px-5 py-3.5 hover:bg-slate-50 transition-colors cursor-pointer" onclick="showView('projects')">
+                  <div class="flex items-center gap-2 mb-1.5">
+                    <div class="w-2 h-2 rounded-full flex-shrink-0" style="background:${dot}"></div>
+                    <span class="text-sm font-medium text-slate-800 flex-1 truncate">${esc(p.name)}</span>
+                    ${statusBadge(p.status)}
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <div class="flex-1 bg-slate-100 rounded-full h-1.5">
+                      <div class="h-1.5 rounded-full ${barColor} transition-all" style="width:${prog}%"></div>
+                    </div>
+                    <span class="text-xs text-slate-400 flex-shrink-0">${prog}%</span>
+                  </div>
+                </div>`
+              }).join('')}
+            </div>`}
+        </div>
+
+      </div>
+
+      <!-- RIGHT COLUMN -->
+      <div class="space-y-5">
+
+        <!-- Task widget (Today focus + overdue) -->
+        <div class="bg-white rounded-2xl border border-slate-200 px-5 py-4" id="dash-todos-widget">
+          <!-- populated by renderTodosWidget() after render -->
+        </div>
+
+        <!-- Grants pipeline -->
+        <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+          <div class="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
+            <h3 class="text-sm font-bold text-slate-800">✍️ Grant Pipeline</h3>
+            <button onclick="showView('grants')" class="text-xs text-indigo-500 hover:underline">All grants →</button>
+          </div>
+          ${openGrants.length === 0
+            ? `<div class="px-5 py-8 text-center text-slate-400 text-sm">No active grant applications.<br/><button onclick="showView('grants')" class="text-indigo-500 hover:underline mt-1">Track one →</button></div>`
+            : `<div class="divide-y divide-slate-50">
+              ${openGrants.map(g => {
+                const grantStatusColors = {
+                  researching:'bg-slate-100 text-slate-600',
+                  drafting:'bg-amber-100 text-amber-700',
+                  submitted:'bg-blue-100 text-blue-700',
+                }
+                const sc = grantStatusColors[g.status] || 'bg-slate-100 text-slate-600'
+                let deadlineHtml = ''
+                if (g.deadline) {
+                  const daysLeft = Math.round((new Date(g.deadline) - now) / 864e5)
+                  const urgent = daysLeft >= 0 && daysLeft <= 14
+                  const past   = daysLeft < 0
+                  deadlineHtml = `<span class="text-xs ${past ? 'text-red-500' : urgent ? 'text-amber-600' : 'text-slate-400'}">
+                    ${past ? `${Math.abs(daysLeft)}d ago` : daysLeft === 0 ? 'Today!' : `${daysLeft}d left`}
+                  </span>`
+                }
+                return `
+                <div class="px-5 py-3 flex items-center gap-3 hover:bg-slate-50 transition-colors cursor-pointer" onclick="showView('grants')">
+                  <div class="flex-1 min-w-0">
+                    <div class="text-sm font-medium text-slate-800 truncate">${esc(g.title)}</div>
+                    <div class="text-xs text-slate-400 truncate">${esc(g.agency||'No agency')}</div>
+                  </div>
+                  <div class="flex items-center gap-2 flex-shrink-0">
+                    ${deadlineHtml}
+                    <span class="text-xs px-2 py-0.5 rounded-full ${sc}">${g.status||'researching'}</span>
+                  </div>
+                </div>`
+              }).join('')}
+            </div>`}
+        </div>
+
+        <!-- Recent papers -->
+        ${recentPapers.length > 0 ? `
+        <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+          <div class="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
+            <h3 class="text-sm font-bold text-slate-800">📚 Recently Added Papers</h3>
+            <button onclick="showView('library')" class="text-xs text-indigo-500 hover:underline">Library →</button>
+          </div>
+          <div class="divide-y divide-slate-50">
+            ${recentPapers.map(p => `
+            <div class="px-5 py-3 flex items-start gap-3 hover:bg-slate-50 transition-colors cursor-pointer" onclick="showView('library')">
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium text-slate-800 line-clamp-1 leading-snug">${esc(p.title||'Untitled')}</div>
+                <div class="text-xs text-slate-400 mt-0.5">${esc(p.authors||'')} ${p.year ? '· '+p.year : ''}</div>
+              </div>
+              ${p.status ? `<span class="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 flex-shrink-0">${p.status}</span>` : ''}
+            </div>`).join('')}
+          </div>
+        </div>` : ''}
+
+      </div>
+    </div>
+  </div>`
+
+  // Populate the task widget (todos.js must be loaded first)
+  if (typeof renderTodosWidget === 'function') renderTodosWidget('dash-todos-widget')
+}
