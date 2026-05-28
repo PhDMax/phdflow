@@ -360,6 +360,7 @@ function _utilRenderText() {
           ${_wcStat('Reading time','—','wc-read')}
           ${_wcStat('Unique words','0','wc-uniq')}
         </div>
+        <button onclick="utilCopyWordStats()" class="mt-3 w-full px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs rounded-lg transition-colors">📋 Copy stats</button>
       </div>
     </div>
 
@@ -406,6 +407,12 @@ function _wcStat(label, val, id) {
     <div id="${id}" class="text-lg font-bold text-indigo-600">${val}</div>
     <div class="text-xs text-slate-500">${label}</div>
   </div>`
+}
+
+function utilCopyWordStats() {
+  const get = id => document.getElementById(id)?.textContent || '—'
+  const txt = `Words: ${get('wc-words')} | Characters: ${get('wc-chars')} | Sentences: ${get('wc-sents')} | Paragraphs: ${get('wc-paras')} | Reading time: ${get('wc-read')} | Unique words: ${get('wc-uniq')}`
+  navigator.clipboard.writeText(txt).then(() => showToast('Stats copied ✓'))
 }
 
 function utilCountWords() {

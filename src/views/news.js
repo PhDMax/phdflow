@@ -79,8 +79,10 @@ async function render_news() {
                 ${c.bg} ${c.text} ${c.border} text-xs font-medium select-none"
                 onclick="newsFilterByTopic('${t.id}')" title="Keywords: ${esc(t.keywords)}">
                 ${esc(t.label)}
+                <button onclick="event.stopPropagation();editNewsTopic('${t.id}')"
+                  class="opacity-0 group-hover:opacity-100 ml-0.5 leading-none hover:opacity-70 transition-opacity text-[10px]">✏️</button>
                 <button onclick="event.stopPropagation();removeNewsTopic('${t.id}')"
-                  class="opacity-0 group-hover:opacity-100 ml-0.5 leading-none hover:text-red-600 transition-opacity">✕</button>
+                  class="opacity-0 group-hover:opacity-100 leading-none hover:text-red-600 transition-opacity">✕</button>
               </span>`
             }).join('')
         }
@@ -251,9 +253,12 @@ function _newsPaperCard(p) {
         ${aStr ? `<p class="text-xs text-slate-500 mb-1.5">${aStr}</p>` : ''}
 
         <!-- abstract -->
-        ${p.abstract
-          ? `<p class="text-xs text-slate-400 leading-relaxed line-clamp-2">${esc(p.abstract)}</p>`
-          : ''}
+        ${p.abstract ? `
+        <div>
+          <p class="text-xs text-slate-400 leading-relaxed line-clamp-2" id="abs-${esc(p.id)}">${esc(p.abstract)}</p>
+          <button onclick="newsToggleAbstract('${esc(p.id)}')" id="abs-btn-${esc(p.id)}"
+            class="text-[10px] text-indigo-400 hover:text-indigo-600 mt-0.5 transition-colors">Show more</button>
+        </div>` : ''}
       </div>
 
       <!-- action buttons -->
@@ -311,6 +316,49 @@ async function saveNewsTopic() {
   await save('newsTopics')
   hideNewsTopicForm()
   render_news()
+}
+
+function newsToggleAbstract(paperId) {
+  const el  = document.getElementById(`abs-${paperId}`)
+  const btn = document.getElementById(`abs-btn-${paperId}`)
+  if (!el || !btn) return
+  const expanded = el.classList.toggle('line-clamp-2')
+  btn.textContent = expanded ? 'Show more' : 'Show less'
+}
+
+function editNewsTopic(id) {
+  const t = state.newsTopics.find(x => x.id === id)
+  if (!t) return
+  openModal(`
+  <h3 class="text-base font-bold mb-4">Edit Topic</h3>
+  <div class="space-y-3">
+    <div>
+      <label class="label">Label</label>
+      <input id="ent-label" type="text" value="${esc(t.label)}" class="input"/>
+    </div>
+    <div>
+      <label class="label">Search keywords</label>
+      <input id="ent-kw" type="text" value="${esc(t.keywords)}" class="input"/>
+      <p class="text-xs text-slate-400 mt-1">Separate distinct concepts with commas.</p>
+    </div>
+    <div class="flex gap-3 pt-2">
+      <button onclick="closeModal()" class="flex-1 btn-secondary">Cancel</button>
+      <button onclick="saveEditedTopic('${id}')" class="flex-1 btn-primary">Save</button>
+    </div>
+  </div>`)
+  setTimeout(() => document.getElementById('ent-label')?.focus(), 80)
+}
+
+async function saveEditedTopic(id) {
+  const label    = document.getElementById('ent-label')?.value.trim()
+  const keywords = document.getElementById('ent-kw')?.value.trim()
+  if (!label || !keywords) { showToast('Both fields required', 'error'); return }
+  const t = state.newsTopics.find(x => x.id === id)
+  if (t) { t.label = label; t.keywords = keywords }
+  await save('newsTopics')
+  closeModal()
+  render_news()
+  showToast('Topic updated ✓')
 }
 
 async function removeNewsTopic(id) {
@@ -379,44 +427,80 @@ async function refreshNewsFeed() {
 
 // ── Save Paper to Library ─────────────────────────────────────────────────────
 
-async function newsSaveToLibrary(paperId) {
+function newsSaveToLibrary(paperId) {
   if (_newsSavedIds.has(paperId)) return
   const p = _newsFeedMap[paperId]
   if (!p) return
 
-  const authors = (Array.isArray(p.authors) ? p.authors : [p.authors]).filter(Boolean)
-
-  // Duplicate check
   const dup = state.papers.some(e =>
     (p.doi && e.doi && e.doi === p.doi) ||
     (e.title?.toLowerCase().trim() === (p.title || '').toLowerCase().trim())
   )
-  if (dup) {
-    showToast('Already in your library', 'info')
-  } else {
-    const entry = {
-      id:        'lib-' + uid(),
-      title:     p.title || '',
-      authors,
-      year:      p.date ? new Date(p.date).getFullYear() : null,
-      journal:   p.journal || p.source || '',
-      doi:       p.doi  || null,
-      url:       p.url  || null,
-      abstract:  p.abstract || null,
-      tags:      p.topicLabel ? [p.topicLabel] : [],
-      addedDate: new Date().toISOString().split('T')[0],
-      addedAt:   new Date().toISOString(),
-      source:    p.source,
-      projectId: null
-    }
-    state.papers.unshift(entry)
-    await save('papers')
-    showToast('Saved to Library ✓')
-  }
+  if (dup) { showToast('Already in your library', 'info'); return }
 
+  openModal(`
+  <h3 class="text-base font-bold mb-1">Save to Library</h3>
+  <p class="text-xs text-slate-500 mb-4 truncate">${esc(p.title)}</p>
+  <div class="space-y-3">
+    <div>
+      <label class="label">Reading status</label>
+      <select id="nsl-status" class="input">
+        <option value="unread">Unread</option>
+        <option value="reading">Reading</option>
+        <option value="read">Read</option>
+      </select>
+    </div>
+    <div>
+      <label class="label">Link to project <span class="text-slate-400 font-normal">(optional)</span></label>
+      <select id="nsl-project" class="input">
+        <option value="">— none —</option>
+        ${state.projects.map(pr => `<option value="${pr.id}">${esc(pr.name)}</option>`).join('')}
+      </select>
+    </div>
+    <div>
+      <label class="label">Tags <span class="text-slate-400 font-normal">(comma-separated)</span></label>
+      <input id="nsl-tags" type="text" class="input" value="${esc(p.topicLabel || '')}" placeholder="e.g. ML, NLP, review"/>
+    </div>
+    <div class="flex gap-3 pt-2">
+      <button onclick="closeModal()" class="flex-1 btn-secondary">Cancel</button>
+      <button onclick="_newsSaveConfirm('${paperId}')" class="flex-1 btn-primary">Save to Library</button>
+    </div>
+  </div>`)
+}
+
+async function _newsSaveConfirm(paperId) {
+  const p       = _newsFeedMap[paperId]
+  if (!p) return
+  const status  = document.getElementById('nsl-status')?.value  || 'unread'
+  const projId  = document.getElementById('nsl-project')?.value || null
+  const tagStr  = document.getElementById('nsl-tags')?.value    || ''
+  const tags    = tagStr.split(',').map(t => t.trim()).filter(Boolean)
+  const authors = (Array.isArray(p.authors) ? p.authors : [p.authors]).filter(Boolean)
+
+  const entry = {
+    id:         'lib-' + uid(),
+    title:      p.title || '',
+    authors,
+    year:       p.date ? new Date(p.date).getFullYear() : null,
+    journal:    p.journal || p.source || '',
+    doi:        p.doi  || null,
+    url:        p.url  || null,
+    abstract:   p.abstract || null,
+    topics:     tags,
+    status,
+    projectIds: projId ? [projId] : [],
+    relevance:  'medium',
+    addedDate:  new Date().toISOString().split('T')[0],
+    addedAt:    new Date().toISOString(),
+    source:     p.source,
+  }
+  state.papers.unshift(entry)
+  await save('papers')
   _newsSavedIds.add(paperId)
   await api.storeSet('newsSavedIds', [..._newsSavedIds])
+  closeModal()
   render_news()
+  showToast('Saved to Library ✓')
 }
 
 // ── Click Delegation ──────────────────────────────────────────────────────────

@@ -189,6 +189,7 @@ function renderAppTab(body) {
   const topics  = (state.newsTopics || [])
   const discord = state.profile?.discordWebhook || ''
   const citStyle= state.profile?.defaultCitationStyle || 'APA'
+  const dms     = state.darkModeSchedule || {}
 
   const currentTheme = document.documentElement.dataset.theme || 'light'
 
@@ -216,6 +217,32 @@ function renderAppTab(body) {
           </div>
           <span class="text-xs font-semibold text-slate-700">🌙 Dark</span>
         </button>
+      </div>
+    </div>
+
+    <!-- Dark mode schedule -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-5">
+      <h3 class="text-sm font-bold text-slate-700 mb-1">🌙 Dark Mode Schedule</h3>
+      <p class="text-xs text-slate-400 mb-3">Auto-switch between light and dark mode at set times each day.</p>
+      <div class="space-y-3">
+        <label class="flex items-center gap-2 cursor-pointer select-none">
+          <input type="checkbox" id="dms-enabled" class="accent-indigo-600 w-4 h-4" ${dms.enabled?'checked':''}
+            onchange="document.getElementById('dms-times').style.opacity=this.checked?'1':'0.4';document.getElementById('dms-times').style.pointerEvents=this.checked?'':'none'"/>
+          <span class="text-sm text-slate-700 font-medium">Enable automatic schedule</span>
+        </label>
+        <div id="dms-times" style="opacity:${dms.enabled?1:0.4};pointer-events:${dms.enabled?'':'none'}">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="label">☀️ Switch to Light at</label>
+              <input id="dms-light" type="time" value="${dms.lightFrom||'07:00'}" class="input"/>
+            </div>
+            <div>
+              <label class="label">🌙 Switch to Dark at</label>
+              <input id="dms-dark" type="time" value="${dms.darkFrom||'20:00'}" class="input"/>
+            </div>
+          </div>
+        </div>
+        <button onclick="dmsSave()" class="btn-primary text-xs py-1.5 px-4">Save Schedule</button>
       </div>
     </div>
 
@@ -313,6 +340,64 @@ async function settingsSetTheme(t) {
   await api.storeSet('theme', t)
   renderAppTab(document.getElementById('settings-body'))
   showToast(`${t === 'dark' ? '🌙 Dark' : '☀️ Light'} mode applied`)
+}
+
+async function dmsSave() {
+  const enabled   = document.getElementById('dms-enabled')?.checked || false
+  const lightFrom = document.getElementById('dms-light')?.value || '07:00'
+  const darkFrom  = document.getElementById('dms-dark')?.value || '20:00'
+  state.darkModeSchedule = { enabled, lightFrom, darkFrom }
+  await api.storeSet('darkModeSchedule', state.darkModeSchedule)
+  if (typeof startDarkSchedule === 'function') startDarkSchedule()
+  showToast(enabled ? `🌙 Schedule saved — dark at ${darkFrom}, light at ${lightFrom}` : 'Dark mode schedule disabled')
+}
+
+async function autoBackupSave() {
+  const enabled = document.getElementById('ab-enabled')?.checked || false
+  const freq    = document.getElementById('ab-freq')?.value || 'weekly'
+  state.profile = state.profile || {}
+  state.profile.autoBackup = { ...(state.profile.autoBackup || {}), enabled, freq }
+  save('profile')
+  showToast(enabled ? `Auto-backup enabled (${freq})` : 'Auto-backup disabled')
+}
+
+async function autoBackupRun() {
+  const el = document.getElementById('ab-status')
+  if (el) el.innerHTML = `<span class="text-slate-400">Backing up…</span>`
+  try {
+    const dir      = await api.getDataDir()
+    const date     = new Date().toISOString().slice(0, 10)
+    const dest     = `${dir}\\auto-backup-${date}.json`
+    const r        = await api.exportData({ keys: _DATA_KEYS, dest })
+    if (!r.success) throw new Error(r.error)
+    state.profile = state.profile || {}
+    state.profile.autoBackup = { ...(state.profile.autoBackup || {}), lastRun: new Date().toISOString() }
+    save('profile')
+    if (el) el.innerHTML = `<span class="text-emerald-600 font-semibold">✓ Backed up to ${dest.split('\\').pop()}</span>`
+    showToast('Auto-backup saved ✓')
+  } catch(e) {
+    if (el) el.innerHTML = `<span class="text-rose-500">✕ ${esc(e.message)}</span>`
+    showToast('Backup failed: ' + e.message, 'error')
+  }
+}
+
+async function _checkAutoBackup() {
+  const ab = state.profile?.autoBackup
+  if (!ab?.enabled) return
+  const now      = Date.now()
+  const lastRun  = ab.lastRun ? new Date(ab.lastRun).getTime() : 0
+  const interval = ab.freq === 'daily' ? 86400000 : 7 * 86400000
+  if (now - lastRun < interval) return
+  try {
+    const dir  = await api.getDataDir()
+    const date = new Date().toISOString().slice(0, 10)
+    const dest = `${dir}\\auto-backup-${date}.json`
+    const r    = await api.exportData({ keys: _DATA_KEYS, dest })
+    if (r.success) {
+      state.profile.autoBackup.lastRun = new Date().toISOString()
+      save('profile')
+    }
+  } catch {}
 }
 
 async function appRemoveTopic(i) {
@@ -491,8 +576,36 @@ const _DATA_KEYS = ['profile','projects','papers','contacts','notes','whiteboard
                     'calGoals','calFeeds','todoGroups']
 
 function renderBackupTab(body) {
+  const ab = state.profile?.autoBackup || {}
   body.innerHTML = `
   <div class="p-6 max-w-2xl space-y-5">
+
+    <!-- Scheduled auto-backup -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-5">
+      <h3 class="text-sm font-bold text-slate-700 mb-1">⏰ Scheduled Auto-Backup</h3>
+      <p class="text-xs text-slate-400 mb-3">
+        Automatically save a backup to your data folder. No manual action required.
+        ${ab.lastRun ? `<span class="text-slate-500">Last backup: <strong>${new Date(ab.lastRun).toLocaleString('en-GB',{dateStyle:'medium',timeStyle:'short'})}</strong></span>` : ''}
+      </p>
+      <div class="space-y-3">
+        <label class="flex items-center gap-2 cursor-pointer select-none">
+          <input type="checkbox" id="ab-enabled" class="accent-indigo-600 w-4 h-4" ${ab.enabled?'checked':''}/>
+          <span class="text-sm text-slate-700 font-medium">Enable scheduled backup</span>
+        </label>
+        <div class="flex items-center gap-3">
+          <select id="ab-freq" class="input" style="width:auto">
+            <option value="daily"  ${ab.freq==='daily' ?'selected':''}>Daily</option>
+            <option value="weekly" ${(ab.freq||'weekly')==='weekly'?'selected':''}>Weekly</option>
+          </select>
+          <span class="text-xs text-slate-400">Saves to your app data folder as <code>auto-backup-YYYY-MM-DD.json</code></span>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="autoBackupSave()" class="btn-primary text-xs py-1.5 px-4">Save</button>
+          <button onclick="autoBackupRun()" class="btn-secondary text-xs py-1.5 px-4">Run Now</button>
+        </div>
+        <div id="ab-status" class="text-xs text-slate-400"></div>
+      </div>
+    </div>
 
     <!-- Full export -->
     <div class="bg-white rounded-2xl border border-slate-200 p-5">

@@ -55,9 +55,17 @@ function render_library() {
     </select>
   </div>
 
+  <!-- DOI / arXiv fetch bar -->
+  <div class="mx-5 mt-3 flex gap-2 flex-shrink-0">
+    <input id="lib-doi-input" type="text" placeholder="Paste DOI or arXiv URL to auto-import metadata…"
+      class="flex-1 px-3 py-1.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      onkeydown="if(event.key==='Enter')libFetchMeta()"/>
+    <button onclick="libFetchMeta()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl transition-colors flex-shrink-0">Fetch →</button>
+  </div>
+
   <!-- Drop zone -->
   <div id="lib-drop-zone"
-    class="drop-zone mx-5 mt-3 border-2 border-dashed border-slate-200 rounded-xl px-4 py-2.5 text-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/50 transition-colors flex-shrink-0"
+    class="drop-zone mx-5 mt-2 border-2 border-dashed border-slate-200 rounded-xl px-4 py-2 text-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/50 transition-colors flex-shrink-0"
     onclick="openLibraryPicker()">
     <p class="text-slate-400 text-xs">📄 Drop PDFs here · or drag a .bib / .ris file to import citations</p>
   </div>
@@ -419,4 +427,120 @@ async function deletePaper(id) {
   if (!await confirmDlg('Remove this paper from your library?', 'Remove Paper')) return
   state.papers = state.papers.filter(p=>p.id!==id)
   save('papers'); closeModal(); renderLibrary(); showToast('Paper removed')
+}
+
+// ── DOI / arXiv metadata fetch ────────────────────────────────────────────────
+async function libFetchMeta() {
+  const raw = (document.getElementById('lib-doi-input')?.value || '').trim()
+  if (!raw) { showToast('Enter a DOI or arXiv URL first', 'error'); return }
+
+  const btn = document.querySelector('[onclick="libFetchMeta()"]')
+  if (btn) { btn.textContent = '…'; btn.disabled = true }
+
+  try {
+    // Detect arXiv
+    const arxivMatch = raw.match(/arxiv\.org\/abs\/([\d.]+)|^arxiv:([\d.]+)|^([\d]{4}\.[\d]{4,5})/)
+    let meta = null
+
+    if (arxivMatch) {
+      const arxivId = arxivMatch[1] || arxivMatch[2] || arxivMatch[3]
+      const r = await fetch(`https://export.arxiv.org/api/query?id_list=${arxivId}`, { signal: AbortSignal.timeout(10000) })
+      const xml = await r.text()
+      const title   = (/<title>([\s\S]*?)<\/title>/.exec(xml)||[])[1]?.replace(/\s+/g,' ').trim()
+      const summary = (/<summary>([\s\S]*?)<\/summary>/.exec(xml)||[])[1]?.replace(/\s+/g,' ').trim()
+      const authors = [...xml.matchAll(/<author>[\s\S]*?<name>(.*?)<\/name>/g)].map(a => a[1])
+      const published = (/<published>(.*?)<\/published>/.exec(xml)||[])[1]?.split('T')[0]
+      if (title && title !== 'ArXiv Query') {
+        meta = { title, authors, year: published ? new Date(published).getFullYear() : null,
+          journal: 'arXiv preprint', doi: null, url: `https://arxiv.org/abs/${arxivId}`, abstract: summary || '' }
+      }
+    } else {
+      // DOI via CrossRef
+      const doi = raw.replace(/^https?:\/\/doi\.org\//,'').replace(/^doi:/,'')
+      const r = await fetch(`https://api.crossref.org/works/${encodeURIComponent(doi)}`,
+        { headers: { 'User-Agent': 'PhDFlow/0.4 (mailto:support@phdflow.app)' }, signal: AbortSignal.timeout(10000) })
+      if (r.ok) {
+        const w = (await r.json()).message
+        meta = {
+          title:   w.title?.[0] || '',
+          authors: (w.author||[]).map(a => [a.family, a.given].filter(Boolean).join(', ')),
+          year:    w.published?.['date-parts']?.[0]?.[0] || null,
+          journal: w['container-title']?.[0] || '',
+          doi:     w.DOI || doi,
+          url:     w.DOI ? `https://doi.org/${w.DOI}` : '',
+          abstract: w.abstract?.replace(/<[^>]+>/g,'').trim().slice(0,500) || '',
+        }
+      }
+    }
+
+    if (!meta || !meta.title) { showToast('Could not find paper — check the DOI or URL', 'error'); return }
+
+    // Duplicate check
+    const dup = state.papers.find(p =>
+      (meta.doi && p.doi && p.doi === meta.doi) ||
+      (p.title?.toLowerCase().trim() === meta.title.toLowerCase().trim())
+    )
+    if (dup) {
+      showToast('Already in your library', 'info')
+      const inp = document.getElementById('lib-doi-input')
+      if (inp) inp.value = ''
+      return
+    }
+
+    // Open detail modal pre-filled for confirmation
+    openModal(`
+    <h3 class="text-base font-bold mb-1">Add to Library</h3>
+    <p class="text-xs text-slate-500 mb-4">Review metadata before saving.</p>
+    <div class="space-y-3">
+      <div><label class="label">Title</label>
+        <input id="fm-title" type="text" value="${esc(meta.title)}" class="input"/></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div><label class="label">Year</label>
+          <input id="fm-year" type="number" value="${meta.year||''}" class="input"/></div>
+        <div><label class="label">Journal / Source</label>
+          <input id="fm-journal" type="text" value="${esc(meta.journal||'')}" class="input"/></div>
+      </div>
+      <div><label class="label">Status</label>
+        <select id="fm-status" class="input">
+          <option value="unread">Unread</option><option value="reading">Reading</option><option value="read">Read</option>
+        </select></div>
+      <div class="flex gap-3 pt-2">
+        <button onclick="closeModal()" class="flex-1 btn-secondary">Cancel</button>
+        <button onclick="_libConfirmFetch(${JSON.stringify(meta).replace(/"/g,'&quot;')})" class="flex-1 btn-primary">Add to Library</button>
+      </div>
+    </div>`, false)
+
+    // Store meta for confirm
+    window._libFetchMeta = meta
+    document.querySelector('[onclick^="_libConfirmFetch"]')?.setAttribute('onclick', '_libConfirmFetch()')
+
+  } catch(e) {
+    showToast('Fetch failed: ' + e.message, 'error')
+  } finally {
+    if (btn) { btn.textContent = 'Fetch →'; btn.disabled = false }
+  }
+}
+
+async function _libConfirmFetch() {
+  const meta    = window._libFetchMeta
+  if (!meta) return
+  const title   = document.getElementById('fm-title')?.value.trim()   || meta.title
+  const year    = parseInt(document.getElementById('fm-year')?.value)  || meta.year
+  const journal = document.getElementById('fm-journal')?.value.trim() || meta.journal
+  const status  = document.getElementById('fm-status')?.value         || 'unread'
+
+  state.papers.unshift({
+    id: uid(), title, authors: meta.authors || [], year, journal,
+    doi: meta.doi || null, url: meta.url || null, abstract: meta.abstract || null,
+    topics: [], relevance: 'medium', status,
+    projectIds: [], notes: '', source: 'doi',
+    addedAt: new Date().toISOString()
+  })
+  await save('papers')
+  closeModal()
+  const inp = document.getElementById('lib-doi-input')
+  if (inp) inp.value = ''
+  renderLibrary()
+  showToast('Paper added ✓')
+  window._libFetchMeta = null
 }

@@ -79,7 +79,16 @@ function render_notes() {
     : filtered.map(n => {
         const type     = NOTE_TYPES[n.type] || NOTE_TYPES.note
         const isActive = n.id === _notesActiveId
-        const preview  = (n.content||'').replace(/^#+\s*/gm,'').replace(/[*`_~>\[\]#]/g,'').trim().slice(0,55)
+        const plainContent = (n.content||'').replace(/^#+\s*/gm,'').replace(/[*`_~>\[\]#]/g,'').trim()
+        let preview = plainContent.slice(0, 55)
+        if (_notesSearch) {
+          const q = _notesSearch.toLowerCase()
+          const idx = plainContent.toLowerCase().indexOf(q)
+          if (idx > 0 && !(n.title||'').toLowerCase().includes(q)) {
+            const start = Math.max(0, idx - 15)
+            preview = (start > 0 ? '…' : '') + plainContent.slice(start, start + 60)
+          }
+        }
         const dateStr  = n.updatedAt ? new Date(n.updatedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short'}) : ''
         return `<button onclick="openNote('${n.id}')" style="${_S.noteItem(isActive)}">
           <span style="${_S.noteDate}">${dateStr}</span>

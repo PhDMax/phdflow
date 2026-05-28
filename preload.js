@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('api', {
   writeTextFile:     (dest, text)        => ipcRenderer.invoke('write-text-file', dest, text),
   writeBinaryFile:   (dest, base64)      => ipcRenderer.invoke('write-binary-file', dest, base64),
   openDataFolder:    ()                  => ipcRenderer.invoke('open-data-folder'),
+  getDataDir:        ()                  => ipcRenderer.invoke('get-data-dir'),
 
   // ── PDF tools ─────────────────────────────────────────────────────────────
   parsePdf:          (filepath)          => ipcRenderer.invoke('parse-pdf', filepath),

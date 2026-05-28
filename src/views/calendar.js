@@ -96,10 +96,14 @@ function _calEventChip(e, extra = '') {
   const sp = "event.stopPropagation();"
   if (e.external) {
     const c = e.feedColor || '#6366f1'
-    return `<div class="text-[10px] px-1.5 py-0.5 rounded truncate cursor-pointer font-medium ${extra}"
+    const initials = (e.feedName || '').slice(0, 2).toUpperCase()
+    return `<div class="text-[10px] px-1.5 py-0.5 rounded truncate cursor-pointer font-medium flex items-center gap-1 ${extra}"
       style="background:${c}20;color:${c};border-left:2px solid ${c}"
       onclick="${sp}calShowExternal('${esc(e.feedId)}','${esc(e.uid)}')"
-      title="${esc(e.title)}">${esc(e.title)}</div>`
+      title="${esc(e.feedName)}: ${esc(e.title)}">
+      <span class="flex-shrink-0 text-[8px] font-bold opacity-60">${initials}</span>
+      <span class="truncate">${esc(e.title)}</span>
+    </div>`
   }
   const conf = (_calTypeConf()[e.type] || _calTypeConf().personal)
   return `<div class="text-[10px] px-1.5 py-0.5 rounded truncate cursor-pointer ${conf.bg} ${conf.text} font-medium ${extra}"
@@ -689,13 +693,26 @@ function openEventModal(id, prefillDate) {
       <textarea id="ev-desc" rows="2" class="input resize-none"
         placeholder="Details, links, reminders…">${esc(e?.description)}</textarea>
     </div>
-    <div>
-      <label class="label">Recurrence</label>
-      <select id="ev-recurrence" class="input">
-        ${['none','daily','weekly','biweekly','monthly','yearly'].map(r =>
-          `<option value="${r}" ${e?.recurrence===r?'selected':''}>${r.charAt(0).toUpperCase()+r.slice(1)}</option>`
-        ).join('')}
-      </select>
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="label">Recurrence</label>
+        <select id="ev-recurrence" class="input">
+          ${['none','daily','weekly','biweekly','monthly','yearly'].map(r =>
+            `<option value="${r}" ${e?.recurrence===r?'selected':''}>${r.charAt(0).toUpperCase()+r.slice(1)}</option>`
+          ).join('')}
+        </select>
+      </div>
+      <div>
+        <label class="label">Reminder</label>
+        <select id="ev-reminder" class="input">
+          <option value=""        ${!e?.reminder?'selected':''}>No reminder</option>
+          <option value="15min"   ${e?.reminder==='15min'  ?'selected':''}>15 min before</option>
+          <option value="30min"   ${e?.reminder==='30min'  ?'selected':''}>30 min before</option>
+          <option value="1hour"   ${e?.reminder==='1hour'  ?'selected':''}>1 hour before</option>
+          <option value="3hours"  ${e?.reminder==='3hours' ?'selected':''}>3 hours before</option>
+          <option value="1day"    ${e?.reminder==='1day'   ?'selected':''}>1 day before</option>
+        </select>
+      </div>
     </div>
     <div class="flex gap-3 pt-2">
       <button onclick="closeModal()" class="flex-1 btn-secondary">Cancel</button>
@@ -718,6 +735,7 @@ function saveEvent(id) {
     location:    document.getElementById('ev-location').value.trim(),
     description: document.getElementById('ev-desc').value.trim(),
     recurrence:  document.getElementById('ev-recurrence').value,
+    reminder:    document.getElementById('ev-reminder').value || '',
     createdAt:   id ? (state.events.find(e=>e.id===id)?.createdAt || new Date().toISOString()) : new Date().toISOString()
   }
   if (id) { const i = state.events.findIndex(e=>e.id===id); if (i > -1) state.events[i] = data }
@@ -726,6 +744,7 @@ function saveEvent(id) {
   closeModal()
   calSetView(_calView)
   renderCountdown()
+  if (typeof scheduleEventReminders === 'function') scheduleEventReminders()
   showToast(id ? 'Event updated' : 'Event added ✓')
 }
 
@@ -762,6 +781,12 @@ function openEventDetail(id) {
     ${e.recurrence && e.recurrence !== 'none' ? `<div class="flex gap-2">
       <span class="text-slate-400 w-20 flex-shrink-0">Repeats</span>
       <span class="text-slate-600 capitalize">${e.recurrence}</span></div>` : ''}
+    ${e.reminder ? `<div class="flex gap-2">
+      <span class="text-slate-400 w-20 flex-shrink-0">Reminder</span>
+      <span class="text-slate-600">⏰ ${{
+        '15min':'15 minutes before','30min':'30 minutes before',
+        '1hour':'1 hour before','3hours':'3 hours before','1day':'1 day before'
+      }[e.reminder]||e.reminder}</span></div>` : ''}
     ${e.description ? `<div class="flex gap-2"><span class="text-slate-400 w-20 flex-shrink-0">Notes</span>
       <span class="text-slate-700 leading-relaxed">${esc(e.description)}</span></div>` : ''}
   </div>

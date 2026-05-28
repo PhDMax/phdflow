@@ -414,6 +414,7 @@ function _todoCard(t, eff, pri, groups, highlightOverdue = false) {
       ${t.description ? `<p class="text-xs text-slate-500 truncate mb-0.5">${esc(t.description)}</p>` : ''}
       <div class="flex items-center gap-3 text-xs flex-wrap">
         ${dueHtml}
+        ${t.repeat && t.repeat !== 'none' ? `<span class="text-indigo-400">🔁 ${({daily:'Daily',weekdays:'Weekdays',weekly:'Weekly',biweekly:'Biweekly',monthly:'Monthly'})[t.repeat]||''}</span>` : ''}
         ${linkedEvent ? `<span class="text-slate-400">📅 ${esc(linkedEvent.title)}</span>` : ''}
         ${t.todayFlag && !_isDueToday(t) && t.status !== 'done' ? `<span class="text-indigo-400">📌 Today</span>` : ''}
       </div>
@@ -429,12 +430,46 @@ function _todoCard(t, eff, pri, groups, highlightOverdue = false) {
 
 // ── Task actions ──────────────────────────────────────────────────────────────
 
+function _nextRecurDate(dueDateStr, repeat) {
+  const d = dueDateStr ? new Date(dueDateStr + 'T00:00:00') : new Date()
+  if (repeat === 'daily') {
+    d.setDate(d.getDate() + 1)
+  } else if (repeat === 'weekdays') {
+    d.setDate(d.getDate() + 1)
+    while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1)
+  } else if (repeat === 'weekly') {
+    d.setDate(d.getDate() + 7)
+  } else if (repeat === 'biweekly') {
+    d.setDate(d.getDate() + 14)
+  } else if (repeat === 'monthly') {
+    d.setMonth(d.getMonth() + 1)
+  }
+  return d.toISOString().slice(0, 10)
+}
+
 function todoToggle(id) {
   const t = state.todos.find(x => x.id === id)
   if (!t) return
   t.status = t.status === 'done' ? 'pending' : 'done'
-  if (t.status === 'done') t.completedAt = new Date().toISOString()
-  else delete t.completedAt
+  if (t.status === 'done') {
+    t.completedAt = new Date().toISOString()
+    if (t.repeat && t.repeat !== 'none') {
+      const next = {
+        ...t,
+        id:          uid(),
+        status:      'pending',
+        dueDate:     _nextRecurDate(t.dueDate, t.repeat),
+        todayFlag:   false,
+        completedAt: undefined,
+        createdAt:   new Date().toISOString(),
+        updatedAt:   new Date().toISOString(),
+      }
+      delete next.completedAt
+      state.todos.push(next)
+    }
+  } else {
+    delete t.completedAt
+  }
   t.updatedAt = new Date().toISOString()
   save('todos')
   todoSetTab(_todoTab)
@@ -529,6 +564,17 @@ function openTodoModal(id, prefillGroupId, prefillToday) {
         ).join('')}
       </select>
     </div>
+    <div>
+      <label class="label">Repeat</label>
+      <select id="td-repeat" class="input">
+        <option value=""         ${!(t?.repeat) || t?.repeat==='none' ?'selected':''}>Does not repeat</option>
+        <option value="daily"    ${t?.repeat==='daily'    ?'selected':''}>🔁 Daily</option>
+        <option value="weekdays" ${t?.repeat==='weekdays' ?'selected':''}>🔁 Every weekday (Mon–Fri)</option>
+        <option value="weekly"   ${t?.repeat==='weekly'   ?'selected':''}>🔁 Weekly</option>
+        <option value="biweekly" ${t?.repeat==='biweekly' ?'selected':''}>🔁 Every 2 weeks</option>
+        <option value="monthly"  ${t?.repeat==='monthly'  ?'selected':''}>🔁 Monthly</option>
+      </select>
+    </div>
     <div class="flex items-center gap-2">
       <input type="checkbox" id="td-today" ${(t?.todayFlag || prefillToday) ? 'checked' : ''}
         class="w-4 h-4 rounded accent-indigo-600"/>
@@ -555,6 +601,7 @@ function saveTodo(id) {
     if (ev?.date) dueDate = ev.date
   }
 
+  const repeat = document.getElementById('td-repeat').value
   const data = {
     id:            id || uid(),
     title,
@@ -563,6 +610,7 @@ function saveTodo(id) {
     effort:        document.getElementById('td-effort').value,
     groupId:       document.getElementById('td-group').value,
     dueDate,
+    repeat:        repeat || '',
     linkedEventId: linkedId,
     todayFlag:     document.getElementById('td-today').checked,
     status:        id ? (state.todos.find(t=>t.id===id)?.status || 'pending') : 'pending',

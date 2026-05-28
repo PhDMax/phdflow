@@ -906,6 +906,7 @@ ipcMain.handle('import-data', async (_, { src, strategy, selectedKeys }) => {
 })
 
 ipcMain.handle('open-data-folder', () => { shell.openPath(getDataDir()); return true })
+ipcMain.handle('get-data-dir',     () => getDataDir())
 
 ipcMain.handle('open-import-dialog', async () => {
   const r = await dialog.showOpenDialog(mainWindow, {

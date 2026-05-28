@@ -106,6 +106,14 @@
     </div>
   </div>
 
+  <!-- Global search shortcut -->
+  <div class="px-2 pt-2 pb-1">
+    <button onclick="openGlobalSearch()"
+      class="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700/60 text-slate-400 text-xs hover:bg-slate-700 transition-colors">
+      <span>🔍</span><span class="flex-1 text-left">Search…</span><span class="text-[10px] bg-slate-700 px-1.5 py-0.5 rounded font-mono">⌘K</span>
+    </button>
+  </div>
+
   <!-- Nav -->
   <nav class="flex-1 p-1.5">
     <button id="nav-dashboard" onclick="showView('dashboard')" class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left mb-1">🏠 Dashboard</button>
@@ -165,6 +173,22 @@
 
 <!-- ══ Toast ═════════════════════════════════════════════════════════════════ -->
 <div id="toast" class="hidden fixed bottom-6 right-6 px-5 py-3 rounded-xl shadow-lg text-sm font-medium z-[200] max-w-sm pointer-events-none"></div>
+
+<!-- ══ Global Search Overlay ══════════════════════════════════════════════════ -->
+<div id="gsearch-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:400;align-items:flex-start;justify-content:center;padding-top:10vh"
+  onclick="if(event.target===this)closeGlobalSearch()">
+  <div style="width:100%;max-width:620px;background:#fff;border-radius:1rem;box-shadow:0 25px 60px rgba(0,0,0,.3);overflow:hidden">
+    <div style="display:flex;align-items:center;gap:.75rem;padding:.875rem 1rem;border-bottom:1px solid #e2e8f0">
+      <span style="font-size:1rem;color:#64748b">🔍</span>
+      <input id="gsearch-input" type="text" placeholder="Search notes, papers, projects, contacts…"
+        style="flex:1;border:none;outline:none;font-size:.9375rem;color:#0f172a;background:transparent"
+        oninput="_runGlobalSearch(this.value)"
+        onkeydown="_gsearchKey(event)"/>
+      <span style="font-size:.7rem;color:#94a3b8;background:#f1f5f9;padding:.2rem .5rem;border-radius:.375rem;flex-shrink:0">Esc</span>
+    </div>
+    <div id="gsearch-results" style="max-height:420px;overflow-y:auto;padding:.375rem"></div>
+  </div>
+</div>
 
 <!-- ══ Scripts ════════════════════════════════════════════════════════════════ -->
 <!-- ══ Login / Lock Overlay ══════════════════════════════════════════════════ -->

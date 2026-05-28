@@ -17,7 +17,8 @@ const state = {
   searchResults: [],
   calGoals: [],
   calFeeds: [],
-  todoGroups: []
+  todoGroups: [],
+  darkModeSchedule: null,
 }
 
 const VIEWS = ['dashboard','projects','library','grants','news','notes','whiteboard','utilities','discover','contacts','calendar','todos','feedback','settings','support','guide']
@@ -456,7 +457,7 @@ async function lockApp() {
 
 async function loadAndShowApp() {
   const keys = ['profile','projects','papers','contacts','notes','whiteboards','events','todos',
-                 'grants','newsFeeds','newsTopics','newsRead','calGoals','calFeeds','todoGroups']
+                 'grants','newsFeeds','newsTopics','newsRead','calGoals','calFeeds','todoGroups','darkModeSchedule']
   const [, ...vals] = await Promise.all([
     window.api.storeGet('theme').then(t => applyTheme(t || 'light')),
     ...keys.map(async k => { const val = await window.api.storeGet(k); if (val !== null) state[k] = val })
@@ -464,12 +465,232 @@ async function loadAndShowApp() {
   updateSidebarProfile()
   if (!state.profile) { showOnboarding(); return }
   showView('dashboard')
+  scheduleEventReminders()
+  startDarkSchedule()
+  if (typeof _checkAutoBackup === 'function') _checkAutoBackup()
 }
 
 // Lock event from main process (window hidden via X, or tray "Lock & Minimise")
 window.api.onAuthLocked(() => {
   renderLoginCard('login')
   document.getElementById('login-overlay').style.display = 'flex'
+})
+
+// ── Global Search ─────────────────────────────────────────────────────────────
+let _gsearchIdx = -1
+
+function openGlobalSearch() {
+  const ol = document.getElementById('gsearch-overlay')
+  if (!ol) return
+  ol.style.display = 'flex'
+  const inp = document.getElementById('gsearch-input')
+  if (inp) { inp.value = ''; inp.focus() }
+  document.getElementById('gsearch-results').innerHTML = `<div style="padding:2rem;text-align:center;color:#94a3b8;font-size:.85rem">Start typing to search across your research workspace…</div>`
+  _gsearchIdx = -1
+}
+
+function closeGlobalSearch() {
+  const ol = document.getElementById('gsearch-overlay')
+  if (ol) ol.style.display = 'none'
+  _gsearchIdx = -1
+}
+
+function _runGlobalSearch(q) {
+  _gsearchIdx = -1
+  const el = document.getElementById('gsearch-results')
+  if (!el) return
+  const query = (q || '').toLowerCase().trim()
+  if (!query) {
+    el.innerHTML = `<div style="padding:2rem;text-align:center;color:#94a3b8;font-size:.85rem">Start typing…</div>`
+    return
+  }
+  const results = []
+  const match = (str) => (str || '').toLowerCase().includes(query)
+  const excerpt = (str, len = 80) => {
+    const s = (str || '').replace(/\s+/g, ' ')
+    const i = s.toLowerCase().indexOf(query)
+    if (i < 0) return s.slice(0, len)
+    const start = Math.max(0, i - 20)
+    return (start > 0 ? '…' : '') + s.slice(start, start + len)
+  }
+
+  state.notes.forEach(n => {
+    if (match(n.title) || match(n.content)) {
+      results.push({ type:'note', icon:'📝', label:'Note', title: n.title || 'Untitled Note',
+        sub: excerpt(n.content), action: `closeGlobalSearch();showView('notes');setTimeout(()=>openNote&&openNote('${n.id}'),150)` })
+    }
+  })
+  state.papers.forEach(p => {
+    if (match(p.title) || match(p.authors) || match(p.abstract)) {
+      results.push({ type:'paper', icon:'📚', label:'Paper', title: p.title || 'Untitled',
+        sub: (p.authors || '') + (p.year ? ' · ' + p.year : ''), action: `closeGlobalSearch();showView('library')` })
+    }
+  })
+  state.projects.forEach(p => {
+    if (match(p.name) || match(p.description)) {
+      results.push({ type:'project', icon:'📋', label:'Project', title: p.name || 'Untitled',
+        sub: p.description || '', action: `closeGlobalSearch();showView('projects')` })
+    }
+  })
+  state.contacts.forEach(c => {
+    if (match(c.name) || match(c.email) || match(c.institution)) {
+      results.push({ type:'contact', icon:'👤', label:'Contact', title: c.name || 'Unknown',
+        sub: [c.institution, c.email].filter(Boolean).join(' · '), action: `closeGlobalSearch();showView('contacts')` })
+    }
+  })
+  state.todos.forEach(t => {
+    if (match(t.title) || match(t.description)) {
+      results.push({ type:'todo', icon:'✅', label:'Task', title: t.title,
+        sub: t.dueDate ? 'Due: ' + t.dueDate : '', action: `closeGlobalSearch();showView('todos')` })
+    }
+  })
+  state.events.forEach(e => {
+    if (match(e.title) || match(e.description)) {
+      results.push({ type:'event', icon:'📅', label:'Event', title: e.title,
+        sub: e.date || '', action: `closeGlobalSearch();showView('calendar')` })
+    }
+  })
+
+  if (!results.length) {
+    el.innerHTML = `<div style="padding:2rem;text-align:center;color:#94a3b8;font-size:.85rem">No results for "<strong style="color:#475569">${esc(q)}</strong>"</div>`
+    return
+  }
+
+  const typeColors = { note:'#6366f1', paper:'#0ea5e9', project:'#10b981', contact:'#f59e0b', todo:'#f43f5e', event:'#8b5cf6' }
+  el.innerHTML = results.slice(0, 20).map((r, i) =>
+    `<div class="gsearch-item" id="gsi-${i}" onclick="${r.action}"
+      style="display:flex;align-items:flex-start;gap:.75rem;padding:.625rem .875rem;border-radius:.625rem;cursor:pointer;transition:background .1s"
+      onmouseover="this.style.background='#f8fafc';_gsearchIdx=${i}"
+      onmouseout="if(_gsearchIdx!==${i})this.style.background=''">
+      <span style="font-size:1rem;flex-shrink:0;margin-top:.1rem">${r.icon}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:.875rem;font-weight:600;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.title)}</div>
+        ${r.sub ? `<div style="font-size:.75rem;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.sub)}</div>` : ''}
+      </div>
+      <span style="font-size:.7rem;padding:.2rem .5rem;border-radius:.375rem;flex-shrink:0;margin-top:.1rem;background:${typeColors[r.type]}20;color:${typeColors[r.type]}">${r.label}</span>
+    </div>`
+  ).join('')
+  if (results.length > 20) {
+    el.innerHTML += `<div style="padding:.5rem .875rem 1rem;text-align:center;font-size:.75rem;color:#94a3b8">+${results.length-20} more — refine your search</div>`
+  }
+}
+
+function _gsearchKey(e) {
+  const items = document.querySelectorAll('.gsearch-item')
+  if (e.key === 'Escape') { closeGlobalSearch(); return }
+  if (e.key === 'ArrowDown' || e.key === 'j') {
+    e.preventDefault()
+    _gsearchIdx = Math.min(_gsearchIdx + 1, items.length - 1)
+  } else if (e.key === 'ArrowUp' || e.key === 'k') {
+    e.preventDefault()
+    _gsearchIdx = Math.max(_gsearchIdx - 1, 0)
+  } else if (e.key === 'Enter' && _gsearchIdx >= 0) {
+    items[_gsearchIdx]?.click()
+    return
+  } else {
+    return
+  }
+  items.forEach((it, i) => {
+    it.style.background = i === _gsearchIdx ? '#f1f5f9' : ''
+  })
+  items[_gsearchIdx]?.scrollIntoView({ block: 'nearest' })
+}
+
+// ── Dark mode schedule ────────────────────────────────────────────────────────
+let _darkScheduleInterval = null
+
+function _applyDarkSchedule() {
+  const s = state.darkModeSchedule
+  if (!s?.enabled || !s.lightFrom || !s.darkFrom) return
+  const now  = new Date()
+  const mins = now.getHours() * 60 + now.getMinutes()
+  const toM  = t => { const [h,m] = t.split(':').map(Number); return h * 60 + m }
+  const lightM = toM(s.lightFrom), darkM = toM(s.darkFrom)
+  let isDark
+  if (darkM > lightM) {
+    isDark = mins >= darkM || mins < lightM
+  } else {
+    isDark = mins >= darkM && mins < lightM
+  }
+  applyTheme(isDark ? 'dark' : 'light')
+}
+
+function startDarkSchedule() {
+  if (_darkScheduleInterval) clearInterval(_darkScheduleInterval)
+  _applyDarkSchedule()
+  _darkScheduleInterval = setInterval(_applyDarkSchedule, 60000)
+}
+
+// ── Event reminder scheduler ──────────────────────────────────────────────────
+const _reminderTimers = {}
+const _REMINDER_OFFSETS = { '15min':15*60000,'30min':30*60000,'1hour':3600000,'3hours':3*3600000,'1day':86400000 }
+const _REMINDER_LABELS  = { '15min':'15 min before','30min':'30 min before','1hour':'1 hour before','3hours':'3 hours before','1day':'1 day before' }
+
+function scheduleEventReminders() {
+  if (typeof Notification === 'undefined') return
+  if (Notification.permission === 'default') Notification.requestPermission()
+  const now = Date.now()
+  state.events.forEach(e => {
+    if (!e.reminder || !e.date) return
+    const offset = _REMINDER_OFFSETS[e.reminder]
+    if (!offset) return
+    const timeStr  = e.startTime || '09:00'
+    const eventMs  = new Date(`${e.date}T${timeStr}`).getTime()
+    const fireAt   = eventMs - offset
+    const delay    = fireAt - now
+    if (delay < 0 || delay > 7 * 86400000) return
+    if (_reminderTimers[e.id]) { clearTimeout(_reminderTimers[e.id]); delete _reminderTimers[e.id] }
+    _reminderTimers[e.id] = setTimeout(() => {
+      delete _reminderTimers[e.id]
+      if (Notification.permission !== 'granted') return
+      new Notification(`⏰ ${e.title}`, {
+        body: `${_REMINDER_LABELS[e.reminder] || 'Reminder'} · ${e.date}`,
+        silent: false,
+      })
+    }, delay)
+  })
+}
+
+// ── Keyboard shortcuts ────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  // Don't fire when typing in inputs
+  const tag = document.activeElement?.tagName
+  const inInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+    || document.activeElement?.contentEditable === 'true'
+
+  // Ctrl+K / Cmd+K — global search
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+    e.preventDefault()
+    const ol = document.getElementById('gsearch-overlay')
+    if (ol?.style.display !== 'none') closeGlobalSearch()
+    else openGlobalSearch()
+    return
+  }
+
+  // Escape — close modal or search overlay
+  if (e.key === 'Escape') {
+    const modal = document.getElementById('modal-overlay')
+    if (!modal?.classList.contains('hidden')) { closeModal(); return }
+    const gsearch = document.getElementById('gsearch-overlay')
+    if (gsearch?.style.display !== 'none') { closeGlobalSearch(); return }
+    return
+  }
+
+  if (inInput) return
+
+  // View shortcuts
+  const viewMap = { '1':'dashboard','2':'projects','3':'library','4':'notes','5':'calendar','6':'todos' }
+  if (viewMap[e.key]) { showView(viewMap[e.key]); return }
+
+  // N — new note (if in notes view)
+  if (e.key === 'n' && state.currentView === 'notes') {
+    if (typeof newNote === 'function') { newNote('note'); return }
+  }
+
+  // T — new task
+  if (e.key === 't' && state.currentView === 'todos') {
+    if (typeof openTodoModal === 'function') { openTodoModal(); return }
+  }
 })
 
 // ── Start ─────────────────────────────────────────────────────────────────────

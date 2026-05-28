@@ -215,4 +215,31 @@ function render_dashboard() {
 
   // Populate the task widget (todos.js must be loaded first)
   if (typeof renderTodosWidget === 'function') renderTodosWidget('dash-todos-widget')
+
+  // Floating quick-add button
+  const fab = document.createElement('div')
+  fab.id = 'dash-fab'
+  fab.innerHTML = `
+  <div style="position:fixed;bottom:1.5rem;right:1.5rem;z-index:100">
+    <div id="dash-fab-menu" style="display:none;position:absolute;bottom:3.5rem;right:0;background:#fff;border:1px solid #e2e8f0;border-radius:.875rem;box-shadow:0 10px 40px rgba(0,0,0,.12);padding:.375rem;width:160px">
+      ${[
+        ['📌 New Task',    `openTodoModal(null,null,true);document.getElementById('dash-fab-menu').style.display='none'`],
+        ['📄 New Note',    `newNote('note');document.getElementById('dash-fab-menu').style.display='none'`],
+        ['📋 New Project', `showView('projects');setTimeout(()=>openProjectModal&&openProjectModal(),150);document.getElementById('dash-fab-menu').style.display='none'`],
+        ['📚 Add Paper',   `showView('library');document.getElementById('dash-fab-menu').style.display='none'`],
+      ].map(([label, action]) => `
+      <button onclick="${action}" style="display:block;width:100%;text-align:left;padding:.5rem .75rem;border:none;background:none;border-radius:.5rem;font-size:.8rem;color:#374151;cursor:pointer;transition:background .12s"
+        onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='none'">${label}</button>`).join('')}
+    </div>
+    <button id="dash-fab-btn" onclick="
+      const m=document.getElementById('dash-fab-menu');
+      m.style.display=m.style.display==='none'?'block':'none'"
+      style="width:3rem;height:3rem;background:#4f46e5;color:#fff;border:none;border-radius:9999px;font-size:1.375rem;cursor:pointer;box-shadow:0 4px 20px rgba(79,70,229,.4);display:flex;align-items:center;justify-content:center;transition:background .15s"
+      onmouseover="this.style.background='#4338ca'" onmouseout="this.style.background='#4f46e5'"
+      title="Quick add">⊕</button>
+  </div>`
+  vc.appendChild(fab)
+  document.addEventListener('click', e => {
+    if (!e.target.closest('#dash-fab')) document.getElementById('dash-fab-menu')?.style && (document.getElementById('dash-fab-menu').style.display = 'none')
+  }, { once: false, capture: true })
 }
