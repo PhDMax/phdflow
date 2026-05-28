@@ -64,10 +64,23 @@ function render_feedback() {
         </div>`).join('')}
       </div>
 
+      <!-- Docs link -->
+      <div class="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 flex items-center gap-4">
+        <div class="text-3xl flex-shrink-0">📖</div>
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-semibold text-slate-800">Step-by-step guides for every tool</p>
+          <p class="text-xs text-slate-500 mt-0.5">Getting started, tips, and full feature walkthroughs — all in one place.</p>
+        </div>
+        <button onclick="api.openExternal('https://github.com/PhDMax/phdflow/tree/master/docs')"
+          class="flex-shrink-0 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-xl text-xs transition-colors whitespace-nowrap">
+          Open Docs →
+        </button>
+      </div>
+
       <!-- Privacy note -->
       <p class="text-xs text-slate-400 text-center">
-        Feedback is sent directly from your device to your own Discord server via your webhook.<br/>
-        PhDFlow never sees or stores your feedback.
+        Feedback is sent anonymously to the developer.<br/>
+        PhDFlow never stores your feedback beyond delivery.
       </p>
 
       <!-- Support nudge -->
