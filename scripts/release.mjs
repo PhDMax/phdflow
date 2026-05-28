@@ -17,7 +17,8 @@ const REPO  = 'phdflow'
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function run(cmd, opts = {}) {
-  return execSync(cmd, { cwd: ROOT, encoding: 'utf-8', stdio: opts.silent ? 'pipe' : 'inherit', ...opts }).trim()
+  const out = execSync(cmd, { cwd: ROOT, encoding: 'utf-8', stdio: opts.silent ? 'pipe' : 'inherit', ...opts })
+  return out ? out.trim() : ''
 }
 
 function loadToken() {
@@ -118,7 +119,7 @@ function gitLogSinceLastTag() {
 
   // 5. Commit version bump
   console.log('\n📝  Committing version bump…')
-  run('git add package.json package-lock.json src/index.html')
+  run('git add package.json src/index.html')
   run(`git commit -m "chore: bump to v${newVersion}"`)
 
   // 6. Build
