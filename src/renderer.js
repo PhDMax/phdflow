@@ -16,6 +16,7 @@ const state = {
   newsRead: [],
   searchResults: [],
   calGoals: [],
+  calFeeds: [],
   todoGroups: []
 }
 
@@ -96,6 +97,66 @@ function openModal(html, wide) {
 function closeModal() {
   document.getElementById('modal-overlay').classList.add('hidden')
   document.getElementById('modal-content').innerHTML = ''
+  // Resolve any pending confirmDlg/confirmTypeDlg with false (user dismissed)
+  if (typeof window._cdlgResolve === 'function') {
+    const res = window._cdlgResolve; window._cdlgResolve = null; res(false)
+  }
+}
+
+// ── Confirm Dialog — replaces window.confirm() which breaks focus in Electron ──
+function confirmDlg(msg, label = 'Delete') {
+  return new Promise(resolve => {
+    window._cdlgResolve = resolve
+    openModal(`
+      <div>
+        <p class="text-slate-700 text-sm leading-relaxed mb-5">${esc(msg).replace(/\n/g,'<br/>')}</p>
+        <div class="flex gap-2 justify-end">
+          <button onclick="closeModal()" class="btn-secondary px-4 py-2 text-sm">Cancel</button>
+          <button id="cdlg-ok"
+            class="px-4 py-2 text-sm font-semibold rounded-xl bg-red-600 hover:bg-red-700 text-white transition-colors">
+            ${label}
+          </button>
+        </div>
+      </div>`)
+    document.getElementById('cdlg-ok').onclick = () => {
+      window._cdlgResolve = null; closeModal(); resolve(true)
+    }
+  })
+}
+
+// ── Confirm-by-typing dialog — for destructive irreversible actions ─────────────
+function confirmTypeDlg(msg, expected = 'YES') {
+  return new Promise(resolve => {
+    window._cdlgResolve = resolve
+    openModal(`
+      <div>
+        <p class="text-slate-700 text-sm leading-relaxed mb-4">${esc(msg).replace(/\n/g,'<br/>')}</p>
+        <div class="mb-4">
+          <label class="block text-xs font-medium text-slate-600 mb-1">
+            Type <span class="font-mono font-bold text-red-600">${expected}</span> to confirm:
+          </label>
+          <input id="cdlg-type" type="text" class="input" placeholder="${expected}"
+            onkeydown="if(event.key==='Enter')document.getElementById('cdlg-type-ok').click()"/>
+        </div>
+        <div class="flex gap-2 justify-end">
+          <button onclick="closeModal()" class="btn-secondary px-4 py-2 text-sm">Cancel</button>
+          <button id="cdlg-type-ok"
+            class="px-4 py-2 text-sm font-semibold rounded-xl bg-red-600 hover:bg-red-700 text-white transition-colors">
+            Erase Everything
+          </button>
+        </div>
+      </div>`)
+    document.getElementById('cdlg-type-ok').onclick = () => {
+      const val = document.getElementById('cdlg-type')?.value.trim()
+      if (val !== expected) {
+        const el = document.getElementById('cdlg-type')
+        if (el) { el.style.borderColor='#ef4444'; el.focus() }
+        return
+      }
+      window._cdlgResolve = null; closeModal(); resolve(true)
+    }
+    setTimeout(() => document.getElementById('cdlg-type')?.focus(), 80)
+  })
 }
 document.getElementById('modal-overlay').addEventListener('click', e => {
   if (e.target === document.getElementById('modal-overlay')) closeModal()
@@ -294,7 +355,7 @@ async function lockApp() {
 
 async function loadAndShowApp() {
   const keys = ['profile','projects','papers','contacts','notes','whiteboards','events','todos',
-                 'grants','newsFeeds','newsTopics','newsRead','calGoals','todoGroups']
+                 'grants','newsFeeds','newsTopics','newsRead','calGoals','calFeeds','todoGroups']
   await Promise.all(keys.map(async k => {
     const val = await window.api.storeGet(k)
     if (val !== null) state[k] = val

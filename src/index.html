@@ -23,15 +23,33 @@
     .badge-mid{background:#fef9c3;color:#854d0e}
     .badge-low{background:#fee2e2;color:#991b1b}
     .badge-none{background:#f1f5f9;color:#475569}
-    .prose h1,.prose h2,.prose h3{font-weight:700;margin:.75rem 0 .35rem}
-    .prose h1{font-size:1.4rem}.prose h2{font-size:1.2rem}.prose h3{font-size:1rem}
-    .prose p{margin:.4rem 0;line-height:1.6}
-    .prose code{background:#f1f5f9;padding:.1rem .35rem;border-radius:.25rem;font-size:.85em;font-family:monospace}
-    .prose pre{background:#1e293b;color:#e2e8f0;padding:1rem;border-radius:.5rem;overflow-x:auto;margin:.75rem 0}
-    .prose pre code{background:none;padding:0;color:inherit}
-    .prose ul,.prose ol{padding-left:1.5rem;margin:.4rem 0}
-    .prose li{margin:.2rem 0}
-    .prose blockquote{border-left:3px solid #6366f1;padding-left:.75rem;color:#64748b;margin:.5rem 0}
+    /* ── Notion-style prose typography ─────────────────────────────────── */
+    .prose{color:#374151;line-height:1.85}
+    .prose h1{font-size:1.75rem;font-weight:700;margin:1.5rem 0 .5rem;color:#111827;letter-spacing:-.02em;line-height:1.2}
+    .prose h2{font-size:1.3rem;font-weight:700;margin:1.4rem 0 .4rem;color:#111827;letter-spacing:-.01em}
+    .prose h3{font-size:1.05rem;font-weight:700;margin:1.2rem 0 .3rem;color:#374151}
+    .prose h4{font-size:.95rem;font-weight:600;margin:1rem 0 .25rem;color:#374151}
+    .prose p{margin:.5rem 0;line-height:1.85}
+    .prose strong{font-weight:700;color:#111827}
+    .prose em{font-style:italic;color:#374151}
+    .prose del{text-decoration:line-through;color:#9ca3af}
+    .prose a{color:#4f46e5;text-decoration:underline;text-decoration-color:#c7d2fe}
+    .prose a:hover{color:#3730a3}
+    .prose code{background:#f3f4f6;padding:.15rem .4rem;border-radius:.375rem;font-size:.85em;font-family:'Cascadia Code','Fira Code',monospace;color:#374151;border:1px solid #e5e7eb}
+    .prose pre{background:#1e293b;color:#e2e8f0;padding:1.25rem 1.5rem;border-radius:.75rem;overflow-x:auto;margin:1.25rem 0;font-size:.85rem;line-height:1.7;border:1px solid #334155}
+    .prose pre code{background:none;padding:0;color:inherit;border:none;font-size:inherit}
+    .prose ul{padding-left:1.75rem;margin:.75rem 0;list-style-type:disc}
+    .prose ol{padding-left:1.75rem;margin:.75rem 0;list-style-type:decimal}
+    .prose li{margin:.3rem 0;line-height:1.75;padding-left:.25rem}
+    .prose li input[type=checkbox]{margin-right:.5rem;accent-color:#6366f1}
+    .prose blockquote{border-left:3px solid #6366f1;padding:.25rem 0 .25rem 1rem;color:#6b7280;margin:1rem 0;font-style:italic}
+    .prose blockquote p{margin:0}
+    .prose hr{border:none;border-top:1px solid #e5e7eb;margin:1.75rem 0}
+    .prose table{width:100%;border-collapse:collapse;margin:1rem 0;font-size:.9rem}
+    .prose th{background:#f9fafb;font-weight:600;text-align:left;padding:.6rem .9rem;border:1px solid #e5e7eb;color:#374151}
+    .prose td{padding:.5rem .9rem;border:1px solid #e5e7eb;color:#4b5563}
+    .prose tr:hover td{background:#f9fafb}
+    .prose img{border-radius:.5rem;max-width:100%;margin:.75rem 0}
     .drop-zone.dragover{border-color:#6366f1;background:#eef2ff}
     .priority-high{border-left:3px solid #ef4444}
     .priority-medium{border-left:3px solid #f59e0b}
@@ -145,7 +163,7 @@
 <script src="views/news.js"></script>
 <script src="views/whiteboard.js"></script>
 <script src="views/utilities.js"></script>
-<script src="views/discover.js"></script>
+
 <script src="views/feedback.js"></script>
 <script src="views/settings.js"></script>
 </body>

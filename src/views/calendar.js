@@ -1,8 +1,111 @@
 // ══ Calendar View ══════════════════════════════════════════════════════════════
 // THE command centre: Month / Week / Agenda views + deadline countdowns + goals
 
-let _calDate = new Date()
-let _calView  = 'month' // 'month' | 'week' | 'agenda'
+let _calDate        = new Date()
+let _calView        = 'month'  // 'month' | 'week' | 'agenda'
+let _calFeedEvents  = {}       // { feedId: [{uid,title,date,startTime,endTime,location,description}] }
+let _calFeedSyncing = {}       // { feedId: bool }
+
+// ── External calendar service presets ─────────────────────────────────────────
+const CAL_SERVICES = {
+  google:    { label:'Google Calendar',      icon:'🔵', hint:'Google Calendar → ⚙ Settings next to your calendar → scroll to "Secret address in iCal format" → copy that link.' },
+  apple:     { label:'Apple iCloud',         icon:'🍎', hint:'iCloud.com → Calendar → Share icon (📤) next to a calendar → enable "Public Calendar" → copy the URL.' },
+  outlook:   { label:'Outlook / Office 365', icon:'📘', hint:'Outlook on the web → Calendar → Settings → Shared calendars → Publish a calendar → copy the ICS link.' },
+  yahoo:     { label:'Yahoo Calendar',       icon:'🟣', hint:'Yahoo Calendar → click the calendar name → Actions → Export Calendar → copy the .ics link.' },
+  nextcloud: { label:'Nextcloud / ownCloud', icon:'☁️',  hint:'Nextcloud Calendar → Share (chain icon) → copy the link, then add ?export at the end of the URL.' },
+  other:     { label:'Other (.ics URL)',     icon:'📅', hint:'Any calendar service that provides a public or "secret" iCal subscription link (ends in .ics or contains /ical/).' },
+}
+
+// ── ICS / iCal parser — RFC 5545, zero external dependencies ─────────────────
+function _parseICS(raw) {
+  // Unfold continuation lines and normalise line endings (RFC 5545 §3.1)
+  const text = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+                  .replace(/\n[ \t]/g, '')
+
+  // Extract VEVENT blocks line-by-line
+  const vevents = []; let inEvent = false; let cur = []
+  for (const line of text.split('\n')) {
+    if (/^BEGIN:VEVENT/i.test(line))  { inEvent = true;  cur = []; continue }
+    if (/^END:VEVENT/i.test(line))    { if (inEvent) vevents.push(cur.join('\n')); inEvent = false; continue }
+    if (inEvent) cur.push(line)
+  }
+
+  const unescape = s => (s || '').replace(/\\n/g,'\n').replace(/\\N/g,'\n')
+                                 .replace(/\\,/g,',').replace(/\\;/g,';')
+                                 .replace(/\\\\/g,'\\').trim()
+
+  const parseDT = dt => {
+    if (!dt) return null
+    const s    = dt.replace(/Z$/,'').replace(/\s/g,'')
+    const date = `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)}`
+    let time   = null
+    if (s.length > 8) {
+      const tp = s.slice(9)  // chars after 'T'
+      if (tp.length >= 4) time = `${tp.slice(0,2)}:${tp.slice(2,4)}`
+    }
+    return { date, time }
+  }
+
+  return vevents.map(block => {
+    const props = {}
+    block.split('\n').forEach(line => {
+      const ci = line.indexOf(':')
+      if (ci < 1) return
+      const baseKey = line.slice(0, ci).toUpperCase().split(';')[0]
+      if (!(baseKey in props)) props[baseKey] = line.slice(ci + 1)
+    })
+    if (!props.SUMMARY || !props.DTSTART) return null
+    const start = parseDT(props.DTSTART)
+    const end   = props.DTEND ? parseDT(props.DTEND) : null
+    if (!start?.date) return null
+    return {
+      uid:         unescape(props.UID) || `${props.DTSTART}~${props.SUMMARY}`,
+      title:       unescape(props.SUMMARY),
+      date:        start.date,
+      startTime:   start.time,
+      endTime:     end?.time || null,
+      location:    unescape(props.LOCATION || ''),
+      description: unescape(props.DESCRIPTION || ''),
+    }
+  }).filter(e => e && e.date && e.title)
+}
+
+// ── Combined local + external events for a given date ────────────────────────
+function _allEventsForDate(dateStr) {
+  const local = _eventsForDate(dateStr)
+  const ext   = []
+  for (const feed of (state.calFeeds || [])) {
+    if (!feed.enabled) continue
+    for (const ev of (_calFeedEvents[feed.id] || [])) {
+      if (ev.date !== dateStr) continue
+      ext.push({ ...ev,
+        id:        `feed-${feed.id}-${ev.uid}`,
+        type:      'external',
+        external:  true,
+        feedId:    feed.id,
+        feedName:  feed.name,
+        feedColor: feed.color || '#6366f1',
+      })
+    }
+  }
+  return [...local, ...ext]
+}
+
+// ── Unified event chip — handles both local and external events ───────────────
+function _calEventChip(e, extra = '') {
+  const sp = "event.stopPropagation();"
+  if (e.external) {
+    const c = e.feedColor || '#6366f1'
+    return `<div class="text-[10px] px-1.5 py-0.5 rounded truncate cursor-pointer font-medium ${extra}"
+      style="background:${c}20;color:${c};border-left:2px solid ${c}"
+      onclick="${sp}calShowExternal('${esc(e.feedId)}','${esc(e.uid)}')"
+      title="${esc(e.title)}">${esc(e.title)}</div>`
+  }
+  const conf = (_calTypeConf()[e.type] || _calTypeConf().personal)
+  return `<div class="text-[10px] px-1.5 py-0.5 rounded truncate cursor-pointer ${conf.bg} ${conf.text} font-medium ${extra}"
+    onclick="${sp}openEventDetail('${e.id}')"
+    title="${esc(e.title)}">${esc(e.title)}</div>`
+}
 
 // ── Type & colour config ──────────────────────────────────────────────────────
 
@@ -63,6 +166,7 @@ function _eventsForDate(dateStr) {
 
 function render_calendar() {
   if (!state.calGoals) state.calGoals = []
+  if (!state.calFeeds) state.calFeeds = []
   const vc = document.getElementById('view-content')
   vc.innerHTML = `
   ${pageHeader('📅 Calendar', `
@@ -75,13 +179,16 @@ function render_calendar() {
           </button>`
         ).join('')}
       </div>
-      <button onclick="openGoalModal()" class="btn-secondary text-xs py-1.5 px-3">🎯 New Goal</button>
-      <button onclick="openEventModal()"  class="btn-primary  text-xs py-1.5 px-3">+ Event</button>
+      <button onclick="openFeedModal()"  class="btn-secondary text-xs py-1.5 px-3">🔗 Connect</button>
+      <button onclick="openGoalModal()"  class="btn-secondary text-xs py-1.5 px-3">🎯 Goal</button>
+      <button onclick="openEventModal()" class="btn-primary   text-xs py-1.5 px-3">+ Event</button>
     </div>
   `)}
   <div class="flex-1 overflow-y-auto">
+    <!-- Connected feeds strip -->
+    <div id="cal-feeds-strip" class="px-6 pt-3"></div>
     <!-- Countdown strip -->
-    <div id="cal-countdown" class="px-6 pt-4"></div>
+    <div id="cal-countdown" class="px-6 pt-2"></div>
     <!-- Nav bar + calendar body -->
     <div class="px-6 pb-4">
       <div class="flex items-center justify-between mb-3">
@@ -113,6 +220,8 @@ function render_calendar() {
   calSetView(_calView)
   renderCountdown()
   renderGoals()
+  renderFeedsStrip()
+  _calAutoSync()   // fire-and-forget background sync
 }
 
 // ── View switcher & navigation ────────────────────────────────────────────────
@@ -211,7 +320,7 @@ function renderMonthView() {
         const cellDate = new Date(y, m, d); cellDate.setHours(0,0,0,0)
         const isToday  = cellDate.getTime() === today.getTime()
         const dateStr  = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`
-        const events   = _eventsForDate(dateStr)
+        const events   = _allEventsForDate(dateStr)
         return `<div class="min-h-[88px] border-b border-r border-slate-100 p-1 cursor-pointer hover:bg-indigo-50/30 transition-colors group"
                      onclick="openEventModal(null,'${dateStr}')">
           <div class="flex justify-end mb-0.5">
@@ -221,12 +330,7 @@ function renderMonthView() {
             </span>
           </div>
           <div class="space-y-0.5">
-            ${events.slice(0,3).map(e => {
-              const conf = tc[e.type] || tc.personal
-              return `<div class="text-[10px] px-1.5 py-0.5 rounded truncate cursor-pointer ${conf.bg} ${conf.text} font-medium"
-                          onclick="event.stopPropagation();openEventDetail('${e.id}')"
-                          title="${esc(e.title)}">${esc(e.title)}</div>`
-            }).join('')}
+            ${events.slice(0,3).map(e => _calEventChip(e)).join('')}
             ${events.length > 3 ? `<div class="text-[10px] text-slate-400 px-1">+${events.length-3} more</div>` : ''}
           </div>
         </div>`
@@ -254,14 +358,14 @@ function renderWeekView() {
 
   const days = Array.from({length:7},(_,i)=>{ const d=new Date(ref); d.setDate(d.getDate()+i); return d })
 
-  // Split events per day into all-day vs timed
+  // Split events per day into all-day vs timed (includes external calendar events)
   const allDay = days.map(d => {
     const ds = d.toISOString().slice(0,10)
-    return _eventsForDate(ds).filter(e => !e.startTime)
+    return _allEventsForDate(ds).filter(e => !e.startTime)
   })
   const timed  = days.map(d => {
     const ds = d.toISOString().slice(0,10)
-    return _eventsForDate(ds).filter(e => e.startTime)
+    return _allEventsForDate(ds).filter(e => e.startTime)
   })
 
   const el = document.getElementById('cal-main')
@@ -287,11 +391,7 @@ function renderWeekView() {
       ${days.map((d,i) => {
         const ds = d.toISOString().slice(0,10)
         return `<div class="border-r border-slate-100 px-0.5 py-0.5">
-          ${allDay[i].map(e => {
-            const c = tc[e.type]||tc.personal
-            return `<div class="text-[10px] px-1 py-0.5 rounded truncate ${c.bg} ${c.text} cursor-pointer mb-0.5"
-                        onclick="openEventDetail('${e.id}')">${esc(e.title)}</div>`
-          }).join('')}
+          ${allDay[i].map(e => _calEventChip(e, 'mb-0.5')).join('')}
         </div>`
       }).join('')}
     </div>
@@ -305,11 +405,7 @@ function renderWeekView() {
           const slot = timed[i].filter(e => parseInt((e.startTime||'00:00').split(':')[0]) === h)
           return `<div class="border-r border-slate-100 px-0.5 py-0.5 min-h-[40px] cursor-pointer hover:bg-indigo-50/20 transition-colors"
                       onclick="openEventModal(null,'${ds}')">
-            ${slot.map(e => {
-              const c = tc[e.type]||tc.personal
-              return `<div class="text-[10px] px-1 py-0.5 rounded truncate ${c.bg} ${c.text} cursor-pointer mb-0.5 font-medium"
-                          onclick="event.stopPropagation();openEventDetail('${e.id}')">${esc(e.title)}</div>`
-            }).join('')}
+            ${slot.map(e => _calEventChip(e, 'mb-0.5')).join('')}
           </div>`
         }).join('')}
       </div>`).join('')}
@@ -330,7 +426,7 @@ function renderAgendaView() {
   for (let i = 0; i < 60; i++) {
     const d  = new Date(now); d.setDate(d.getDate() + i)
     const ds = d.toISOString().slice(0,10)
-    const ev = _eventsForDate(ds)
+    const ev = _allEventsForDate(ds)
     if (ev.length) groups[ds] = ev
   }
 
@@ -361,6 +457,18 @@ function renderAgendaView() {
         </div>
         <div class="space-y-1.5 ml-3 pl-4 border-l-2 border-slate-200">
           ${groups[ds].map(e => {
+            if (e.external) {
+              const c = e.feedColor || '#6366f1'
+              return `<div class="flex items-center gap-3 bg-white border border-slate-200 rounded-xl px-4 py-2.5
+                                 cursor-pointer hover:shadow-sm transition-shadow"
+                           onclick="calShowExternal('${esc(e.feedId)}','${esc(e.uid)}')">
+                <span class="w-2 h-2 rounded-full flex-shrink-0" style="background:${c}"></span>
+                <span class="text-xs px-2 py-0.5 rounded-full font-semibold flex-shrink-0"
+                      style="background:${c}20;color:${c}">${esc(e.feedName)}</span>
+                <span class="text-sm font-medium text-slate-800 flex-1 truncate">${esc(e.title)}</span>
+                ${e.startTime ? `<span class="text-xs text-slate-400 flex-shrink-0">${e.startTime}${e.endTime?' – '+e.endTime:''}</span>` : ''}
+              </div>`
+            }
             const conf = tc[e.type] || tc.personal
             return `<div class="flex items-center gap-3 bg-white border border-slate-200 rounded-xl px-4 py-2.5
                                cursor-pointer hover:shadow-sm transition-shadow" onclick="openEventDetail('${e.id}')">
@@ -443,8 +551,8 @@ function goalStep(id, delta) {
   if (g.doneSteps === g.totalSteps) showToast(`🎉 Goal complete: ${g.title}`)
 }
 
-function deleteGoal(id) {
-  if (!confirm('Delete this goal?')) return
+async function deleteGoal(id) {
+  if (!await confirmDlg('Delete this goal?', 'Delete Goal')) return
   state.calGoals = (state.calGoals || []).filter(g => g.id !== id)
   save('calGoals')
   renderGoals()
@@ -663,12 +771,321 @@ function openEventDetail(id) {
   </div>`)
 }
 
-function deleteEvent(id) {
-  if (!confirm('Delete this event?')) return
+async function deleteEvent(id) {
+  if (!await confirmDlg('Delete this event?', 'Delete Event')) return
   state.events = state.events.filter(e => e.id !== id)
   save('events')
   closeModal()
   calSetView(_calView)
   renderCountdown()
   showToast('Event deleted')
+}
+
+// ══ Connected Calendar Feeds ══════════════════════════════════════════════════
+
+// ── Feeds strip (pill row below header) ──────────────────────────────────────
+function renderFeedsStrip() {
+  const el = document.getElementById('cal-feeds-strip')
+  if (!el) return
+  const feeds = state.calFeeds || []
+  if (!feeds.length) { el.innerHTML = ''; return }
+
+  el.innerHTML = `<div class="flex flex-wrap gap-2 pb-1">
+    ${feeds.map(f => {
+      const syncing = !!_calFeedSyncing[f.id]
+      const count   = (_calFeedEvents[f.id] || []).length
+      const ago     = f.lastSync
+        ? (() => { const m = Math.round((Date.now()-new Date(f.lastSync).getTime())/60000);
+                   return m < 2 ? 'just now' : m < 60 ? m+'m ago' : Math.round(m/60)+'h ago' })()
+        : 'not synced'
+      return `<div class="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs shadow-sm">
+        <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:${f.color||'#6366f1'}"></span>
+        <span class="font-semibold ${f.enabled?'text-slate-700':'text-slate-400 line-through'}">${esc(f.name)}</span>
+        <span class="text-slate-400 text-[10px]">${count?count+' events·':''} ${ago}</span>
+        <button onclick="calToggleFeed('${f.id}')" title="${f.enabled?'Hide feed':'Show feed'}"
+          class="text-slate-400 hover:text-slate-700 transition-colors leading-none">${f.enabled?'👁':'🚫'}</button>
+        <button onclick="calSyncFeed('${f.id}')" title="Sync now"
+          class="text-slate-400 hover:text-indigo-600 transition-colors leading-none ${syncing?'spin':''}">⟳</button>
+        <button onclick="openFeedModal('${f.id}')" title="Edit feed"
+          class="text-slate-400 hover:text-slate-700 transition-colors leading-none text-[10px]">⚙</button>
+      </div>`
+    }).join('')}
+    <button onclick="openFeedModal()"
+      class="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium px-3 py-1.5 rounded-xl hover:bg-indigo-50 transition-colors border border-dashed border-indigo-200">
+      + Connect
+    </button>
+  </div>`
+}
+
+// ── "Connect calendar" modal ──────────────────────────────────────────────────
+function openFeedModal(feedId) {
+  const f   = feedId ? (state.calFeeds||[]).find(x=>x.id===feedId) : null
+  const svc = f?.service || 'google'
+  const palette = ['#4285f4','#34a853','#ea4335','#fbbc04','#6366f1','#0ea5e9','#f97316','#8b5cf6','#10b981','#64748b']
+  const selColor = f?.color || '#4285f4'
+
+  openModal(`
+  <h3 class="text-base font-bold mb-1">${f ? 'Edit Calendar Feed' : '🔗 Connect External Calendar'}</h3>
+  <p class="text-xs text-slate-500 mb-4 leading-relaxed">
+    Connect any calendar via its <strong>ICS / iCal subscription URL</strong> — works with
+    Google Calendar, Apple iCloud, Outlook, Yahoo, Nextcloud, and any service that publishes .ics links.
+    Events are fetched and cached locally — nothing leaves your machine.
+  </p>
+
+  <div class="space-y-3">
+    <div>
+      <label class="label">Service</label>
+      <div class="grid grid-cols-3 gap-1.5">
+        ${Object.entries(CAL_SERVICES).map(([k,v]) =>
+          `<button id="feed-svc-${k}" onclick="calSelectSvc('${k}')"
+            class="text-[11px] px-2 py-1.5 rounded-lg border transition-colors text-left leading-snug
+              ${svc===k ? 'border-indigo-400 bg-indigo-50 text-indigo-700 font-semibold'
+                        : 'border-slate-200 text-slate-600 hover:border-slate-300'}">
+            ${v.icon} ${v.label}
+          </button>`
+        ).join('')}
+      </div>
+    </div>
+
+    <div id="feed-hint-box" class="text-xs text-slate-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 leading-relaxed"></div>
+
+    <div>
+      <label class="label">Calendar name *</label>
+      <input id="feed-name" type="text" value="${esc(f?.name||'')}"
+        placeholder="e.g. My Work Calendar" class="input"/>
+    </div>
+
+    <div>
+      <label class="label">ICS / iCal URL *</label>
+      <textarea id="feed-url" rows="2" class="input resize-none text-xs"
+        placeholder="https://calendar.google.com/calendar/ical/…/basic.ics">${esc(f?.url||'')}</textarea>
+    </div>
+
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="label">Colour</label>
+        <div class="flex gap-1.5 flex-wrap mt-1">
+          ${palette.map(c =>
+            `<button onclick="calPickFeedColor('${c}')" id="fclr-${c.slice(1)}"
+              style="width:22px;height:22px;border-radius:50%;background:${c};flex-shrink:0;
+                     border:2px solid ${selColor===c?'#1e293b':'transparent'};transition:border .1s"
+              title="${c}"></button>`
+          ).join('')}
+        </div>
+        <input type="hidden" id="feed-color-val" value="${selColor}"/>
+      </div>
+      <div>
+        <label class="label">Auto-sync</label>
+        <select id="feed-freq" class="input">
+          <option value="startup" ${(f?.freq||'startup')==='startup'?'selected':''}>On app start</option>
+          <option value="hourly"  ${(f?.freq)==='hourly' ?'selected':''}>Every hour</option>
+          <option value="manual"  ${(f?.freq)==='manual' ?'selected':''}>Manual only</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="feed-test-result"></div>
+
+    <div class="flex gap-2 pt-1">
+      <button onclick="closeModal()" class="btn-secondary">Cancel</button>
+      <button onclick="calTestFeed()" class="btn-secondary px-3 text-xs">🧪 Test URL</button>
+      ${f ? `<button onclick="deleteFeed('${f.id}')" class="btn-danger px-3">✕ Remove</button>` : ''}
+      <button onclick="saveFeed('${f?.id||''}',true)" class="btn-primary flex-1">
+        ${f ? '💾 Save & Sync' : '➕ Add & Sync'}
+      </button>
+    </div>
+  </div>`)
+
+  // Set initial hint text
+  setTimeout(() => calSelectSvc(svc), 0)
+}
+
+function calSelectSvc(k) {
+  Object.keys(CAL_SERVICES).forEach(key => {
+    const btn = document.getElementById(`feed-svc-${key}`)
+    if (!btn) return
+    btn.className = `text-[11px] px-2 py-1.5 rounded-lg border transition-colors text-left leading-snug ${
+      key === k
+        ? 'border-indigo-400 bg-indigo-50 text-indigo-700 font-semibold'
+        : 'border-slate-200 text-slate-600 hover:border-slate-300'}`
+  })
+  const hint = document.getElementById('feed-hint-box')
+  if (hint && CAL_SERVICES[k]) {
+    hint.innerHTML = `<strong>${CAL_SERVICES[k].icon} ${CAL_SERVICES[k].label}:</strong> ${CAL_SERVICES[k].hint}`
+  }
+}
+
+function calPickFeedColor(c) {
+  document.querySelectorAll('[id^="fclr-"]').forEach(b => { b.style.border = '2px solid transparent' })
+  const btn = document.getElementById(`fclr-${c.slice(1)}`)
+  if (btn) btn.style.border = '2px solid #1e293b'
+  const inp = document.getElementById('feed-color-val')
+  if (inp) inp.value = c
+}
+
+async function calTestFeed() {
+  const url = (document.getElementById('feed-url')?.value || '').trim()
+  const box = document.getElementById('feed-test-result')
+  if (!box) return
+  if (!url) { box.innerHTML = `<div class="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">⚠ Enter a URL first</div>`; return }
+  box.innerHTML = `<div class="text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2 flex items-center gap-2">
+    <span class="spin inline-block w-3 h-3 border border-indigo-400 border-t-transparent rounded-full"></span> Fetching…</div>`
+  try {
+    const res = await window.api.fetchICS(url)
+    if (!res.success) {
+      box.innerHTML = `<div class="text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2">❌ ${esc(res.error)}</div>`
+      return
+    }
+    const events = _parseICS(res.text)
+    box.innerHTML = `<div class="text-xs text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">
+      ✅ Valid calendar — <strong>${events.length} events</strong> found. Ready to connect!
+    </div>`
+  } catch(e) {
+    box.innerHTML = `<div class="text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2">❌ ${esc(e.message)}</div>`
+  }
+}
+
+async function saveFeed(id, syncNow) {
+  const name  = (document.getElementById('feed-name')?.value || '').trim()
+  const url   = (document.getElementById('feed-url')?.value  || '').trim()
+  const color = document.getElementById('feed-color-val')?.value || '#4285f4'
+  const freq  = document.getElementById('feed-freq')?.value || 'startup'
+
+  if (!name) { showToast('Calendar name is required', 'error'); return }
+  if (!url)  { showToast('ICS URL is required', 'error');        return }
+
+  if (!state.calFeeds) state.calFeeds = []
+
+  // Detect selected service from button states
+  const service = Object.keys(CAL_SERVICES).find(k => {
+    const btn = document.getElementById(`feed-svc-${k}`)
+    return btn?.className.includes('bg-indigo-50')
+  }) || 'other'
+
+  const existing = id ? state.calFeeds.find(f => f.id === id) : null
+  const feed = {
+    id:        id || uid(),
+    name, url, color, freq, service,
+    enabled:   existing ? (existing.enabled ?? true) : true,
+    lastSync:  existing?.lastSync || null,
+    createdAt: existing?.createdAt || new Date().toISOString(),
+  }
+
+  if (id) {
+    const i = state.calFeeds.findIndex(f => f.id === id)
+    if (i > -1) state.calFeeds[i] = feed; else state.calFeeds.push(feed)
+  } else {
+    state.calFeeds.push(feed)
+  }
+  save('calFeeds')
+  closeModal()
+  renderFeedsStrip()
+
+  if (syncNow) {
+    showToast(`Syncing "${name}"…`)
+    await calSyncFeed(feed.id)
+  } else {
+    showToast(id ? 'Calendar updated' : 'Calendar feed added ✓')
+  }
+}
+
+async function deleteFeed(feedId) {
+  if (!await confirmDlg('Remove this calendar feed? Events from it will no longer appear.', 'Remove Feed')) return
+  state.calFeeds = (state.calFeeds || []).filter(f => f.id !== feedId)
+  delete _calFeedEvents[feedId]
+  save('calFeeds')
+  closeModal()
+  renderFeedsStrip()
+  calSetView(_calView)
+  showToast('Calendar feed removed')
+}
+
+function calToggleFeed(feedId) {
+  const f = (state.calFeeds || []).find(f => f.id === feedId)
+  if (!f) return
+  f.enabled = !f.enabled
+  save('calFeeds')
+  renderFeedsStrip()
+  calSetView(_calView)
+}
+
+async function calSyncFeed(feedId, quiet = false) {
+  const f = (state.calFeeds || []).find(f => f.id === feedId)
+  if (!f) return
+  _calFeedSyncing[feedId] = true
+  renderFeedsStrip()
+  try {
+    const res = await window.api.fetchICS(f.url)
+    if (!res.success) {
+      if (!quiet) showToast(`Sync failed: ${res.error}`, 'error')
+      return
+    }
+    const events = _parseICS(res.text)
+    _calFeedEvents[feedId] = events
+    f.lastSync = new Date().toISOString()
+    save('calFeeds')
+    if (!quiet) showToast(`✓ "${f.name}": ${events.length} events synced`)
+    calSetView(_calView)
+  } catch(e) {
+    if (!quiet) showToast(`Sync error: ${e.message}`, 'error')
+  } finally {
+    _calFeedSyncing[feedId] = false
+    renderFeedsStrip()
+  }
+}
+
+async function _calAutoSync() {
+  const feeds = (state.calFeeds || []).filter(f => f.enabled && f.freq !== 'manual')
+  const toSync = feeds.filter(f => {
+    if (!f.lastSync) return true                                        // never synced
+    const mins = (Date.now() - new Date(f.lastSync).getTime()) / 60000
+    return f.freq === 'hourly' ? mins >= 55 : mins >= 25               // startup = every 25 min
+  })
+  if (!toSync.length) return
+  // Parallel fetch, quiet (no individual toasts)
+  await Promise.all(toSync.map(f => calSyncFeed(f.id, true)))
+  if (toSync.length > 0) calSetView(_calView)
+}
+
+// ── External event detail modal ───────────────────────────────────────────────
+function calShowExternal(feedId, uid) {
+  const feed = (state.calFeeds || []).find(f => f.id === feedId)
+  const ev   = (_calFeedEvents[feedId] || []).find(e => e.uid === uid)
+  if (!ev || !feed) return
+  const c = feed.color || '#6366f1'
+
+  openModal(`
+  <div class="flex items-start justify-between gap-3 mb-3">
+    <h3 class="font-bold text-slate-900 text-lg leading-snug">${esc(ev.title)}</h3>
+    <span class="text-xs px-2.5 py-1 rounded-full font-semibold flex-shrink-0"
+          style="background:${c}20;color:${c}">${esc(feed.name)}</span>
+  </div>
+  <div class="space-y-2 text-sm mb-4">
+    <div class="flex gap-2">
+      <span class="text-slate-400 w-20 flex-shrink-0">Date</span>
+      <span class="font-medium text-slate-800">${fmtDate(ev.date)}</span>
+    </div>
+    ${ev.startTime ? `<div class="flex gap-2">
+      <span class="text-slate-400 w-20 flex-shrink-0">Time</span>
+      <span class="text-slate-700">${ev.startTime}${ev.endTime ? ' – ' + ev.endTime : ''}</span>
+    </div>` : ''}
+    ${ev.location ? `<div class="flex gap-2">
+      <span class="text-slate-400 w-20 flex-shrink-0">Location</span>
+      <span class="text-slate-700">${esc(ev.location)}</span>
+    </div>` : ''}
+    ${ev.description ? `<div class="flex gap-2">
+      <span class="text-slate-400 w-20 flex-shrink-0">Notes</span>
+      <span class="text-slate-700 leading-relaxed whitespace-pre-line">${esc(ev.description)}</span>
+    </div>` : ''}
+    <div class="flex gap-2">
+      <span class="text-slate-400 w-20 flex-shrink-0">Calendar</span>
+      <span class="text-slate-600 flex items-center gap-1">
+        <span class="w-2 h-2 rounded-full inline-block" style="background:${c}"></span>
+        ${esc(feed.name)}
+      </span>
+    </div>
+  </div>
+  <div class="border-t border-slate-100 pt-4">
+    <button onclick="closeModal()" class="w-full btn-secondary">Close</button>
+  </div>`)
 }

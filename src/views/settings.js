@@ -282,8 +282,8 @@ function appAddTopic() {
   renderAppTab(document.getElementById('settings-body'))
 }
 
-function appRemoveTopic(i) {
-  if (!confirm('Remove this topic?')) return
+async function appRemoveTopic(i) {
+  if (!await confirmDlg('Remove this topic?', 'Remove')) return
   ;(state.newsTopics || []).splice(i, 1)
   renderAppTab(document.getElementById('settings-body'))
 }
@@ -455,7 +455,7 @@ async function diagTestSmtp() {
 
 const _DATA_KEYS = ['profile','projects','papers','contacts','notes','whiteboards',
                     'events','todos','grants','newsFeeds','newsTopics','newsRead',
-                    'calGoals','todoGroups']
+                    'calGoals','calFeeds','todoGroups']
 
 function renderBackupTab(body) {
   body.innerHTML = `
@@ -570,7 +570,7 @@ async function backupImport() {
   }
 
   if (strategy === 'replace') {
-    if (!confirm('⚠️ This will REPLACE your existing data. Are you absolutely sure?')) return
+    if (!await confirmDlg('⚠️ This will REPLACE your existing data with the backup file.\n\nAny data not in the backup will be lost.', 'Replace & Import')) return
   }
 
   const el = document.getElementById('backup-import-status')
@@ -590,10 +590,8 @@ async function backupImport() {
   }
 }
 
-function backupClearAll() {
-  if (!confirm('ERASE ALL APP DATA? This cannot be undone. Type YES in the next prompt to confirm.')) return
-  const confirm2 = prompt('Type YES to confirm erasure:')
-  if (confirm2 !== 'YES') { showToast('Cancelled'); return }
+async function backupClearAll() {
+  if (!await confirmTypeDlg('⚠️ ERASE ALL APP DATA?\n\nThis permanently deletes all projects, papers, notes, contacts, events, todos, and grants. This cannot be undone.')) return
   _DATA_KEYS.forEach(k => api.storeSet(k, Array.isArray(state[k]) ? [] : null))
   showToast('All data erased — restart the app')
 }
@@ -949,7 +947,7 @@ async function vaultSaveEntry(id) {
 }
 
 async function vaultDeleteEntry(id) {
-  if (!confirm('Delete this vault entry?')) return
+  if (!await confirmDlg('Delete this vault entry?', 'Delete Entry')) return
   const r = await api.vaultDeleteEntry(id)
   if (!r.success) { showToast(r.error,'error'); return }
   _vaultEntries = _vaultEntries.filter(e => e.id !== id)

@@ -554,8 +554,8 @@ function removeDoc(projectId, index) {
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────────
-function deleteProject(id) {
-  if (!confirm('Delete this project? This cannot be undone.')) return
+async function deleteProject(id) {
+  if (!await confirmDlg('Delete this project? This cannot be undone.', 'Delete Project')) return
   state.projects = state.projects.filter(p=>p.id!==id)
   save('projects'); closeModal(); renderProjectCards(_pFilter)
   showToast('Project deleted')

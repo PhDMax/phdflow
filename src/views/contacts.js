@@ -607,8 +607,8 @@ function saveContact(id) {
   showToast(id ? 'Contact updated ✓' : 'Contact added ✓')
 }
 
-function deleteContact(id) {
-  if (!confirm('Remove this contact?')) return
+async function deleteContact(id) {
+  if (!await confirmDlg('Remove this contact?', 'Remove')) return
   state.contacts = state.contacts.filter(c=>c.id!==id)
   save('contacts'); closeModal(); renderContacts()
   showToast('Contact removed')

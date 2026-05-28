@@ -52,6 +52,11 @@ async function render_news() {
     ${pageHeader('📡 Literature Feed',
       `<div class="flex items-center gap-3">
         <span class="text-xs text-slate-400">${lastStr}</span>
+        <button onclick="newsClearFeed()" title="Clear all cached papers and start fresh"
+          class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors
+            text-slate-400 hover:text-rose-500 hover:bg-rose-50 border border-slate-200">
+          🗑 Clear
+        </button>
         <button onclick="refreshNewsFeed()" id="news-refresh-btn"
           class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors
             ${_newsLoading ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 text-white'}">
@@ -100,7 +105,10 @@ async function render_news() {
               class="w-full px-3 py-1.5 rounded-lg border border-slate-200 text-sm text-slate-900
                 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-400"
               onkeydown="if(event.key==='Enter')saveNewsTopic()"/>
-            <p class="text-xs text-slate-400">Use specific terms — arXiv &amp; OpenAlex are searched automatically on Refresh.</p>
+            <p class="text-xs text-slate-400">
+              Tip: separate distinct concepts with commas — e.g. <em>"protein folding, AlphaFold"</em>.
+              Multi-word phrases are searched exactly in titles &amp; abstracts.
+            </p>
           </div>
           <div class="flex flex-col gap-2 pt-0.5">
             <button onclick="saveNewsTopic()"
@@ -306,7 +314,7 @@ async function saveNewsTopic() {
 }
 
 async function removeNewsTopic(id) {
-  if (!confirm('Remove this topic?\n\nPapers already fetched stay in your feed.')) return
+  if (!await confirmDlg('Remove this topic?\n\nPapers already fetched stay in your feed.', 'Remove Topic')) return
   state.newsTopics = state.newsTopics.filter(t => t.id !== id)
   await save('newsTopics')
   if (_newsFilter.topicId === id) _newsFilter.topicId = 'all'
@@ -315,6 +323,20 @@ async function removeNewsTopic(id) {
 
 function newsFilterByTopic(id) {
   _newsFilter.topicId = (_newsFilter.topicId === id) ? 'all' : id
+  render_news()
+}
+
+// ── Clear Feed ────────────────────────────────────────────────────────────────
+
+async function newsClearFeed() {
+  if (!await confirmDlg(
+    'Clear all cached papers from the feed?\n\nYour saved library papers are not affected. Click "Refresh Feed" after clearing to re-fetch.',
+    'Clear Feed'
+  )) return
+  _newsFeed = []; _newsFeedMap = {}; _newsLastRefresh = null
+  await api.storeSet('newsFeed',        [])
+  await api.storeSet('newsLastRefresh', null)
+  showToast('Feed cleared — click Refresh to re-fetch ✓')
   render_news()
 }
 

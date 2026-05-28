@@ -233,7 +233,7 @@ function buildDiscoverHTML() {
           <div class="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-50">
             <span>${g.amount}${g.duration?' · '+g.duration:''}</span>
             <div class="flex gap-2">
-              <button onclick="window.api.openExternal('${g.url}')" class="text-indigo-500 hover:underline">Website ↗</button>
+              <button onclick="window.api.openExternal('${esc(g.url)}')" class="text-indigo-500 hover:underline">Website ↗</button>
               ${!tracked ? `<button onclick="trackDiscoveredGrant('${g.id}')" class="text-xs px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">+ Track</button>` : ''}
             </div>
           </div>
@@ -498,8 +498,8 @@ function updateGrantField(id, field, value) {
   if (g) { g[field]=value; save('grants') }
 }
 
-function deleteGrant(id) {
-  if (!confirm('Delete this grant?')) return
+async function deleteGrant(id) {
+  if (!await confirmDlg('Delete this grant?', 'Delete Grant')) return
   state.grants = state.grants.filter(g=>g.id!==id)
   save('grants'); closeModal(); renderGrantTab()
   showToast('Grant deleted')

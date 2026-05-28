@@ -1,16 +1,16 @@
-// ══ Notes — Rich Research Notes ═══════════════════════════════════════════════
+// ══ Notes — Notion-style Research Notes ═══════════════════════════════════════
 
 let _notesActiveId   = null
 let _notesSearch     = ''
 let _notesTypeFilter = 'all'
 let _notesSaveTimer  = null
-let _notesSplitView  = true
+let _notesReadMode   = false
 
 const NOTE_TYPES = {
-  note:       { icon: '📝', label: 'Quick Note',      cls: 'bg-slate-100 text-slate-700'   },
-  experiment: { icon: '🧪', label: 'Experiment Log',  cls: 'bg-blue-100 text-blue-700'     },
-  meeting:    { icon: '🤝', label: 'Meeting Notes',   cls: 'bg-purple-100 text-purple-700' },
-  writing:    { icon: '✍️',  label: 'Writing / Draft', cls: 'bg-green-100 text-green-700'   },
+  note:       { icon: '📄', label: 'Note',           cls: 'background:#f1f5f9;color:#475569'   },
+  experiment: { icon: '🧪', label: 'Experiment Log', cls: 'background:#eff6ff;color:#1d4ed8'   },
+  meeting:    { icon: '🤝', label: 'Meeting',        cls: 'background:#faf5ff;color:#7c3aed'   },
+  writing:    { icon: '✍️',  label: 'Writing Draft',  cls: 'background:#f0fdf4;color:#15803d'   },
 }
 
 const NOTE_TEMPLATES = {
@@ -20,30 +20,49 @@ const NOTE_TEMPLATES = {
   writing:    `## Introduction\n\n\n\n## Key Points\n\n\n\n## Notes / References\n\n`,
 }
 
-// Toolbar definitions — used for HTML render AND keyboard shortcuts
 const _NOTES_TB = [
-  { id:'bold',      before:'**',     after:'**',   label:'<b>B</b>',            title:'Bold (Ctrl+B)'        },
-  { id:'italic',    before:'*',      after:'*',    label:'<i>I</i>',            title:'Italic (Ctrl+I)'      },
-  { id:'strike',    before:'~~',     after:'~~',   label:'<s>S</s>',            title:'Strikethrough'         },
+  { id:'bold',      before:'**',      after:'**',    label:'B',    title:'Bold (Ctrl+B)',        s:'font-weight:700'        },
+  { id:'italic',    before:'*',       after:'*',     label:'I',    title:'Italic (Ctrl+I)',      s:'font-style:italic'      },
+  { id:'strike',    before:'~~',      after:'~~',    label:'S',    title:'Strikethrough',        s:'text-decoration:line-through' },
   { id:'SEP' },
-  { id:'h1',        before:'# ',     after:'',     label:'H1',                  title:'Heading 1'             },
-  { id:'h2',        before:'## ',    after:'',     label:'H2',                  title:'Heading 2'             },
-  { id:'h3',        before:'### ',   after:'',     label:'H3',                  title:'Heading 3'             },
+  { id:'h1',        before:'# ',      after:'',      label:'H1',   title:'Heading 1'            },
+  { id:'h2',        before:'## ',     after:'',      label:'H2',   title:'Heading 2'            },
+  { id:'h3',        before:'### ',    after:'',      label:'H3',   title:'Heading 3'            },
   { id:'SEP' },
-  { id:'code',      before:'`',      after:'`',    label:'<code>&lt;/&gt;</code>', title:'Inline code (Ctrl+K)' },
-  { id:'codeblock', before:'```\n',  after:'\n```',label:'<code>{ }</code>',    title:'Code block'            },
-  { id:'math',      before:'$$\n',   after:'\n$$', label:'∑',                   title:'Math block (LaTeX)'    },
+  { id:'code',      before:'`',       after:'`',     label:'</>',  title:'Inline code (Ctrl+K)' },
+  { id:'codeblock', before:'```\n',   after:'\n```', label:'{ }',  title:'Code block'           },
+  { id:'math',      before:'$$\n',    after:'\n$$',  label:'∑',    title:'Math / LaTeX'         },
   { id:'SEP' },
-  { id:'quote',     before:'> ',     after:'',     label:'❝',                   title:'Blockquote'            },
-  { id:'ul',        before:'- ',     after:'',     label:'•',                   title:'List item'             },
-  { id:'ol',        before:'1. ',    after:'',     label:'1.',                  title:'Numbered item'         },
-  { id:'task',      before:'- [ ] ', after:'',     label:'☐',                   title:'Task / checkbox'       },
-  { id:'hr',        before:'\n---\n',after:'',     label:'—',                   title:'Horizontal rule'       },
+  { id:'quote',     before:'> ',      after:'',      label:'❝',    title:'Blockquote'           },
+  { id:'ul',        before:'- ',      after:'',      label:'•',    title:'Bullet list'          },
+  { id:'ol',        before:'1. ',     after:'',      label:'1.',   title:'Numbered list'        },
+  { id:'task',      before:'- [ ] ',  after:'',      label:'☑',    title:'Task / to-do'         },
+  { id:'hr',        before:'\n---\n', after:'',      label:'—',    title:'Divider'              },
   { id:'SEP' },
-  { id:'table',     before:'| Col 1 | Col 2 | Col 3 |\n| --- | --- | --- |\n| | | |\n', after:'', label:'⊞', title:'Insert table' },
-  { id:'link',      before:'[',      after:'](url)',label:'🔗',                  title:'Link'                  },
-  { id:'date',      before:() => `**${new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}**  \n`, after:'', label:'📅', title:"Insert today's date" },
+  { id:'table',     before:'| Col 1 | Col 2 | Col 3 |\n| --- | --- | --- |\n| | | |\n', after:'', label:'⊞', title:'Table' },
+  { id:'link',      before:'[',       after:'](url)',label:'🔗',   title:'Link'                 },
+  { id:'date',      before:() => `**${new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}**  \n`, after:'', label:'📅', title:"Today's date" },
 ]
+
+// ── Sidebar styles (constant) ─────────────────────────────────────────────────
+const _S = {
+  sidebar:      'width:240px;flex-shrink:0;background:#191919;display:flex;flex-direction:column;overflow:hidden;border-right:1px solid rgba(255,255,255,.06)',
+  sideHdr:      'padding:.875rem 1rem .5rem;font-size:.65rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#4b5563',
+  searchWrap:   'padding:.25rem .75rem .75rem',
+  searchInp:    'width:100%;padding:.4rem .75rem;background:#2d2d2d;border:1px solid rgba(255,255,255,.08);border-radius:.5rem;font-size:.75rem;color:#d1d5db;outline:none;box-sizing:border-box',
+  filterBar:    'padding:0 .75rem .625rem;display:flex;gap:.25rem;flex-wrap:wrap',
+  noteList:     'flex:1;overflow-y:auto;padding:.25rem .5rem',
+  noteFooter:   'padding:.75rem;border-top:1px solid rgba(255,255,255,.06)',
+  newBtn:       'display:flex;align-items:center;gap:.5rem;width:100%;padding:.5rem .75rem;background:none;border:none;border-radius:.5rem;font-size:.75rem;color:#6b7280;cursor:pointer;transition:background .15s;text-align:left',
+  quickBtns:    'display:flex;gap:.25rem;padding:.125rem .25rem',
+  quickBtn:     'flex:1;padding:.35rem 0;background:none;border:none;border-radius:.375rem;font-size:1rem;cursor:pointer;text-align:center',
+  noteCount:    'font-size:.7rem;color:#374151;padding:.25rem .75rem 0',
+  // note items
+  noteItem:     (active) => `display:block;width:100%;padding:.5rem .75rem;border-radius:.5rem;cursor:pointer;border:none;text-align:left;transition:background .12s;background:${active?'#2d2d2d':'transparent'}`,
+  noteTitle:    (active) => `display:block;font-size:.8rem;font-weight:500;color:${active?'#f3f4f6':'#9ca3af'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis`,
+  notePreview:  'display:block;font-size:.72rem;color:#4b5563;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:.1rem',
+  noteDate:     'font-size:.68rem;color:#374151;float:right;margin-left:.25rem',
+}
 
 // ── Main Render ───────────────────────────────────────────────────────────────
 
@@ -54,187 +73,227 @@ function render_notes() {
   const filtered = _notesFiltered()
   const active   = _notesActiveId ? state.notes.find(n => n.id === _notesActiveId) : null
 
-  vc.innerHTML = `
-  <div class="flex h-full overflow-hidden">
+  // Build sidebar note list HTML
+  const listHtml = filtered.length === 0
+    ? `<p style="font-size:.75rem;color:#374151;text-align:center;padding:2.5rem 1rem">${state.notes.length===0?'No notes yet':'No matches'}</p>`
+    : filtered.map(n => {
+        const type     = NOTE_TYPES[n.type] || NOTE_TYPES.note
+        const isActive = n.id === _notesActiveId
+        const preview  = (n.content||'').replace(/^#+\s*/gm,'').replace(/[*`_~>\[\]#]/g,'').trim().slice(0,55)
+        const dateStr  = n.updatedAt ? new Date(n.updatedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short'}) : ''
+        return `<button onclick="openNote('${n.id}')" style="${_S.noteItem(isActive)}">
+          <span style="${_S.noteDate}">${dateStr}</span>
+          <span style="${_S.noteTitle(isActive)}">${type.icon} ${esc(n.title||'Untitled')}</span>
+          ${preview ? `<span style="${_S.notePreview}">${esc(preview)}</span>` : ''}
+        </button>`
+      }).join('')
 
-    <!-- ── Note List Sidebar ──────────────────────────────────────────────── -->
-    <div class="w-60 flex-shrink-0 bg-white border-r border-slate-200 flex flex-col overflow-hidden">
+  // Build filter pills
+  const allPill = (k) => `_notesTypeFilter='${k}';render_notes()`
+  const filterPillStyle = (k) => `padding:.2rem .625rem;border-radius:1rem;font-size:.7rem;font-weight:500;border:none;cursor:pointer;transition:background .12s;background:${_notesTypeFilter===k?'#3b3b3b':'transparent'};color:${_notesTypeFilter===k?'#e5e7eb':'#6b7280'}`
 
-      <!-- New + Search -->
-      <div class="p-3 border-b border-slate-200 space-y-2">
-        <div class="flex gap-1">
-          <button onclick="newNote('note')"
-            class="flex-1 px-2 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors">
-            + Note
-          </button>
-          <button onclick="newNote('experiment')" title="New Experiment Log"
-            class="px-2.5 py-2 bg-slate-100 hover:bg-blue-100 rounded-lg text-base transition-colors">🧪</button>
-          <button onclick="newNote('meeting')" title="New Meeting Notes"
-            class="px-2.5 py-2 bg-slate-100 hover:bg-purple-100 rounded-lg text-base transition-colors">🤝</button>
-          <button onclick="newNote('writing')" title="New Writing Draft"
-            class="px-2.5 py-2 bg-slate-100 hover:bg-green-100 rounded-lg text-base transition-colors">✍️</button>
-        </div>
-        <input type="text" value="${esc(_notesSearch)}" placeholder="Search notes…"
-          oninput="_notesSearch=this.value;render_notes()"
-          class="w-full px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-900
-            placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
-      </div>
+  vc.innerHTML = `<div style="display:flex;height:100%;overflow:hidden">
 
-      <!-- Type filter -->
-      <div class="px-3 py-2 border-b border-slate-100 flex gap-1 flex-wrap">
-        <button onclick="_notesTypeFilter='all';render_notes()"
-          class="px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors
-            ${_notesTypeFilter==='all' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">
-          All
-        </button>
-        ${Object.entries(NOTE_TYPES).map(([k,v]) => `
-        <button onclick="_notesTypeFilter='${k}';render_notes()" title="${v.label}"
-          class="px-2 py-0.5 rounded-full text-sm transition-colors
-            ${_notesTypeFilter===k ? 'bg-indigo-600 text-white' : 'bg-slate-100 hover:bg-slate-200'}">
-          ${v.icon}
-        </button>`).join('')}
-      </div>
+  <!-- ── SIDEBAR ─────────────────────────────────────────────────────────── -->
+  <div style="${_S.sidebar}">
+    <div style="${_S.sideHdr}">Notes</div>
 
-      <!-- Note list -->
-      <div class="flex-1 overflow-y-auto">
-        ${filtered.length === 0
-          ? `<p class="text-xs text-slate-400 text-center py-10 px-4">
-              ${state.notes.length === 0 ? 'No notes yet — create one above' : 'No matches'}
-             </p>`
-          : filtered.map(n => {
-              const type     = NOTE_TYPES[n.type] || NOTE_TYPES.note
-              const isActive = n.id === _notesActiveId
-              const preview  = (n.content||'').replace(/#+\s*/g,'').replace(/[*`_~>\[\]]/g,'').trim().slice(0,70)
-              const dateStr  = n.updatedAt
-                ? new Date(n.updatedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short'})
-                : ''
-              return `
-              <div onclick="openNote('${n.id}')"
-                class="px-3 py-2.5 border-b border-slate-100 cursor-pointer transition-colors
-                  ${isActive ? 'bg-indigo-50 border-l-[3px] border-l-indigo-500' : 'hover:bg-slate-50'}">
-                <div class="flex items-center gap-1.5 mb-0.5">
-                  <span class="text-xs">${type.icon}</span>
-                  <span class="text-xs font-semibold text-slate-800 truncate flex-1 min-w-0">${esc(n.title||'Untitled')}</span>
-                  <span class="text-xs text-slate-300 flex-shrink-0">${dateStr}</span>
-                </div>
-                <p class="text-xs text-slate-400 truncate ml-5">${esc(preview)||'—'}</p>
-                ${n.tags?.length ? `<div class="flex gap-1 mt-1 ml-5 flex-wrap">
-                  ${n.tags.slice(0,3).map(t=>`<span class="text-xs px-1.5 rounded-full bg-slate-100 text-slate-500">#${esc(t)}</span>`).join('')}
-                </div>` : ''}
-              </div>`
-            }).join('')
-        }
-      </div>
-
-      <div class="px-3 py-2 border-t border-slate-100">
-        <p class="text-xs text-slate-400">${state.notes.length} note${state.notes.length!==1?'s':''}</p>
-      </div>
+    <div style="${_S.searchWrap}">
+      <input type="text" value="${esc(_notesSearch)}" placeholder="Search…"
+        oninput="_notesSearch=this.value;render_notes()"
+        style="${_S.searchInp}"
+        onfocus="this.style.borderColor='rgba(255,255,255,.2)'"
+        onblur="this.style.borderColor='rgba(255,255,255,.08)'"/>
     </div>
 
-    <!-- ── Editor / Preview ───────────────────────────────────────────────── -->
-    <div class="flex-1 flex flex-col overflow-hidden">
-      ${active ? _notesEditorPanel(active) : `
-        <div class="flex-1 flex flex-col items-center justify-center text-center p-8">
-          <div class="text-5xl mb-4">📝</div>
-          <p class="text-slate-600 font-semibold mb-2">Select or create a note</p>
-          <p class="text-slate-400 text-sm mb-5">Supports Markdown, tables, code blocks, task lists, and math (LaTeX).</p>
-          <div class="flex gap-2 flex-wrap justify-center">
-            <button onclick="newNote('note')"
-              class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors">📝 Quick Note</button>
-            <button onclick="newNote('experiment')"
-              class="px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 text-sm font-semibold rounded-lg transition-colors">🧪 Experiment Log</button>
-            <button onclick="newNote('meeting')"
-              class="px-4 py-2 bg-purple-100 hover:bg-purple-200 text-purple-700 text-sm font-semibold rounded-lg transition-colors">🤝 Meeting Notes</button>
-            <button onclick="newNote('writing')"
-              class="px-4 py-2 bg-green-100 hover:bg-green-200 text-green-700 text-sm font-semibold rounded-lg transition-colors">✍️ Writing Draft</button>
-          </div>
-        </div>
-      `}
+    <div style="${_S.filterBar}">
+      <button onclick="${allPill('all')}" style="${filterPillStyle('all')}">All</button>
+      ${Object.entries(NOTE_TYPES).map(([k,v])=>`
+      <button onclick="${allPill(k)}" title="${v.label}" style="${filterPillStyle(k)}">${v.icon}</button>`).join('')}
     </div>
 
-  </div>`
+    <div style="${_S.noteList}">${listHtml}</div>
+
+    <div style="${_S.noteFooter}">
+      <button onclick="newNote('note')"
+        style="${_S.newBtn}"
+        onmouseover="this.style.background='#2d2d2d'" onmouseout="this.style.background='none'">
+        <span style="color:#4b5563;font-size:1rem;line-height:1">+</span>
+        <span>New page</span>
+      </button>
+      <div style="${_S.quickBtns}">
+        ${Object.entries(NOTE_TYPES).filter(([k])=>k!=='note').map(([k,v])=>`
+        <button onclick="newNote('${k}')" title="${v.label}"
+          style="${_S.quickBtn}"
+          onmouseover="this.style.background='#2d2d2d'" onmouseout="this.style.background='none'">${v.icon}</button>`).join('')}
+      </div>
+      <div style="${_S.noteCount}">${state.notes.length} note${state.notes.length!==1?'s':''}</div>
+    </div>
+  </div>
+
+  <!-- ── MAIN ────────────────────────────────────────────────────────────── -->
+  <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;background:#fff">
+    ${active ? _notesEditorPanel(active) : `
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:3rem">
+      <div style="font-size:3rem;margin-bottom:1.25rem;opacity:.25">📄</div>
+      <p style="font-size:.9375rem;font-weight:600;color:#6b7280;margin:0 0 .375rem">No page selected</p>
+      <p style="font-size:.8rem;color:#9ca3af;margin:0 0 1.75rem">Pick a note from the sidebar or create one.</p>
+      <button onclick="newNote('note')"
+        style="padding:.625rem 1.5rem;background:#191919;color:#fff;border:none;border-radius:.75rem;font-size:.8rem;font-weight:600;cursor:pointer">
+        + New page
+      </button>
+    </div>`}
+  </div>
+
+</div>`
 }
 
-// ── Editor Panel ──────────────────────────────────────────────────────────────
+// ── Editor / Reading Panel ────────────────────────────────────────────────────
 
 function _notesEditorPanel(note) {
-  const tagsStr  = (note.tags || []).join(', ')
+  const tagsStr    = (note.tags || []).join(', ')
+  const type       = NOTE_TYPES[note.type] || NOTE_TYPES.note
+  const updatedStr = note.updatedAt
+    ? new Date(note.updatedAt).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})
+    : ''
 
-  const toolbarHtml = _NOTES_TB.map(a => {
-    if (a.id === 'SEP') return `<div class="w-px h-4 bg-slate-200 mx-0.5 flex-shrink-0"></div>`
+  // Toolbar HTML
+  const tbHtml = _NOTES_TB.map(a => {
+    if (a.id === 'SEP') return `<div style="width:1px;height:1rem;background:#e5e7eb;margin:0 .25rem;flex-shrink:0"></div>`
     return `<button data-tb="${a.id}" title="${a.title}"
-      class="px-1.5 py-1 rounded text-xs text-slate-600 hover:bg-slate-100 transition-colors flex-shrink-0">
+      style="padding:.3rem .5rem;border:none;background:none;border-radius:.375rem;font-size:.75rem;
+        color:#6b7280;cursor:pointer;flex-shrink:0;${a.s||''}"
+      onmouseover="this.style.background='#f3f4f6';this.style.color='#111827'"
+      onmouseout="this.style.background='none';this.style.color='#6b7280'">
       ${a.label}
     </button>`
   }).join('')
 
-  const previewHtml = note.content
-    ? marked.parse(note.content)
-    : '<p style="color:#94a3b8;font-style:italic">Preview will appear here as you type…</p>'
+  if (_notesReadMode) {
+    // ── Reading mode ──────────────────────────────────────────────────────────
+    const previewHtml = note.content
+      ? marked.parse(note.content)
+      : '<p style="color:#d1d5db;font-style:italic">Nothing here yet…</p>'
 
+    return `
+    <!-- Reading top bar -->
+    <div style="border-bottom:1px solid #f3f4f6;padding:.5rem 1.25rem;display:flex;align-items:center;gap:.75rem;flex-shrink:0">
+      <span style="${type.cls};padding:.2rem .6rem;border-radius:.375rem;font-size:.72rem;font-weight:600">${type.icon} ${type.label}</span>
+      <span style="font-size:.75rem;color:#d1d5db">${updatedStr}</span>
+      <div style="margin-left:auto;display:flex;gap:.5rem">
+        <button onclick="exportNote('${note.id}')"
+          style="padding:.375rem .875rem;border:1px solid #e5e7eb;background:#fff;border-radius:.5rem;font-size:.75rem;color:#6b7280;cursor:pointer">
+          ↓ Export
+        </button>
+        <button onclick="deleteNote('${note.id}')"
+          style="padding:.375rem .875rem;border:1px solid #fecaca;background:#fff;border-radius:.5rem;font-size:.75rem;color:#ef4444;cursor:pointer">
+          Delete
+        </button>
+        <button onclick="notesToggleRead()"
+          style="padding:.375rem .875rem;background:#111827;color:#fff;border:none;border-radius:.5rem;font-size:.75rem;font-weight:600;cursor:pointer">
+          ✏️ Edit
+        </button>
+      </div>
+    </div>
+
+    <!-- Reading document -->
+    <div style="flex:1;overflow-y:auto">
+      <div style="max-width:720px;margin:0 auto;padding:3rem 4rem 6rem">
+        <div style="font-size:3rem;margin-bottom:1.25rem;line-height:1">${type.icon}</div>
+        <h1 style="font-size:2.25rem;font-weight:700;color:#111827;line-height:1.15;margin:0 0 1rem;letter-spacing:-.02em">${esc(note.title||'Untitled')}</h1>
+        ${note.tags?.length ? `
+        <div style="display:flex;flex-wrap:wrap;gap:.375rem;margin-bottom:1.5rem">
+          ${note.tags.map(t=>`<span style="font-size:.7rem;padding:.2rem .625rem;border-radius:1rem;background:#f3f4f6;color:#6b7280">#${esc(t)}</span>`).join('')}
+        </div>` : ''}
+        <div style="border-top:1px solid #f3f4f6;margin-bottom:2rem"></div>
+        <div class="prose">${previewHtml}</div>
+      </div>
+    </div>`
+  }
+
+  // ── Edit mode ─────────────────────────────────────────────────────────────
   return `
-  <!-- Title / meta bar -->
-  <div class="bg-white border-b border-slate-200 px-4 py-2.5 flex items-center gap-2 flex-shrink-0">
+  <!-- Top bar -->
+  <div style="border-bottom:1px solid #f3f4f6;padding:.4rem 1rem;display:flex;align-items:center;gap:.5rem;flex-shrink:0;min-height:38px">
     <select onchange="updateNoteType('${note.id}',this.value)"
-      class="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white text-slate-700
-        focus:outline-none focus:ring-2 focus:ring-indigo-400 flex-shrink-0">
-      ${Object.entries(NOTE_TYPES).map(([k,v])=>
-        `<option value="${k}" ${note.type===k?'selected':''}>${v.icon} ${v.label}</option>`
-      ).join('')}
+      style="font-size:.75rem;background:none;border:none;color:#9ca3af;outline:none;cursor:pointer;padding:.2rem 0">
+      ${Object.entries(NOTE_TYPES).map(([k,v])=>`<option value="${k}" ${note.type===k?'selected':''}>${v.icon} ${v.label}</option>`).join('')}
     </select>
-    <input id="note-title" type="text" value="${esc(note.title||'')}" placeholder="Untitled note"
-      class="flex-1 text-sm font-bold text-slate-900 bg-transparent border-none
-        focus:outline-none placeholder-slate-300 min-w-0"
-      oninput="scheduleNoteSave()"/>
-    <input id="note-tags" type="text" value="${esc(tagsStr)}" placeholder="tags, comma-separated"
-      class="w-44 text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-600 flex-shrink-0
-        focus:outline-none focus:ring-2 focus:ring-indigo-400"
-      oninput="scheduleNoteSave()"/>
-    <button onclick="exportNote('${note.id}')" title="Export as .md file"
-      class="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs rounded-lg transition-colors flex-shrink-0">
-      ⬇ .md
-    </button>
-    <button onclick="deleteNote('${note.id}')"
-      class="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-500 text-xs rounded-lg transition-colors flex-shrink-0">
-      🗑
-    </button>
-  </div>
-
-  <!-- Toolbar -->
-  <div class="bg-white border-b border-slate-200 px-3 py-1 flex items-center gap-px flex-shrink-0 overflow-x-auto">
-    ${toolbarHtml}
-    <div class="flex items-center gap-2 ml-auto pl-2 flex-shrink-0">
-      <span id="notes-save-indicator" class="text-xs text-slate-300">saved</span>
-      <button onclick="_notesSplitView=!_notesSplitView;render_notes()" title="Toggle split view"
-        class="px-2.5 py-1 rounded-lg text-xs font-medium transition-colors
-          ${_notesSplitView ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600 hover:bg-indigo-50'}">
-        ⊟ Split
+    <div style="margin-left:auto;display:flex;align-items:center;gap:.375rem">
+      <span id="notes-save-indicator" style="font-size:.7rem;color:#d1d5db;margin-right:.25rem">saved</span>
+      <button onclick="exportNote('${note.id}')"
+        style="padding:.3rem .75rem;border:1px solid #e5e7eb;background:#fff;border-radius:.5rem;font-size:.72rem;color:#6b7280;cursor:pointer">
+        ↓ .md
+      </button>
+      <button onclick="deleteNote('${note.id}')"
+        style="padding:.3rem .75rem;border:1px solid #fecaca;background:#fff;border-radius:.5rem;font-size:.72rem;color:#ef4444;cursor:pointer">
+        Delete
+      </button>
+      <div style="width:1px;height:1rem;background:#e5e7eb;margin:0 .125rem"></div>
+      <button onclick="notesToggleRead()"
+        style="padding:.3rem .75rem;border:1px solid #e5e7eb;background:#fff;border-radius:.5rem;font-size:.72rem;color:#6b7280;cursor:pointer">
+        👁 Read
       </button>
     </div>
   </div>
 
-  <!-- Editor + Preview -->
-  <div class="flex flex-1 overflow-hidden">
+  <!-- Formatting toolbar -->
+  <div style="border-bottom:1px solid #f3f4f6;padding:.2rem .75rem;display:flex;align-items:center;flex-shrink:0;overflow-x:auto;gap:.1rem;min-height:34px">
+    ${tbHtml}
+  </div>
 
-    <!-- Editor pane -->
-    <div class="${_notesSplitView ? 'w-1/2 border-r border-slate-200' : 'flex-1'} flex flex-col">
-      <textarea id="note-editor"
-        class="flex-1 p-5 text-sm text-slate-800 font-mono leading-relaxed resize-none
-          focus:outline-none bg-white caret-indigo-500"
-        placeholder="Start writing…  Markdown supported"
-        spellcheck="true"
-        oninput="scheduleNoteSave()"
-        onkeydown="notesKeydown(event)">${esc(note.content||'')}</textarea>
-    </div>
+  <!-- ══ THE PAGE ══════════════════════════════════════════════════════════ -->
+  <!-- This div scrolls. Everything inside is the "document". -->
+  <div style="flex:1;overflow-y:auto;background:#fff" id="notes-scroll-area">
+    <div style="max-width:720px;margin:0 auto;padding:3.5rem 4rem 8rem;box-sizing:border-box">
 
-    <!-- Preview pane (split view) -->
-    ${_notesSplitView ? `
-    <div class="flex-1 overflow-y-auto p-6 bg-slate-50">
-      <div id="note-preview" class="prose max-w-none text-slate-800 text-sm leading-relaxed">
-        ${previewHtml}
+      <!-- Page icon -->
+      <div style="font-size:2.75rem;line-height:1;margin-bottom:1rem;user-select:none">${type.icon}</div>
+
+      <!-- Title — big, Notion-style -->
+      <input id="note-title" type="text" value="${esc(note.title||'')}"
+        placeholder="Untitled"
+        style="display:block;width:100%;font-size:2.25rem;font-weight:700;color:#111827;
+          background:transparent;border:none;outline:none;padding:0;margin:0 0 .875rem;
+          line-height:1.15;letter-spacing:-.02em;font-family:inherit;box-sizing:border-box;"
+        oninput="scheduleNoteSave()"/>
+
+      <!-- Properties row: tags + date -->
+      <div style="display:flex;align-items:center;gap:.75rem;padding-bottom:1.25rem;
+        border-bottom:1px solid #f3f4f6;margin-bottom:1.5rem">
+        <input id="note-tags" type="text" value="${esc(tagsStr)}"
+          placeholder="Add tags, comma separated…"
+          style="flex:1;background:transparent;border:none;outline:none;font-size:.8rem;
+            color:#9ca3af;font-family:inherit;min-width:0;"
+          oninput="scheduleNoteSave()"/>
+        ${updatedStr ? `<span style="font-size:.75rem;color:#d1d5db;flex-shrink:0">${updatedStr}</span>` : ''}
       </div>
-    </div>` : ''}
+
+      <!-- Content textarea — grows with content, fills page -->
+      <textarea id="note-editor"
+        placeholder="Start writing…"
+        spellcheck="true"
+        style="display:block;width:100%;min-height:65vh;font-size:15px;line-height:1.85;
+          color:#374151;background:transparent;border:none;outline:none;resize:none;
+          font-family:inherit;overflow:hidden;box-sizing:border-box;padding:0;"
+        oninput="scheduleNoteSave();_notesGrow(this)"
+        onkeydown="notesKeydown(event)">${esc(note.content||'')}</textarea>
+
+    </div>
   </div>`
+}
+
+// ── Auto-grow textarea ────────────────────────────────────────────────────────
+
+function _notesGrow(el) {
+  // Let the textarea be as tall as its content, but never smaller than 65vh
+  el.style.height = 'auto'
+  el.style.height = Math.max(el.scrollHeight, Math.round(window.innerHeight * 0.65)) + 'px'
+}
+
+function _notesInitGrow() {
+  const ta = document.getElementById('note-editor')
+  if (ta) _notesGrow(ta)
 }
 
 // ── Filtering ─────────────────────────────────────────────────────────────────
@@ -268,13 +327,22 @@ async function newNote(type = 'note') {
   state.notes.unshift(note)
   await save('notes')
   _notesActiveId = note.id
+  _notesReadMode = false
   render_notes()
-  setTimeout(() => document.getElementById('note-title')?.focus(), 60)
+  setTimeout(() => { document.getElementById('note-title')?.focus(); _notesInitGrow() }, 60)
 }
 
 async function openNote(id) {
   await autoSaveNote()
   _notesActiveId = id
+  _notesReadMode = false
+  render_notes()
+  setTimeout(_notesInitGrow, 60)
+}
+
+async function notesToggleRead() {
+  await autoSaveNote()
+  _notesReadMode = !_notesReadMode
   render_notes()
 }
 
@@ -285,13 +353,14 @@ async function updateNoteType(id, type) {
   note.updatedAt = new Date().toISOString()
   await save('notes')
   render_notes()
+  setTimeout(_notesInitGrow, 60)
 }
 
 async function deleteNote(id) {
-  if (!confirm('Delete this note?\n\nThis cannot be undone.')) return
+  if (!await confirmDlg('Delete this note?\n\nThis cannot be undone.', 'Delete Note')) return
   state.notes = state.notes.filter(n => n.id !== id)
   await save('notes')
-  if (_notesActiveId === id) _notesActiveId = state.notes[0]?.id || null
+  if (_notesActiveId === id) { _notesActiveId = state.notes[0]?.id || null; _notesReadMode = false }
   render_notes()
 }
 
@@ -315,8 +384,7 @@ async function exportNote(noteId) {
 
 function scheduleNoteSave() {
   const ind = document.getElementById('notes-save-indicator')
-  if (ind) ind.textContent = 'editing…'
-  if (_notesSplitView) _updateNotePreview()
+  if (ind) ind.textContent = 'saving…'
   if (_notesSaveTimer) clearTimeout(_notesSaveTimer)
   _notesSaveTimer = setTimeout(autoSaveNote, 700)
 }
@@ -328,26 +396,17 @@ async function autoSaveNote() {
   const titleEl   = document.getElementById('note-title')
   const contentEl = document.getElementById('note-editor')
   const tagsEl    = document.getElementById('note-tags')
-  if (!contentEl) return
-  note.title     = (titleEl?.value  ||'').trim() || 'Untitled'
-  note.content   = contentEl.value  || ''
-  note.tags      = (tagsEl?.value   ||'').split(',').map(t=>t.trim()).filter(Boolean)
+  if (!contentEl && !titleEl) return
+  if (titleEl)   note.title   = titleEl.value.trim() || 'Untitled'
+  if (contentEl) note.content = contentEl.value || ''
+  if (tagsEl)    note.tags    = tagsEl.value.split(',').map(t=>t.trim()).filter(Boolean)
   note.updatedAt = new Date().toISOString()
   await save('notes')
   const ind = document.getElementById('notes-save-indicator')
   if (ind) ind.textContent = 'saved'
 }
 
-function _updateNotePreview() {
-  const ta  = document.getElementById('note-editor')
-  const pre = document.getElementById('note-preview')
-  if (!ta || !pre) return
-  pre.innerHTML = ta.value
-    ? marked.parse(ta.value)
-    : '<p style="color:#94a3b8;font-style:italic">Preview will appear here…</p>'
-}
-
-// ── Toolbar Insert ────────────────────────────────────────────────────────────
+// ── Toolbar insert ────────────────────────────────────────────────────────────
 
 function _noteInsertAt(before, after) {
   const ta = document.getElementById('note-editor')
@@ -359,6 +418,7 @@ function _noteInsertAt(before, after) {
   ta.selectionStart = s + before.length
   ta.selectionEnd   = s + before.length + sel.length
   ta.focus()
+  _notesGrow(ta)
   ta.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
@@ -374,7 +434,7 @@ function notesKeydown(e) {
   if (e.key === 'Tab') { e.preventDefault(); _noteInsertAt('  ','') }
 }
 
-// ── Click delegation (toolbar) ────────────────────────────────────────────────
+// ── Toolbar click delegation ──────────────────────────────────────────────────
 
 document.addEventListener('click', e => {
   const btn = e.target.closest('[data-tb]')

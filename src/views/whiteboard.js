@@ -19,7 +19,7 @@ let _wbSelId     = null          // selected shape ID
 let _wbCanvas    = null          // <canvas> element
 let _wbCtx       = null          // 2D context
 let _wbBg        = 'dots'        // 'white' | 'dots' | 'grid'
-let _wbInited    = false
+let _wbResizeObs = null          // ResizeObserver instance
 
 const WB_PALETTE = [
   '#1e293b','#ef4444','#f97316','#eab308',
@@ -53,6 +53,9 @@ function render_whiteboard() {
 
   const boards = state.whiteboards || []
 
+  // Auto-select first board when none is active but boards exist
+  if (!_wb && boards.length > 0) _wb = boards[0]
+
   vc.innerHTML = `
   <div class="flex flex-col h-full overflow-hidden">
 
@@ -84,7 +87,7 @@ function render_whiteboard() {
 
       <!-- Tools -->
       ${WB_TOOLS.map(t => `
-      <button onclick="wbSetTool('${t.id}')" title="${t.title}"
+      <button data-wb-tool="${t.id}" onclick="wbSetTool('${t.id}')" title="${t.title}"
         class="px-2 py-1.5 rounded text-sm transition-colors flex-shrink-0
           ${_wbTool===t.id ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'}">
         ${t.icon}
@@ -94,7 +97,7 @@ function render_whiteboard() {
 
       <!-- Color palette -->
       ${WB_PALETTE.map(c => `
-      <button onclick="wbSetColor('${c}')" title="${c}"
+      <button data-wb-color="${c}" onclick="wbSetColor('${c}')" title="${c}"
         style="background:${c};border:2px solid ${_wbColor===c ? '#6366f1' : (c==='#ffffff'?'#e2e8f0':'transparent')}"
         class="w-5 h-5 rounded-full flex-shrink-0 transition-all hover:scale-110"></button>`).join('')}
 
@@ -102,7 +105,7 @@ function render_whiteboard() {
 
       <!-- Stroke width -->
       ${[1,2,5].map((w,i) => `
-      <button onclick="wbSetSW(${w})" title="Stroke ${['thin','medium','thick'][i]}"
+      <button data-wb-sw="${w}" onclick="wbSetSW(${w})" title="Stroke ${['thin','medium','thick'][i]}"
         class="px-2 py-1.5 rounded text-xs font-bold transition-colors flex-shrink-0
           ${_wbSW===w ? 'bg-indigo-100 text-indigo-700' : 'text-slate-500 hover:bg-slate-100'}">
         ${['—','━','▬'][i]}
@@ -111,14 +114,14 @@ function render_whiteboard() {
       <div class="w-px h-5 bg-slate-200 mx-1.5 flex-shrink-0"></div>
 
       <!-- Fill toggle -->
-      <button onclick="wbToggleFill()" title="Toggle shape fill"
+      <button id="wb-fill-btn" onclick="wbToggleFill()" title="Toggle shape fill"
         class="px-2.5 py-1 rounded text-xs font-medium transition-colors flex-shrink-0
           ${_wbFill ? 'bg-indigo-100 text-indigo-700' : 'text-slate-500 hover:bg-slate-100'}">
         ${_wbFill ? '⬛ Fill on' : '▭ Fill off'}
       </button>
 
       <!-- Background -->
-      <select onchange="wbSetBg(this.value)"
+      <select id="wb-bg-select" onchange="wbSetBg(this.value)"
         class="text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white text-slate-600 focus:outline-none ml-1 flex-shrink-0">
         <option value="white" ${_wbBg==='white'?'selected':''}>White</option>
         <option value="dots"  ${_wbBg==='dots'?'selected':''}>Dots</option>
@@ -128,7 +131,7 @@ function render_whiteboard() {
       <div class="w-px h-5 bg-slate-200 mx-1.5 flex-shrink-0"></div>
 
       <!-- Smart shapes toggle -->
-      <button onclick="wbToggleSmart()" title="Smart shape recognition"
+      <button id="wb-smart-btn" onclick="wbToggleSmart()" title="Smart shape recognition"
         class="px-2.5 py-1 rounded text-xs font-medium transition-colors flex-shrink-0
           ${_wbSmartOn ? 'bg-amber-100 text-amber-700' : 'text-slate-400 hover:bg-slate-100'}">
         ${_wbSmartOn ? '✦ Smart' : '✦ Off'}
@@ -144,7 +147,7 @@ function render_whiteboard() {
 
     <!-- Canvas area -->
     <div id="wb-container" class="flex-1 relative overflow-hidden" style="${WB_BG[_wbBg]||WB_BG.dots}">
-      <canvas id="wb-canvas" class="absolute inset-0 w-full h-full" style="cursor:${_wbTool==='text'?'text':_wbTool==='select'?'default':_wbTool==='erase'?'cell':'crosshair'}"></canvas>
+      <canvas id="wb-canvas" class="absolute inset-0" style="cursor:${_wbTool==='text'?'text':_wbTool==='select'?'default':_wbTool==='erase'?'cell':'crosshair'}"></canvas>
     </div>
     ` : `
     <div class="flex-1 flex flex-col items-center justify-center text-center p-8">
@@ -167,13 +170,23 @@ function render_whiteboard() {
 
 // ── Canvas Initialisation ─────────────────────────────────────────────────────
 
-function _wbInitCanvas() {
+function _wbInitCanvas(retryCount) {
   const canvas = document.getElementById('wb-canvas')
   if (!canvas) return
-  const container = canvas.parentElement
+  const container = document.getElementById('wb-container')
+  if (!container) return
+
   const dpr = window.devicePixelRatio || 1
   const w   = container.clientWidth
   const h   = container.clientHeight
+
+  // If layout not settled yet, retry up to 5 times at 50ms intervals
+  if ((!w || !h) && (retryCount || 0) < 5) {
+    setTimeout(() => _wbInitCanvas((retryCount || 0) + 1), 50)
+    return
+  }
+  if (!w || !h) return   // give up after 5 retries
+
   canvas.width  = w * dpr
   canvas.height = h * dpr
   canvas.style.width  = w + 'px'
@@ -184,6 +197,16 @@ function _wbInitCanvas() {
   _wbCtx    = ctx
   _wbRender()
   _wbBindCanvas()
+
+  // Watch for container resize so canvas stays correct size
+  if (_wbResizeObs) _wbResizeObs.disconnect()
+  _wbResizeObs = new ResizeObserver(() => {
+    // Only re-init if this canvas is still the active one in the DOM
+    if (document.getElementById('wb-canvas') === _wbCanvas) {
+      _wbInitCanvas()
+    }
+  })
+  _wbResizeObs.observe(container)
 }
 
 let _wbKeysAdded = false
@@ -218,6 +241,8 @@ function _wbBindCanvas() {
   _wbCanvas.onmouseleave= _wbUp
 }
 
+// ── Drawing Event Handlers ────────────────────────────────────────────────────
+
 function _wbDown(e) {
   if (e.button !== 0) return
   const pt = _wbPt(e)
@@ -236,10 +261,6 @@ function _wbDown(e) {
 
   _wbDrawing = true
   _wbPts = [pt]
-
-  if (_wbTool !== 'pen' && _wbTool !== 'smart' && _wbTool !== 'erase') {
-    // Shape tool: live preview during drag
-  }
 }
 
 function _wbMove(e) {
@@ -281,7 +302,6 @@ function _wbUp(e) {
   } else if (_wbTool === 'pen') {
     _wbAddShape({ type:'freehand', points:[..._wbPts], color:_wbColor, sw:_wbSW })
   } else if (_wbTool === 'smart') {
-    const first = _wbPts[0], last = _wbPts[_wbPts.length-1]
     if (_wbSmartOn) {
       const rec = _recognizeShape(_wbPts)
       if (rec) { _wbAddShape({ ...rec, color:_wbColor, sw:_wbSW, fill:_wbFill, fillColor:_wbFillClr }) }
@@ -472,9 +492,8 @@ function _tryLine(pts) {
 function _tryArrow(pts) {
   const line = _tryLine(pts.slice(0, Math.floor(pts.length*0.7)))
   if (!line || line.confidence < 0.7) return { confidence: 0 }
-  // Check if last segment has a V-like fork (arrowhead sketch)
   const tail = pts.slice(-Math.max(4, Math.floor(pts.length*0.15)))
-  const p0 = tail[0], pN = pts[pts.length-1]
+  const pN = pts[pts.length-1]
   const spreadX = Math.max(...tail.map(p=>Math.abs(p.x - pN.x)))
   const spreadY = Math.max(...tail.map(p=>Math.abs(p.y - pN.y)))
   const spread  = Math.max(spreadX, spreadY)
@@ -507,7 +526,6 @@ function _tryRect(pts) {
   const p0=pts[0], pN=pts[pts.length-1]
   const closeDist = Math.hypot(p0.x-pN.x, p0.y-pN.y)
   if (closeDist > Math.min(w,h)*0.5) return { confidence:0 }
-  // How well do points fit near the bounding box edges?
   const distToEdge = p => Math.min(
     Math.abs(p.x-minX), Math.abs(p.x-maxX),
     Math.abs(p.y-minY), Math.abs(p.y-maxY)
@@ -524,7 +542,6 @@ function _tryTriangle(pts) {
                           Math.max(...pts.map(p=>p.y))-Math.min(...pts.map(p=>p.y)))
   if (closeDist > span*0.4) return { confidence:0 }
 
-  // Find the point furthest from the line p0→pN  — that's the apex
   let maxDist=0, apex=null
   for (const p of pts) {
     const len = Math.hypot(pN.x-p0.x, pN.y-p0.y)
@@ -672,11 +689,64 @@ function _wbAddShape(s) {
   _wb.shapes.push(s)
 }
 
+// ── Toolbar Update (no canvas destruction) ────────────────────────────────────
+
+function _wbUpdateToolbar() {
+  // Tool buttons
+  document.querySelectorAll('[data-wb-tool]').forEach(btn => {
+    const active = btn.dataset.wbTool === _wbTool
+    btn.className = `px-2 py-1.5 rounded text-sm transition-colors flex-shrink-0 ${active ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`
+  })
+  // Color palette
+  document.querySelectorAll('[data-wb-color]').forEach(btn => {
+    const c = btn.dataset.wbColor
+    btn.style.border = `2px solid ${_wbColor===c ? '#6366f1' : (c==='#ffffff' ? '#e2e8f0' : 'transparent')}`
+  })
+  // Stroke width buttons
+  document.querySelectorAll('[data-wb-sw]').forEach(btn => {
+    const w = parseInt(btn.dataset.wbSw)
+    btn.className = `px-2 py-1.5 rounded text-xs font-bold transition-colors flex-shrink-0 ${_wbSW===w ? 'bg-indigo-100 text-indigo-700' : 'text-slate-500 hover:bg-slate-100'}`
+  })
+  // Fill toggle
+  const fillBtn = document.getElementById('wb-fill-btn')
+  if (fillBtn) {
+    fillBtn.textContent = _wbFill ? '⬛ Fill on' : '▭ Fill off'
+    fillBtn.className = `px-2.5 py-1 rounded text-xs font-medium transition-colors flex-shrink-0 ${_wbFill ? 'bg-indigo-100 text-indigo-700' : 'text-slate-500 hover:bg-slate-100'}`
+  }
+  // Smart toggle
+  const smartBtn = document.getElementById('wb-smart-btn')
+  if (smartBtn) {
+    smartBtn.textContent = _wbSmartOn ? '✦ Smart' : '✦ Off'
+    smartBtn.className = `px-2.5 py-1 rounded text-xs font-medium transition-colors flex-shrink-0 ${_wbSmartOn ? 'bg-amber-100 text-amber-700' : 'text-slate-400 hover:bg-slate-100'}`
+  }
+  // Canvas cursor
+  if (_wbCanvas) {
+    _wbCanvas.style.cursor = _wbTool==='text'?'text':_wbTool==='select'?'default':_wbTool==='erase'?'cell':'crosshair'
+  }
+  // Container background
+  const container = document.getElementById('wb-container')
+  if (container) container.setAttribute('style', WB_BG[_wbBg] || WB_BG.dots)
+}
+
 // ── Board Management ──────────────────────────────────────────────────────────
 
 function wbNewBoard() {
-  const name = prompt('Board name:', 'Untitled Board')
-  if (!name) return
+  openModal(`
+    <div>
+      <h3 class="text-base font-bold text-slate-800 mb-4">New Whiteboard</h3>
+      <label class="label">Board Name</label>
+      <input id="wb-new-name" type="text" value="Untitled Board" class="input mb-4"
+        onkeydown="if(event.key==='Enter')wbNewBoardConfirm()"/>
+      <div class="flex gap-2 justify-end">
+        <button onclick="closeModal()" class="btn-secondary px-4 py-2 text-sm">Cancel</button>
+        <button onclick="wbNewBoardConfirm()" class="btn-primary px-4 py-2 text-sm">Create Board</button>
+      </div>
+    </div>`)
+  setTimeout(() => { const el = document.getElementById('wb-new-name'); if(el){el.select();el.focus()} }, 80)
+}
+function wbNewBoardConfirm() {
+  const name = document.getElementById('wb-new-name')?.value.trim() || 'Untitled Board'
+  closeModal()
   const board = { id:'wb-'+uid(), name, shapes:[], createdAt:new Date().toISOString() }
   if (!state.whiteboards) state.whiteboards=[]
   state.whiteboards.push(board)
@@ -693,21 +763,36 @@ function wbLoadBoard(id) {
 
 function wbRenameBoard() {
   if (!_wb) return
-  const name = prompt('New name:', _wb.name)
-  if (!name) return
+  openModal(`
+    <div>
+      <h3 class="text-base font-bold text-slate-800 mb-4">Rename Board</h3>
+      <label class="label">Board Name</label>
+      <input id="wb-ren-name" type="text" value="${esc(_wb.name)}" class="input mb-4"
+        onkeydown="if(event.key==='Enter')wbRenameBoardConfirm()"/>
+      <div class="flex gap-2 justify-end">
+        <button onclick="closeModal()" class="btn-secondary px-4 py-2 text-sm">Cancel</button>
+        <button onclick="wbRenameBoardConfirm()" class="btn-primary px-4 py-2 text-sm">Rename</button>
+      </div>
+    </div>`)
+  setTimeout(() => { const el = document.getElementById('wb-ren-name'); if(el){el.select();el.focus()} }, 80)
+}
+function wbRenameBoardConfirm() {
+  const name = document.getElementById('wb-ren-name')?.value.trim()
+  if (!name || !_wb) { closeModal(); return }
   _wb.name = name
+  closeModal()
   saveWb(); render_whiteboard()
 }
 
-function wbDeleteBoard() {
-  if (!_wb||!confirm(`Delete "${_wb.name}"? This cannot be undone.`)) return
+async function wbDeleteBoard() {
+  if (!_wb||!await confirmDlg(`Delete "${_wb.name}"? This cannot be undone.`, 'Delete Board')) return
   state.whiteboards = state.whiteboards.filter(b=>b.id!==_wb.id)
   _wb = state.whiteboards[0]||null
   save('whiteboards'); render_whiteboard()
 }
 
-function wbClear() {
-  if (!_wb||!confirm('Clear the entire board?')) return
+async function wbClear() {
+  if (!_wb||!await confirmDlg('Clear the entire board? This cannot be undone.', 'Clear Board')) return
   _wbPushUndo()
   _wb.shapes=[]
   _wbSelId=null
@@ -721,20 +806,41 @@ function saveWb() {
 }
 
 // ── Toolbar Controls ──────────────────────────────────────────────────────────
+// These update state and refresh only toolbar UI + canvas content,
+// WITHOUT destroying and recreating the canvas element.
 
 function wbSetTool(t) {
   _wbTool = t
   _wbSelId = null
   document.getElementById('wb-text-inp')?.remove()
-  if (_wbCanvas) _wbCanvas.style.cursor = t==='text'?'text':t==='select'?'default':t==='erase'?'cell':'crosshair'
-  render_whiteboard()
+  _wbUpdateToolbar()
+  _wbRender()
 }
 
-function wbSetColor(c) { _wbColor = c; render_whiteboard() }
-function wbSetSW(w)    { _wbSW = w;    render_whiteboard() }
-function wbToggleFill(){ _wbFill = !_wbFill; render_whiteboard() }
-function wbSetBg(b)    { _wbBg = b;    render_whiteboard() }
-function wbToggleSmart(){ _wbSmartOn = !_wbSmartOn; render_whiteboard() }
+function wbSetColor(c) {
+  _wbColor = c
+  _wbUpdateToolbar()
+}
+
+function wbSetSW(w) {
+  _wbSW = w
+  _wbUpdateToolbar()
+}
+
+function wbToggleFill() {
+  _wbFill = !_wbFill
+  _wbUpdateToolbar()
+}
+
+function wbSetBg(b) {
+  _wbBg = b
+  _wbUpdateToolbar()
+}
+
+function wbToggleSmart() {
+  _wbSmartOn = !_wbSmartOn
+  _wbUpdateToolbar()
+}
 
 // ── Export ────────────────────────────────────────────────────────────────────
 

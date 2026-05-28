@@ -415,8 +415,8 @@ function linkPaperToProject(id, projectId) {
   const p = state.papers.find(x=>x.id===id)
   if (p) { p.projectIds = projectId ? [projectId] : []; save('papers'); renderLibrary() }
 }
-function deletePaper(id) {
-  if (!confirm('Remove this paper from your library?')) return
+async function deletePaper(id) {
+  if (!await confirmDlg('Remove this paper from your library?', 'Remove Paper')) return
   state.papers = state.papers.filter(p=>p.id!==id)
   save('papers'); closeModal(); renderLibrary(); showToast('Paper removed')
 }

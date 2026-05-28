@@ -642,8 +642,8 @@ function saveGroup(id) {
   showToast(id ? 'Group updated' : 'Group created ✓')
 }
 
-function deleteGroup(id) {
-  if (!confirm('Delete group? Tasks in this group will become ungrouped.')) return
+async function deleteGroup(id) {
+  if (!await confirmDlg('Delete group? Tasks in this group will become ungrouped.', 'Delete Group')) return
   state.todoGroups = (state.todoGroups || []).filter(g => g.id !== id)
   state.todos.forEach(t => { if (t.groupId === id) t.groupId = '' })
   save('todoGroups')

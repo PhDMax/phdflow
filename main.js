@@ -88,9 +88,13 @@ function writeStore(data) {
 // ─── Window ───────────────────────────────────────────────────────────────────
 
 function createWindow() {
+  const iconPath = path.join(__dirname, 'build', 'icon.png')
+  const appIcon  = fs.existsSync(iconPath) ? nativeImage.createFromPath(iconPath) : nativeImage.createEmpty()
+
   mainWindow = new BrowserWindow({
     width: 1400, height: 900, minWidth: 1100, minHeight: 700,
     backgroundColor: '#0f172a',
+    icon: appIcon,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
     title: 'PhD Command Center',
     show: false
@@ -113,7 +117,7 @@ function setupTray() {
   try {
     const iconPath = path.join(__dirname, 'build', 'icon.png')
     const rawIcon  = fs.existsSync(iconPath)
-      ? nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
+      ? nativeImage.createFromPath(iconPath)
       : nativeImage.createEmpty()
     tray = new Tray(rawIcon)
     tray.setToolTip('PhD Command Center')
@@ -426,12 +430,32 @@ ipcMain.handle('search-papers', async (_, topics, daysBack) => {
 
       // ── arXiv Atom API ────────────────────────────────────────────────────
       try {
-        const terms    = kw.split(/\s+/).filter(t => t.length > 1).slice(0, 5)
-        const queryStr = terms.map(t => `all:${encodeURIComponent(t)}`).join('+AND+')
+        // Build focused query: each comma/semicolon-separated concept becomes a
+        // phrase search in title+abstract. Single concepts with spaces are
+        // treated as exact phrases (far more precise than splitting into AND terms).
+        const concepts = kw.split(/[,;]+/).map(s => s.trim()).filter(Boolean)
+        const queryParts = concepts.map(concept => {
+          const words = concept.split(/\s+/).filter(w => w.length > 1)
+          if (!words.length) return null
+          if (words.length === 1) {
+            const w = encodeURIComponent(words[0])
+            return `(ti:${w}+OR+abs:${w})`
+          }
+          // Multi-word → exact phrase search in title or abstract
+          const phrase = encodeURIComponent(`"${concept.replace(/"/g, '')}"`)
+          return `(ti:${phrase}+OR+abs:${phrase})`
+        }).filter(Boolean)
+        if (!queryParts.length) return
+
+        // Include submittedDate filter directly in the query for reliability
+        const arxivFrom = cutoffDate.replace(/-/g, '') + '000000'
+        const innerQ = queryParts.length > 1 ? `(${queryParts.join('+OR+')})` : queryParts[0]
+        const fullQuery = `${innerQ}+AND+submittedDate:[${arxivFrom}+TO+*]`
+
         const r = await fetch(
-          `https://export.arxiv.org/api/query?search_query=${queryStr}&max_results=15&sortBy=submittedDate&sortOrder=descending`,
-          { headers: { 'User-Agent': 'PhD-Command-Center/0.2' },
-            signal: AbortSignal.timeout(12000) }
+          `https://export.arxiv.org/api/query?search_query=${fullQuery}&max_results=25&sortBy=submittedDate&sortOrder=descending`,
+          { headers: { 'User-Agent': 'PhD-Command-Center/0.3' },
+            signal: AbortSignal.timeout(15000) }
         )
         if (r.ok) {
           const xml     = await r.text()
@@ -444,11 +468,14 @@ ipcMain.handle('search-papers', async (_, topics, daysBack) => {
             const summary   = (/<summary>([\s\S]*?)<\/summary>/.exec(e) || [])[1]?.replace(/\s+/g,' ').trim()
             const authors   = [...e.matchAll(/<author>[\s\S]*?<name>(.*?)<\/name>/g)].map(a => a[1])
             if (!title || !published || published < cutoffDate) continue
+            // Strip version suffix from arXiv ID (v1, v2…) to avoid duplicates across versions
+            const rawId = link?.split('/').pop() || ''
+            const normId = rawId.replace(/v\d+$/, '')
             allPapers.push({
-              id: `arxiv-${link?.split('/').pop() || _uid()}`,
+              id: `arxiv-${normId || _uid()}`,
               title, authors,
-              abstract: (summary || '').slice(0, 400),
-              url: link?.replace('http://arxiv.org/abs/', 'https://arxiv.org/abs/') || link,
+              abstract: (summary || '').slice(0, 500),
+              url: (link || '').replace('http://arxiv.org/abs/', 'https://arxiv.org/abs/').replace(/v\d+$/, ''),
               doi: null, date: published,
               journal: 'arXiv preprint',
               source: 'arXiv',
@@ -460,10 +487,12 @@ ipcMain.handle('search-papers', async (_, topics, daysBack) => {
 
       // ── OpenAlex API ──────────────────────────────────────────────────────
       try {
+        // Use title+abstract search for precision, fall back to full-text search
+        const searchParam = encodeURIComponent(kw)
         const r = await fetch(
-          `https://api.openalex.org/works?search=${encodeURIComponent(kw)}&filter=from_publication_date:${cutoffDate}&sort=publication_date:desc&per-page=10`,
-          { headers: { 'User-Agent': 'PhD-Command-Center/0.2 (mailto:phd-cc@example.com)' },
-            signal: AbortSignal.timeout(12000) }
+          `https://api.openalex.org/works?search=${searchParam}&filter=from_publication_date:${cutoffDate},type:article|preprint&sort=publication_date:desc&per-page=15`,
+          { headers: { 'User-Agent': 'PhD-Command-Center/0.3 (mailto:phd-cc@example.com)' },
+            signal: AbortSignal.timeout(15000) }
         )
         if (r.ok) {
           const data = await r.json()
@@ -471,15 +500,20 @@ ipcMain.handle('search-papers', async (_, topics, daysBack) => {
             const authors = (w.authorships || []).slice(0, 5)
               .map(a => a.author?.display_name || '').filter(Boolean)
             const doi = w.doi?.replace('https://doi.org/', '') || null
+            // Reconstruct abstract from inverted index
+            let abstract = ''
+            if (w.abstract_inverted_index) {
+              const pos = {}
+              for (const [word, positions] of Object.entries(w.abstract_inverted_index)) {
+                for (const p of positions) pos[p] = word
+              }
+              abstract = Object.keys(pos).sort((a,b)=>a-b).map(k=>pos[k]).join(' ').slice(0, 500)
+            }
             allPapers.push({
               id: `oa-${w.id?.split('/').pop() || _uid()}`,
               title: w.title || 'Untitled',
-              authors,
-              abstract: (w.abstract_inverted_index
-                ? Object.keys(w.abstract_inverted_index).join(' ').slice(0, 400)
-                : ''
-              ),
-              url: w.doi || w.id || '',
+              authors, abstract,
+              url: w.doi ? `https://doi.org/${doi}` : (w.id || ''),
               doi, date: w.publication_date || '',
               journal: w.primary_location?.source?.display_name || null,
               source: 'OpenAlex',
@@ -944,6 +978,22 @@ ipcMain.handle('check-for-updates', async () => {
       releaseUrl: data.html_url || 'https://github.com/PhDMax/phd-command-center/releases/latest',
       releaseNotes: (data.body || '').slice(0, 600)
     }
+  } catch(e) { return { success: false, error: e.message } }
+})
+
+// ─── IPC: Calendar ICS Fetch ─────────────────────────────────────────────────
+ipcMain.handle('fetch-ics', async (_, url) => {
+  try {
+    const r = await fetch(url, {
+      headers: { 'User-Agent': 'PhD-Command-Center/0.3', 'Accept': 'text/calendar,text/plain,*/*' },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(15000)
+    })
+    if (!r.ok) return { success: false, error: `HTTP ${r.status} — check the URL is correct and publicly accessible` }
+    const text = await r.text()
+    if (!text.includes('BEGIN:VCALENDAR'))
+      return { success: false, error: 'URL did not return a valid ICS calendar file (no BEGIN:VCALENDAR found)' }
+    return { success: true, text }
   } catch(e) { return { success: false, error: e.message } }
 })
 

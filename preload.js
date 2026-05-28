@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('api', {
   searchResearchers: (query)             => ipcRenderer.invoke('search-researchers', query),
   searchPapers:      (topics, days)      => ipcRenderer.invoke('search-papers', topics, days),
   fetchNews:         (feeds)             => ipcRenderer.invoke('fetch-news', feeds),
+  fetchICS:          (url)               => ipcRenderer.invoke('fetch-ics', url),
 
   // ── Vault (3FA secure storage) ────────────────────────────────────────────
   vaultStatus:       ()                  => ipcRenderer.invoke('vault-status'),
