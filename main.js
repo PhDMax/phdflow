@@ -4,20 +4,24 @@ const path = require('path')
 const fs   = require('fs')
 
 // ─── Auto-updater setup ───────────────────────────────────────────────────────
-autoUpdater.autoDownload    = true   // download silently in background
-autoUpdater.autoInstallOnAppQuit = true  // install when user quits normally
+autoUpdater.autoDownload         = true
+autoUpdater.autoInstallOnAppQuit = true
+autoUpdater.logger               = null  // suppress noisy default logging
+
+let _lastUpdateState = null  // cached so renderer can query it after the fact
 
 function _sendUpdate(status, extra = {}) {
+  _lastUpdateState = { status, ...extra }
   if (mainWindow?.webContents && !mainWindow.webContents.isDestroyed())
-    mainWindow.webContents.send('update-status', { status, ...extra })
+    mainWindow.webContents.send('update-status', _lastUpdateState)
 }
 
 autoUpdater.on('checking-for-update',  ()    => _sendUpdate('checking'))
 autoUpdater.on('update-not-available', ()    => _sendUpdate('current'))
-autoUpdater.on('update-available',     (i)   => _sendUpdate('available',    { version: i.version }))
-autoUpdater.on('download-progress',    (p)   => _sendUpdate('downloading',  { percent: Math.round(p.percent) }))
-autoUpdater.on('update-downloaded',    (i)   => _sendUpdate('ready',        { version: i.version }))
-autoUpdater.on('error',                (err) => _sendUpdate('error',        { message: err.message }))
+autoUpdater.on('update-available',     (i)   => _sendUpdate('available',   { version: i.version }))
+autoUpdater.on('download-progress',    (p)   => _sendUpdate('downloading', { percent: Math.round(p.percent) }))
+autoUpdater.on('update-downloaded',    (i)   => _sendUpdate('ready',       { version: i.version }))
+autoUpdater.on('error',                (err) => _sendUpdate('error',       { message: err.message }))
 
 // Single-instance lock — if a second instance launches, focus the existing window
 if (!app.requestSingleInstanceLock()) { app.quit() }
@@ -155,7 +159,10 @@ function setupTray() {
 app.whenReady().then(() => {
   createWindow()
   setupTray()
-  autoUpdater.checkForUpdates().catch(() => null)
+  // Delay first check until renderer is shown so IPC events aren't lost
+  mainWindow.once('ready-to-show', () => {
+    setTimeout(() => autoUpdater.checkForUpdates().catch(() => null), 3000)
+  })
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
 })
 
@@ -971,8 +978,14 @@ ipcMain.handle('auth-change-password', async (_, { currentPassword, newPassword 
 
 // ─── IPC: Auto-updater ───────────────────────────────────────────────────────
 
-ipcMain.handle('check-for-updates', () => autoUpdater.checkForUpdates().catch(() => null))
-ipcMain.handle('updater-install',   () => autoUpdater.quitAndInstall(false, true))
+ipcMain.handle('get-update-state',  () => _lastUpdateState)
+ipcMain.handle('check-for-updates', async () => {
+  try { await autoUpdater.checkForUpdates() }
+  catch (err) { _sendUpdate('error', { message: err.message }) }
+})
+ipcMain.handle('updater-install', () => {
+  autoUpdater.quitAndInstall(true, true)
+})
 
 // ─── IPC: Calendar ICS Fetch ─────────────────────────────────────────────────
 ipcMain.handle('fetch-ics', async (_, url) => {

@@ -393,7 +393,15 @@ async function _renderUpdateTab() {
   </div>`
 
   _initUpdateListener()
-  window.api.checkForUpdates().catch(() => null)
+
+  // Restore any result already cached in the main process (e.g. from the startup check)
+  const cached = await window.api.getUpdateState().catch(() => null)
+  if (cached && cached.status && cached.status !== 'checking') {
+    _handleUpdateStatus(cached)
+  } else {
+    // Nothing cached yet — trigger a fresh check
+    checkForUpdates()
+  }
 }
 
 function renderLoginCard(mode) {
@@ -530,84 +538,89 @@ const _updCard = {
   },
 }
 
+function _handleUpdateStatus({ status, version, percent, message } = {}) {
+  if (status === 'checking') {
+    _updCard.show(`
+      <div style="${_updCard._row};color:#475569;font-size:.75rem">
+        ${_updCard._spinner} Checking for updates…
+      </div>`)
+    _updCard._setBadge('Checking…', { bg:'#1e293b', text:'#475569' })
+  } else if (status === 'current') {
+    _updCard.show(`
+      <div style="${_updCard._row}">
+        <span style="color:#4ade80;font-size:1rem">✓</span>
+        <span style="color:#4ade80;font-size:.8rem;font-weight:600">You're on the latest version</span>
+      </div>`)
+    _updCard._setBadge('Up to date', { bg:'#164e3b', text:'#4ade80' })
+    _updCard._setTabDot(false)
+  } else if (status === 'available') {
+    _updCard.show(`
+      <div>
+        <div style="${_updCard._row};margin-bottom:.625rem">
+          ${_updCard._spinner}
+          <span style="color:#a5b4fc;font-size:.8rem;font-weight:600">Update found — downloading…</span>
+        </div>
+        <div style="background:#0f172a;border-radius:9999px;height:.35rem;overflow:hidden">
+          <div style="background:#4f46e5;height:100%;border-radius:9999px;width:3%;transition:width .4s ease"></div>
+        </div>
+        <div style="color:#475569;font-size:.68rem;margin-top:.4rem">v${esc(version||'')} will install on restart</div>
+      </div>`)
+    _updCard._setBadge('Downloading', { bg:'#1e3a5f', text:'#93c5fd' })
+    _updCard._setTabDot(true)
+  } else if (status === 'downloading') {
+    const pct = Math.round(percent ?? 0)
+    _updCard.show(`
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.625rem">
+          <div style="${_updCard._row}">
+            ${_updCard._spinner}
+            <span style="color:#a5b4fc;font-size:.8rem;font-weight:600">Downloading v${esc(version||'')}</span>
+          </div>
+          <span style="color:#818cf8;font-size:.75rem;font-weight:700">${pct}%</span>
+        </div>
+        <div style="background:#0f172a;border-radius:9999px;height:.45rem;overflow:hidden">
+          <div style="background:linear-gradient(90deg,#4f46e5,#818cf8);height:100%;border-radius:9999px;width:${pct}%;transition:width .4s ease"></div>
+        </div>
+        <div style="color:#475569;font-size:.68rem;margin-top:.4rem">${100-pct}% remaining…</div>
+      </div>`)
+    _updCard._setBadge(`${pct}%`, { bg:'#1e3a5f', text:'#93c5fd' })
+  } else if (status === 'ready') {
+    _updCard.show(`
+      <div style="background:#1a1f3a;border:1px solid #3730a3;border-radius:.75rem;padding:1rem">
+        <div style="${_updCard._row};margin-bottom:.875rem">
+          <span style="font-size:1.25rem">🎉</span>
+          <div>
+            <p style="color:#a5b4fc;font-size:.825rem;font-weight:700;margin:0">v${esc(version||'')} ready to install</p>
+            <p style="color:#475569;font-size:.7rem;margin:.2rem 0 0">The app will restart to apply the update</p>
+          </div>
+        </div>
+        <button onclick="window.api.installUpdate()"
+          style="width:100%;background:#4f46e5;color:#fff;font-weight:700;padding:.65rem;border-radius:.625rem;font-size:.8rem;border:none;cursor:pointer;transition:background .15s"
+          onmouseover="this.style.background='#4338ca'" onmouseout="this.style.background='#4f46e5'">
+          ↻ Restart &amp; Install Now
+        </button>
+      </div>`)
+    _updCard._setBadge('Ready!', { bg:'#3730a3', text:'#a5b4fc' })
+    _updCard._setTabDot(true)
+  } else if (status === 'error') {
+    const detail = message ? `: ${message}` : ''
+    _updCard.show(`<div style="color:#f87171;font-size:.75rem">⚠ Update check failed${esc(detail)}</div>`)
+    _updCard._setBadge('Error', { bg:'#3b1a1a', text:'#f87171' })
+    _updCard._setTabDot(false)
+  }
+}
+
 let _updateListenerSet = false
 function _initUpdateListener() {
   if (_updateListenerSet) return
   _updateListenerSet = true
-  window.api.onUpdateStatus(({ status, version, percent }) => {
-    if (status === 'checking') {
-      _updCard.show(`
-        <div style="${_updCard._row};color:#475569;font-size:.75rem">
-          ${_updCard._spinner} Checking for updates…
-        </div>`)
-      _updCard._setBadge('Checking…', { bg:'#1e293b', text:'#475569' })
-    } else if (status === 'current') {
-      _updCard.show(`
-        <div style="${_updCard._row}">
-          <span style="color:#4ade80;font-size:1rem">✓</span>
-          <span style="color:#4ade80;font-size:.8rem;font-weight:600">You're on the latest version</span>
-        </div>`)
-      _updCard._setBadge('Up to date', { bg:'#164e3b', text:'#4ade80' })
-      _updCard._setTabDot(false)
-    } else if (status === 'available') {
-      _updCard.show(`
-        <div>
-          <div style="${_updCard._row};margin-bottom:.625rem">
-            ${_updCard._spinner}
-            <span style="color:#a5b4fc;font-size:.8rem;font-weight:600">Update found — starting download…</span>
-          </div>
-          <div style="background:#0f172a;border-radius:9999px;height:.35rem;overflow:hidden">
-            <div style="background:#4f46e5;height:100%;border-radius:9999px;width:3%;transition:width .4s ease"></div>
-          </div>
-          <div style="color:#475569;font-size:.68rem;margin-top:.4rem">v${esc(version)} will install automatically</div>
-        </div>`)
-      _updCard._setBadge('Downloading', { bg:'#1e3a5f', text:'#93c5fd' })
-      _updCard._setTabDot(true)
-    } else if (status === 'downloading') {
-      const pct = Math.round(percent ?? 0)
-      _updCard.show(`
-        <div>
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.625rem">
-            <div style="${_updCard._row}">
-              ${_updCard._spinner}
-              <span style="color:#a5b4fc;font-size:.8rem;font-weight:600">Downloading v${esc(version)}</span>
-            </div>
-            <span style="color:#818cf8;font-size:.75rem;font-weight:700">${pct}%</span>
-          </div>
-          <div style="background:#0f172a;border-radius:9999px;height:.45rem;overflow:hidden">
-            <div style="background:linear-gradient(90deg,#4f46e5,#818cf8);height:100%;border-radius:9999px;width:${pct}%;transition:width .4s ease"></div>
-          </div>
-          <div style="color:#475569;font-size:.68rem;margin-top:.4rem">${100-pct}% remaining…</div>
-        </div>`)
-      _updCard._setBadge(`${pct}%`, { bg:'#1e3a5f', text:'#93c5fd' })
-    } else if (status === 'ready') {
-      _updCard.show(`
-        <div style="background:#1a1f3a;border:1px solid #3730a3;border-radius:.75rem;padding:1rem">
-          <div style="${_updCard._row};margin-bottom:.875rem">
-            <span style="font-size:1.25rem">🎉</span>
-            <div>
-              <p style="color:#a5b4fc;font-size:.825rem;font-weight:700;margin:0">v${esc(version)} ready to install</p>
-              <p style="color:#475569;font-size:.7rem;margin:.2rem 0 0">The app will restart to apply the update</p>
-            </div>
-          </div>
-          <button onclick="window.api.installUpdate()"
-            style="width:100%;background:#4f46e5;color:#fff;font-weight:700;padding:.65rem;border-radius:.625rem;font-size:.8rem;border:none;cursor:pointer;transition:background .15s"
-            onmouseover="this.style.background='#4338ca'" onmouseout="this.style.background='#4f46e5'">
-            ↻ Restart &amp; Install Now
-          </button>
-        </div>`)
-      _updCard._setBadge('Ready!', { bg:'#3730a3', text:'#a5b4fc' })
-      _updCard._setTabDot(true)
-    } else if (status === 'error') {
-      _updCard.show(`<div style="color:#f87171;font-size:.75rem">⚠ Update check failed — check your internet connection</div>`)
-      _updCard._setBadge('Error', { bg:'#3b1a1a', text:'#f87171' })
-    }
-  })
+  window.api.onUpdateStatus(_handleUpdateStatus)
 }
 
 async function checkForUpdates() {
   _initUpdateListener()
-  window.api.checkForUpdates().catch(() => null)
+  _handleUpdateStatus({ status: 'checking' })
+  await window.api.checkForUpdates()
 }
 
 async function lockApp() {
