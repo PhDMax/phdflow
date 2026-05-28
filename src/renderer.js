@@ -19,6 +19,7 @@ const state = {
   calFeeds: [],
   todoGroups: [],
   darkModeSchedule: null,
+  paperCollections: [],
 }
 
 const VIEWS = ['dashboard','projects','library','grants','news','notes','whiteboard','utilities','discover','contacts','calendar','todos','feedback','settings','support','guide']
@@ -213,6 +214,45 @@ function showToast(msg, type='success') {
   t.style.opacity = '1'
   if (_toastTimer) clearTimeout(_toastTimer)
   _toastTimer = setTimeout(() => t.style.opacity='0', 2800)
+}
+
+// ── Undo Toast ────────────────────────────────────────────────────────────────
+let _undoToastTimer = null
+
+function showUndoToast(msg, undoFn, duration = 5000) {
+  const el = document.getElementById('undo-toast')
+  if (!el) return
+  if (_undoToastTimer) { clearTimeout(_undoToastTimer); _undoToastTimer = null }
+  window._pendingUndo = undoFn
+  el.style.opacity  = '1'
+  el.style.transition = 'opacity .25s'
+  el.classList.remove('hidden')
+  el.innerHTML = `
+    <span class="flex-1 text-sm">${esc(msg)}</span>
+    <div class="flex items-center gap-3 ml-3 flex-shrink-0">
+      <div class="w-14 h-1 bg-white/20 rounded-full overflow-hidden">
+        <div id="undo-bar" class="h-full bg-white/70 rounded-full" style="width:100%;transition:width ${duration}ms linear"></div>
+      </div>
+      <button onclick="_doUndo()" class="text-yellow-300 font-bold text-sm hover:text-yellow-200 transition-colors">Undo</button>
+    </div>`
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const bar = document.getElementById('undo-bar')
+    if (bar) bar.style.width = '0%'
+  }))
+  _undoToastTimer = setTimeout(() => {
+    el.style.opacity = '0'
+    setTimeout(() => { el.classList.add('hidden'); window._pendingUndo = null }, 280)
+  }, duration)
+}
+
+function _doUndo() {
+  if (_undoToastTimer) { clearTimeout(_undoToastTimer); _undoToastTimer = null }
+  const el = document.getElementById('undo-toast')
+  if (el) { el.style.opacity = '0'; setTimeout(() => el.classList.add('hidden'), 280) }
+  if (typeof window._pendingUndo === 'function') {
+    window._pendingUndo()
+    window._pendingUndo = null
+  }
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
@@ -457,7 +497,7 @@ async function lockApp() {
 
 async function loadAndShowApp() {
   const keys = ['profile','projects','papers','contacts','notes','whiteboards','events','todos',
-                 'grants','newsFeeds','newsTopics','newsRead','calGoals','calFeeds','todoGroups','darkModeSchedule']
+                 'grants','newsFeeds','newsTopics','newsRead','calGoals','calFeeds','todoGroups','darkModeSchedule','paperCollections']
   const [, ...vals] = await Promise.all([
     window.api.storeGet('theme').then(t => applyTheme(t || 'light')),
     ...keys.map(async k => { const val = await window.api.storeGet(k); if (val !== null) state[k] = val })

@@ -90,10 +90,15 @@ function render_notes() {
           }
         }
         const dateStr  = n.updatedAt ? new Date(n.updatedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short'}) : ''
+        const wordCount = (n.content||'').trim().split(/\s+/).filter(Boolean).length
+        const wcStr = wordCount > 999 ? Math.round(wordCount/1000*10)/10+'k' : String(wordCount)
         return `<button onclick="openNote('${n.id}')" style="${_S.noteItem(isActive)}">
           <span style="${_S.noteDate}">${dateStr}</span>
-          <span style="${_S.noteTitle(isActive)}">${type.icon} ${esc(n.title||'Untitled')}</span>
-          ${preview ? `<span style="${_S.notePreview}">${esc(preview)}</span>` : ''}
+          <span style="${_S.noteTitle(isActive)}">${n.pinned ? '📌 ' : ''}${type.icon} ${esc(n.title||'Untitled')}</span>
+          <span style="display:flex;justify-content:space-between;align-items:center;margin-top:.1rem">
+            ${preview ? `<span style="${_S.notePreview};flex:1;margin-top:0">${esc(preview)}</span>` : '<span></span>'}
+            <span style="font-size:.66rem;color:#374151;flex-shrink:0;margin-left:.25rem">${wordCount > 0 ? wcStr+'w' : ''}</span>
+          </span>
         </button>`
       }).join('')
 
@@ -190,6 +195,11 @@ function _notesEditorPanel(note) {
       <span style="${type.cls};padding:.2rem .6rem;border-radius:.375rem;font-size:.72rem;font-weight:600">${type.icon} ${type.label}</span>
       <span style="font-size:.75rem;color:#d1d5db">${updatedStr}</span>
       <div style="margin-left:auto;display:flex;gap:.5rem">
+        <button onclick="toggleNotePin('${note.id}')"
+          title="${note.pinned ? 'Unpin note' : 'Pin to top'}"
+          style="padding:.375rem .875rem;border:1px solid ${note.pinned ? '#a5b4fc' : '#e5e7eb'};background:${note.pinned ? '#eef2ff' : '#fff'};border-radius:.5rem;font-size:.75rem;color:${note.pinned ? '#6366f1' : '#6b7280'};cursor:pointer">
+          📌 ${note.pinned ? 'Pinned' : 'Pin'}
+        </button>
         <button onclick="exportNote('${note.id}')"
           style="padding:.375rem .875rem;border:1px solid #e5e7eb;background:#fff;border-radius:.5rem;font-size:.75rem;color:#6b7280;cursor:pointer">
           ↓ Export
@@ -230,6 +240,11 @@ function _notesEditorPanel(note) {
     </select>
     <div style="margin-left:auto;display:flex;align-items:center;gap:.375rem">
       <span id="notes-save-indicator" style="font-size:.7rem;color:#d1d5db;margin-right:.25rem">saved</span>
+      <button onclick="toggleNotePin('${note.id}')"
+        title="${note.pinned ? 'Unpin' : 'Pin to top'}"
+        style="padding:.3rem .75rem;border:1px solid ${note.pinned ? '#a5b4fc' : '#e5e7eb'};background:${note.pinned ? '#eef2ff' : '#fff'};border-radius:.5rem;font-size:.72rem;color:${note.pinned ? '#6366f1' : '#6b7280'};cursor:pointer">
+        📌${note.pinned ? ' Pinned' : ''}
+      </button>
       <button onclick="exportNote('${note.id}')"
         style="padding:.3rem .75rem;border:1px solid #e5e7eb;background:#fff;border-radius:.5rem;font-size:.72rem;color:#6b7280;cursor:pointer">
         ↓ .md
@@ -308,7 +323,12 @@ function _notesInitGrow() {
 // ── Filtering ─────────────────────────────────────────────────────────────────
 
 function _notesFiltered() {
-  let list = [...state.notes].sort((a,b)=>(b.updatedAt||'').localeCompare(a.updatedAt||''))
+  let list = [...state.notes].sort((a,b) => {
+    // Pinned first, then most-recently-updated
+    if (a.pinned && !b.pinned) return -1
+    if (!a.pinned && b.pinned) return 1
+    return (b.updatedAt||'').localeCompare(a.updatedAt||'')
+  })
   if (_notesTypeFilter !== 'all') list = list.filter(n => n.type === _notesTypeFilter)
   if (_notesSearch) {
     const q = _notesSearch.toLowerCase()
@@ -365,12 +385,29 @@ async function updateNoteType(id, type) {
   setTimeout(_notesInitGrow, 60)
 }
 
+async function toggleNotePin(id) {
+  const n = state.notes.find(x => x.id === id)
+  if (!n) return
+  n.pinned = !n.pinned
+  await save('notes')
+  render_notes()
+  showToast(n.pinned ? '📌 Note pinned to top' : 'Note unpinned')
+}
+
 async function deleteNote(id) {
-  if (!await confirmDlg('Delete this note?\n\nThis cannot be undone.', 'Delete Note')) return
+  const snap     = [...state.notes]
+  const title    = state.notes.find(n => n.id === id)?.title || 'Note'
+  const wasActive = _notesActiveId === id
   state.notes = state.notes.filter(n => n.id !== id)
   await save('notes')
-  if (_notesActiveId === id) { _notesActiveId = state.notes[0]?.id || null; _notesReadMode = false }
+  if (wasActive) { _notesActiveId = state.notes[0]?.id || null; _notesReadMode = false }
   render_notes()
+  showUndoToast(`"${title}" deleted`, async () => {
+    state.notes = snap
+    await save('notes')
+    if (wasActive) _notesActiveId = id
+    render_notes(); showToast('Note restored ✓')
+  })
 }
 
 async function exportNote(noteId) {

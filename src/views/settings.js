@@ -246,6 +246,23 @@ function renderAppTab(body) {
       </div>
     </div>
 
+    <!-- Calendar preferences -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-5">
+      <h3 class="text-sm font-bold text-slate-700 mb-1">📅 Calendar Preferences</h3>
+      <p class="text-xs text-slate-400 mb-3">Adjust how the calendar looks and behaves.</p>
+      <div class="space-y-2">
+        <label class="flex items-center gap-3 cursor-pointer select-none">
+          <input type="checkbox" id="cal-week-nums" class="accent-indigo-600 w-4 h-4"
+            ${state.profile?.showWeekNumbers?'checked':''}
+            onchange="calPrefSave()"/>
+          <div>
+            <span class="text-sm text-slate-700 font-medium">Show ISO week numbers</span>
+            <p class="text-xs text-slate-400">Displays the week number (W1–W53) on the left of each row in month view.</p>
+          </div>
+        </label>
+      </div>
+    </div>
+
     <!-- Research topics -->
     <div class="bg-white rounded-2xl border border-slate-200 p-5">
       <h3 class="text-sm font-bold text-slate-700 mb-1">📡 Literature Feed Topics</h3>
@@ -340,6 +357,13 @@ async function settingsSetTheme(t) {
   await api.storeSet('theme', t)
   renderAppTab(document.getElementById('settings-body'))
   showToast(`${t === 'dark' ? '🌙 Dark' : '☀️ Light'} mode applied`)
+}
+
+function calPrefSave() {
+  if (!state.profile) return
+  state.profile.showWeekNumbers = document.getElementById('cal-week-nums')?.checked || false
+  save('profile')
+  showToast('Calendar preferences saved ✓')
 }
 
 async function dmsSave() {

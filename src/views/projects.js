@@ -16,6 +16,7 @@ document.head.insertAdjacentHTML('beforeend', `<style>
 // ── Attention scoring (lower = needs attention more) ─────────────────────────
 function _projectAttention(p) {
   const today = new Date().toISOString().split('T')[0]
+  if (p.status === 'archived')  return 95
   if (p.status === 'completed') return 90
   if (p.status === 'on-hold')   return 80
   if (p.endDate && p.endDate < today) return 0            // overdue
@@ -91,10 +92,10 @@ function render_projects() {
   ${pageHeader('📋 Projects', `<button onclick="openProjectModal()" class="btn-primary text-xs py-2">+ New Project</button>`)}
   <div class="flex-1 overflow-y-auto p-6">
     <div id="projects-filters" class="flex gap-2 mb-5 flex-wrap">
-      ${['all','active','planning','on-hold','completed'].map(s=>`
+      ${['all','active','planning','on-hold','completed','archived'].map(s=>`
       <button onclick="filterProjects('${s}')" data-pf="${s}"
         class="text-xs px-3 py-1.5 rounded-full border transition-colors ${s==='all'?'bg-indigo-600 border-indigo-600 text-white':'border-slate-200 text-slate-600 hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-700'}">
-        ${s==='all'?'All':s[0].toUpperCase()+s.slice(1)}
+        ${s==='all'?'All':s==='on-hold'?'On Hold':s[0].toUpperCase()+s.slice(1)}
       </button>`).join('')}
     </div>
     <div id="projects-grid" class="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3"></div>
@@ -116,7 +117,7 @@ function filterProjects(f) {
 function renderProjectCards(filter) {
   const grid = document.getElementById('projects-grid')
   let projects = filter === 'all'
-    ? [...state.projects]
+    ? state.projects.filter(p => p.status !== 'archived')
     : state.projects.filter(p => p.status === filter)
 
   // Sort by attention level (most urgent first)
@@ -202,7 +203,7 @@ function openProjectModal(id) {
     <div class="grid grid-cols-2 gap-3">
       <div><label class="label">Status</label>
         <select id="pm-status" class="input">
-          ${['planning','active','on-hold','completed'].map(s=>`<option value="${s}" ${p?.status===s?'selected':''}>${s[0].toUpperCase()+s.slice(1)}</option>`).join('')}
+          ${['planning','active','on-hold','completed','archived'].map(s=>`<option value="${s}" ${p?.status===s?'selected':''}>${s==='on-hold'?'On Hold':s[0].toUpperCase()+s.slice(1)}</option>`).join('')}
         </select></div>
       <div><label class="label">Colour</label>
         <input id="pm-color" type="color" value="${p?.color||'#6366f1'}" class="h-9 w-full rounded-xl border border-slate-200 cursor-pointer px-1"/></div>
@@ -303,10 +304,20 @@ function openProjectDetail(id) {
     <div id="doc-list">${renderDocs(p)}</div>
   </div>
 
+  <!-- ── Linked Tasks ──────────────────────────────────────────────────── -->
+  <div class="mb-5">
+    <div class="flex items-center justify-between mb-2">
+      <span class="text-sm font-bold text-slate-800">✅ Tasks</span>
+      <button onclick="createTaskForProject('${id}')" class="text-xs text-indigo-600 hover:underline font-medium">+ Create Task</button>
+    </div>
+    <div id="proj-task-list">${renderProjectTasks(id)}</div>
+  </div>
+
   ${p.tags?.length ? `<div class="flex gap-1 flex-wrap mb-4">${p.tags.map(t=>`<span class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">${esc(t)}</span>`).join('')}</div>` : ''}
 
   <div class="flex gap-3 border-t border-slate-100 pt-4">
     <button onclick="openProjectModal('${id}');void 0" class="flex-1 btn-secondary">✏️ Edit</button>
+    <button onclick="duplicateProject('${id}')" class="btn-secondary">Duplicate</button>
     <button onclick="deleteProject('${id}')" class="btn-danger">Delete</button>
   </div>`, true)
 }
@@ -553,10 +564,52 @@ function removeDoc(projectId, index) {
   p.documents.splice(index,1); save('projects'); openProjectDetail(projectId)
 }
 
+// ── Linked Tasks ──────────────────────────────────────────────────────────────
+function renderProjectTasks(projectId) {
+  const tasks = (state.todos||[]).filter(t => t.projectId === projectId && !t.completedAt)
+  if (!tasks.length) return `<p class="text-xs text-slate-400 italic">No open tasks linked to this project</p>`
+  return `<div class="space-y-1">` + tasks.map(t => {
+    const overdue = t.dueDate && t.dueDate < new Date().toISOString().split('T')[0]
+    return `<div class="flex items-center gap-2 py-1.5 px-2.5 rounded-lg bg-slate-50 border border-slate-100">
+      <input type="checkbox" onchange="todoToggle('${t.id}');setTimeout(()=>{document.getElementById('proj-task-list').innerHTML=renderProjectTasks('${projectId}')},150)"
+        class="rounded accent-indigo-600 flex-shrink-0"/>
+      <span class="flex-1 text-sm text-slate-700 truncate">${esc(t.title)}</span>
+      ${t.dueDate ? `<span class="text-xs flex-shrink-0 ${overdue?'text-red-500 font-semibold':'text-slate-400'}">${fmtDate(t.dueDate)}</span>` : ''}
+    </div>`
+  }).join('') + `</div>`
+}
+
+function createTaskForProject(projectId) {
+  window._pendingTaskProjectId = projectId
+  openTodoModal(null)
+}
+
+// ── Duplicate ─────────────────────────────────────────────────────────────────
+function duplicateProject(id) {
+  const p = state.projects.find(x=>x.id===id)
+  if (!p) return
+  const copy = JSON.parse(JSON.stringify(p))
+  copy.id        = uid()
+  copy.name      = `Copy of ${p.name}`
+  copy.createdAt = new Date().toISOString()
+  copy.updatedAt = new Date().toISOString()
+  // Give threads fresh IDs so they don't collide
+  ;(copy.threads||[]).forEach(t => { t.id = uid() })
+  state.projects.push(copy)
+  save('projects')
+  closeModal()
+  renderProjectCards(_pFilter)
+  showToast(`"${copy.name}" created ✓`)
+}
+
 // ── Delete ────────────────────────────────────────────────────────────────────
 async function deleteProject(id) {
-  if (!await confirmDlg('Delete this project? This cannot be undone.', 'Delete Project')) return
+  const snap  = [...state.projects]
+  const name  = state.projects.find(p=>p.id===id)?.name || 'Project'
   state.projects = state.projects.filter(p=>p.id!==id)
   save('projects'); closeModal(); renderProjectCards(_pFilter)
-  showToast('Project deleted')
+  showUndoToast(`"${name}" deleted`, () => {
+    state.projects = snap
+    save('projects'); renderProjectCards(_pFilter); showToast('Project restored ✓')
+  })
 }

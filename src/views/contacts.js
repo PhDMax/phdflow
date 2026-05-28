@@ -370,6 +370,28 @@ async function discCheckPapers(followId, listIndex) {
 
 // ── CONTACTS ──────────────────────────────────────────────────────────────────
 
+const _RELATIONSHIP_TYPES = [
+  '', 'Supervisor', 'PhD Colleague', 'Postdoc Colleague', 'Co-author',
+  'Collaborator', 'Reviewer', 'Mentor', 'Conference Contact',
+  'Industry Contact', 'Friend', 'Other'
+]
+
+function _lastContactedDate(c) {
+  if (!c.interactionLog?.length) return null
+  return c.interactionLog.map(i => i.date).filter(Boolean).sort().pop() || null
+}
+
+function _lastContactedStr(c) {
+  const last = _lastContactedDate(c)
+  if (!last) return null
+  const days = Math.round((new Date() - new Date(last)) / 864e5)
+  if (days === 0) return 'Today'
+  if (days === 1) return 'Yesterday'
+  if (days < 30)  return `${days}d ago`
+  if (days < 365) return `${Math.round(days/30)}mo ago`
+  return `${Math.round(days/365)}yr ago`
+}
+
 function render_contacts() {
   const vc = document.getElementById('view-content')
   vc.innerHTML = `
@@ -393,14 +415,20 @@ function renderContacts() {
   if (q) list = list.filter(c =>
     c.name?.toLowerCase().includes(q) ||
     c.institution?.toLowerCase().includes(q) ||
-    c.researchAreas?.toLowerCase().includes(q)
+    c.researchAreas?.toLowerCase().includes(q) ||
+    c.relationship?.toLowerCase().includes(q)
   )
   if (!list.length) {
     grid.innerHTML = emptyState('🤝','No contacts yet','Discover researchers and save them here, or add manually')
     return
   }
-  grid.innerHTML = list.map(c => `
-  <div class="bg-white border border-slate-200 rounded-2xl p-4 hover:shadow-md transition-shadow cursor-pointer" onclick="openContactDetail('${c.id}')">
+  grid.innerHTML = list.map(c => {
+    const lastStr = _lastContactedStr(c)
+    const lastDays = _lastContactedDate(c)
+      ? Math.round((new Date() - new Date(_lastContactedDate(c))) / 864e5) : null
+    const staleContact = lastDays !== null && lastDays > 90
+    return `
+  <div class="bg-white border ${staleContact?'border-amber-200':'border-slate-200'} rounded-2xl p-4 hover:shadow-md transition-shadow cursor-pointer" onclick="openContactDetail('${c.id}')">
     <div class="flex items-center gap-3 mb-3">
       <div class="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-700 font-bold text-sm flex-shrink-0">
         ${initials(c.name)}
@@ -410,16 +438,17 @@ function renderContacts() {
         ${c.institution ? `<div class="text-slate-400 text-xs truncate">${esc(c.institution)}</div>` : ''}
       </div>
     </div>
-    ${c.role ? `<div class="text-xs text-slate-500 mb-1">${esc(c.role)}</div>` : ''}
+    ${c.relationship ? `<div class="mb-1"><span class="text-xs px-2 py-px rounded-full bg-indigo-50 text-indigo-600 font-medium">${esc(c.relationship)}</span></div>` : ''}
+    ${c.role && c.role !== c.relationship ? `<div class="text-xs text-slate-500 mb-1">${esc(c.role)}</div>` : ''}
     ${c.researchAreas ? `<div class="text-xs text-slate-400 mb-2 line-clamp-2">${esc(c.researchAreas)}</div>` : ''}
-    <div class="flex gap-1.5 flex-wrap">
+    <div class="flex gap-1.5 flex-wrap items-center">
       ${c.hIndex    ? `<span class="text-xs bg-slate-100 text-slate-600 px-2 py-px rounded-full">h ${c.hIndex}</span>` : ''}
       ${c.email     ? `<span class="text-xs bg-green-100 text-green-700 px-2 py-px rounded-full">📧</span>` : ''}
       ${c.linkedIn  ? `<span class="text-xs bg-blue-100 text-blue-700 px-2 py-px rounded-full font-semibold">in</span>` : ''}
       ${c.orcid     ? `<span class="text-xs bg-emerald-100 text-emerald-700 px-2 py-px rounded-full">ORCID</span>` : ''}
-      ${c.interactionLog?.length ? `<span class="text-xs bg-slate-100 text-slate-500 px-2 py-px rounded-full">💬 ${c.interactionLog.length}</span>` : ''}
+      ${lastStr ? `<span class="text-xs ${staleContact?'text-amber-600 font-medium':'text-slate-400'} ml-auto">${staleContact?'⚠ ':''}${lastStr}</span>` : ''}
     </div>
-  </div>`).join('')
+  </div>`}).join('')
 }
 
 function openContactDetail(id) {
@@ -428,6 +457,9 @@ function openContactDetail(id) {
   const conf = c.emailConfidence || 0
   const bc   = conf>=70?'bg-green-100 text-green-700':conf>=40?'bg-amber-100 text-amber-700':conf>0?'bg-slate-100 text-slate-500':''
   const li   = `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent((c.name||'')+' '+(c.institution||''))}`
+  const lastStr  = _lastContactedStr(c)
+  const lastDays = _lastContactedDate(c)
+    ? Math.round((new Date() - new Date(_lastContactedDate(c))) / 864e5) : null
   openModal(`
   <div class="flex items-center gap-4 mb-5">
     <div class="w-14 h-14 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-700 font-bold text-xl flex-shrink-0">
@@ -437,6 +469,10 @@ function openContactDetail(id) {
       <h3 class="font-bold text-slate-900 text-lg">${esc(c.name)}</h3>
       ${c.role ? `<p class="text-slate-500 text-sm">${esc(c.role)}${c.institution?' · '+esc(c.institution):''}</p>` : ''}
       ${c.department ? `<p class="text-slate-400 text-xs">${esc(c.department)}</p>` : ''}
+      <div class="flex gap-2 flex-wrap mt-1">
+        ${c.relationship ? `<span class="text-xs px-2 py-px rounded-full bg-indigo-50 text-indigo-600 font-medium">${esc(c.relationship)}</span>` : ''}
+        ${lastStr ? `<span class="text-xs px-2 py-px rounded-full ${lastDays>90?'bg-amber-50 text-amber-600':'bg-slate-100 text-slate-500'}">Last: ${lastStr}</span>` : ''}
+      </div>
     </div>
   </div>
 
@@ -549,9 +585,13 @@ function openContactModal(id) {
     <div><label class="block text-xs font-medium text-slate-600 mb-1">Department</label>
       <input id="cm-dept" type="text" value="${v('department')}"
         class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/></div>
-    <div><label class="block text-xs font-medium text-slate-600 mb-1">Role</label>
+    <div><label class="block text-xs font-medium text-slate-600 mb-1">Role / Title</label>
       <input id="cm-role" type="text" value="${v('role')}" placeholder="Professor, PhD student…"
         class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/></div>
+    <div><label class="block text-xs font-medium text-slate-600 mb-1">Relationship to you</label>
+      <select id="cm-relationship" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+        ${_RELATIONSHIP_TYPES.map(r=>`<option value="${r}" ${(c?.relationship||''===r)?'selected':''}>${r||'— select —'}</option>`).join('')}
+      </select></div>
     <div><label class="block text-xs font-medium text-slate-600 mb-1">Email</label>
       <input id="cm-email" type="email" value="${v('email')}"
         class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/></div>
@@ -585,8 +625,9 @@ function saveContact(id) {
     id: id||uid(), name,
     institution: document.getElementById('cm-inst').value.trim(),
     department:  document.getElementById('cm-dept').value.trim(),
-    role:        document.getElementById('cm-role').value.trim(),
-    email:       document.getElementById('cm-email').value.trim(),
+    role:         document.getElementById('cm-role').value.trim(),
+    relationship: document.getElementById('cm-relationship')?.value || '',
+    email:        document.getElementById('cm-email').value.trim(),
     phone:       document.getElementById('cm-phone').value.trim(),
     linkedIn:    document.getElementById('cm-linkedin').value.trim(),
     googleScholar:document.getElementById('cm-scholar').value.trim(),
@@ -608,8 +649,12 @@ function saveContact(id) {
 }
 
 async function deleteContact(id) {
-  if (!await confirmDlg('Remove this contact?', 'Remove')) return
+  const snap = [...state.contacts]
+  const name = state.contacts.find(c=>c.id===id)?.name || 'Contact'
   state.contacts = state.contacts.filter(c=>c.id!==id)
   save('contacts'); closeModal(); renderContacts()
-  showToast('Contact removed')
+  showUndoToast(`"${name}" removed`, () => {
+    state.contacts = snap
+    save('contacts'); renderContacts(); showToast('Contact restored ✓')
+  })
 }

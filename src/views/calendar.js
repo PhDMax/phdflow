@@ -1,6 +1,14 @@
 // ══ Calendar View ══════════════════════════════════════════════════════════════
 // THE command centre: Month / Week / Agenda views + deadline countdowns + goals
 
+function _isoWeekNum(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
+  const dayNum = d.getUTCDay() || 7
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum)
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1))
+  return Math.ceil((((d - yearStart) / 864e5) + 1) / 7)
+}
+
 let _calDate        = new Date()
 let _calView        = 'month'  // 'month' | 'week' | 'agenda'
 let _calFeedEvents  = {}       // { feedId: [{uid,title,date,startTime,endTime,location,description}] }
@@ -115,14 +123,16 @@ function _calEventChip(e, extra = '') {
 
 function _calTypeConf() {
   return {
-    deadline:   { bg:'bg-rose-100',    text:'text-rose-700',    dot:'#f43f5e', label:'Deadline'    },
-    milestone:  { bg:'bg-violet-100',  text:'text-violet-700',  dot:'#7c3aed', label:'Milestone'   },
-    meeting:    { bg:'bg-sky-100',     text:'text-sky-700',     dot:'#0284c7', label:'Meeting'     },
-    seminar:    { bg:'bg-teal-100',    text:'text-teal-700',    dot:'#0d9488', label:'Seminar'     },
-    course:     { bg:'bg-amber-100',   text:'text-amber-700',   dot:'#d97706', label:'Course'      },
-    exam:       { bg:'bg-orange-100',  text:'text-orange-700',  dot:'#ea580c', label:'Exam'        },
-    conference: { bg:'bg-emerald-100', text:'text-emerald-700', dot:'#059669', label:'Conference'  },
-    personal:   { bg:'bg-slate-100',   text:'text-slate-600',   dot:'#64748b', label:'Personal'    },
+    deadline:   { bg:'bg-rose-100',    text:'text-rose-700',    dot:'#f43f5e', label:'Deadline'       },
+    milestone:  { bg:'bg-violet-100',  text:'text-violet-700',  dot:'#7c3aed', label:'Milestone'      },
+    meeting:    { bg:'bg-sky-100',     text:'text-sky-700',     dot:'#0284c7', label:'Meeting'        },
+    seminar:    { bg:'bg-teal-100',    text:'text-teal-700',    dot:'#0d9488', label:'Seminar'        },
+    course:     { bg:'bg-amber-100',   text:'text-amber-700',   dot:'#d97706', label:'Course'         },
+    exam:       { bg:'bg-orange-100',  text:'text-orange-700',  dot:'#ea580c', label:'Exam'           },
+    conference: { bg:'bg-emerald-100', text:'text-emerald-700', dot:'#059669', label:'Conference'     },
+    focus:      { bg:'bg-indigo-100',  text:'text-indigo-700',  dot:'#6366f1', label:'Focus Block'    },
+    busy:       { bg:'bg-slate-200',   text:'text-slate-700',   dot:'#94a3b8', label:'Busy'           },
+    personal:   { bg:'bg-slate-100',   text:'text-slate-600',   dot:'#64748b', label:'Personal'       },
   }
 }
 
@@ -309,35 +319,50 @@ function renderMonthView() {
   for (let d = 1; d <= lastDay.getDate(); d++) cells.push(d)
   while (cells.length % 7 !== 0) cells.push(null)
 
+  const showWkNums = state.profile?.showWeekNumbers
+  const rows = []
+  for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7))
+  const gridCols = showWkNums ? 'grid-cols-8' : 'grid-cols-7'
+
   const el = document.getElementById('cal-main')
   if (!el) return
   el.innerHTML = `
   <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-    <div class="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
+    <div class="grid ${gridCols} border-b border-slate-200 bg-slate-50">
+      ${showWkNums ? `<div class="text-center text-xs font-semibold text-slate-300 py-2">Wk</div>` : ''}
       ${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d =>
         `<div class="text-center text-xs font-semibold text-slate-400 py-2">${d}</div>`
       ).join('')}
     </div>
-    <div class="grid grid-cols-7">
-      ${cells.map(d => {
-        if (!d) return `<div class="min-h-[88px] border-b border-r border-slate-100 bg-slate-50/30"></div>`
-        const cellDate = new Date(y, m, d); cellDate.setHours(0,0,0,0)
-        const isToday  = cellDate.getTime() === today.getTime()
-        const dateStr  = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`
-        const events   = _allEventsForDate(dateStr)
-        return `<div class="min-h-[88px] border-b border-r border-slate-100 p-1 cursor-pointer hover:bg-indigo-50/30 transition-colors group"
-                     onclick="openEventModal(null,'${dateStr}')">
-          <div class="flex justify-end mb-0.5">
-            <span class="text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full transition-colors
-              ${isToday ? 'bg-indigo-600 text-white' : 'text-slate-500 group-hover:bg-indigo-100 group-hover:text-indigo-700'}">
-              ${d}
-            </span>
-          </div>
-          <div class="space-y-0.5">
-            ${events.slice(0,3).map(e => _calEventChip(e)).join('')}
-            ${events.length > 3 ? `<div class="text-[10px] text-slate-400 px-1">+${events.length-3} more</div>` : ''}
-          </div>
-        </div>`
+    <div class="grid ${gridCols}">
+      ${rows.map(row => {
+        const firstDay = row.find(d => d !== null)
+        const wkNum = showWkNums && firstDay ? _isoWeekNum(new Date(y, m, firstDay)) : null
+        return (showWkNums
+          ? `<div class="min-h-[88px] border-b border-r border-slate-100 bg-slate-50/60 flex items-start justify-center pt-2">
+               <span class="text-[10px] font-semibold text-slate-300">W${wkNum}</span>
+             </div>`
+          : '') +
+        row.map(d => {
+          if (!d) return `<div class="min-h-[88px] border-b border-r border-slate-100 bg-slate-50/30"></div>`
+          const cellDate = new Date(y, m, d); cellDate.setHours(0,0,0,0)
+          const isToday  = cellDate.getTime() === today.getTime()
+          const dateStr  = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`
+          const events   = _allEventsForDate(dateStr)
+          return `<div class="min-h-[88px] border-b border-r border-slate-100 p-1 cursor-pointer hover:bg-indigo-50/30 transition-colors group"
+                       onclick="openEventModal(null,'${dateStr}')">
+            <div class="flex justify-end mb-0.5">
+              <span class="text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full transition-colors
+                ${isToday ? 'bg-indigo-600 text-white' : 'text-slate-500 group-hover:bg-indigo-100 group-hover:text-indigo-700'}">
+                ${d}
+              </span>
+            </div>
+            <div class="space-y-0.5">
+              ${events.slice(0,3).map(e => _calEventChip(e)).join('')}
+              ${events.length > 3 ? `<div class="text-[10px] text-slate-400 px-1">+${events.length-3} more</div>` : ''}
+            </div>
+          </div>`
+        }).join('')
       }).join('')}
     </div>
   </div>`
@@ -792,18 +817,32 @@ function openEventDetail(id) {
   </div>
   <div class="flex gap-3 border-t border-slate-100 pt-4">
     <button onclick="closeModal();openEventModal('${id}')" class="flex-1 btn-secondary">✏️ Edit</button>
+    <button onclick="createTaskFromEvent('${id}')" class="btn-secondary text-xs">✅ Task</button>
     <button onclick="deleteEvent('${id}')" class="btn-danger">Delete</button>
   </div>`)
 }
 
 async function deleteEvent(id) {
-  if (!await confirmDlg('Delete this event?', 'Delete Event')) return
+  const snap  = [...state.events]
+  const title = state.events.find(e=>e.id===id)?.title || 'Event'
   state.events = state.events.filter(e => e.id !== id)
-  save('events')
+  save('events'); closeModal(); calSetView(_calView); renderCountdown()
+  if (typeof scheduleEventReminders === 'function') scheduleEventReminders()
+  showUndoToast(`"${title}" deleted`, () => {
+    state.events = snap
+    save('events'); calSetView(_calView); renderCountdown()
+    if (typeof scheduleEventReminders === 'function') scheduleEventReminders()
+    showToast('Event restored ✓')
+  })
+}
+
+function createTaskFromEvent(eventId) {
+  const e = state.events.find(x => x.id === eventId)
+  if (!e) return
+  window._pendingTaskFromEvent = { dueDate: e.date, linkedEventId: eventId, title: `Prepare for: ${e.title}` }
   closeModal()
-  calSetView(_calView)
-  renderCountdown()
-  showToast('Event deleted')
+  navigateTo('todos')
+  openTodoModal(null)
 }
 
 // ══ Connected Calendar Feeds ══════════════════════════════════════════════════

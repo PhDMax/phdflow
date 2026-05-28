@@ -379,8 +379,18 @@ function openGrantDetail(id) {
       onchange="updateGrantField('${id}','notes',this.value)">${esc(g.notes||'')}</textarea>
   </div>
 
+  <!-- Linked Tasks -->
+  <div class="mb-4">
+    <div class="flex items-center justify-between mb-2">
+      <span class="text-sm font-bold text-slate-800">✅ Tasks</span>
+      <button onclick="createTaskForGrant('${id}')" class="text-xs text-indigo-600 hover:underline font-medium">+ Create Task</button>
+    </div>
+    <div id="grant-task-list">${renderGrantTasks(id)}</div>
+  </div>
+
   <div class="flex gap-3 border-t border-slate-100 pt-4">
     <button onclick="openGrantModal('${id}')" class="flex-1 btn-secondary">✏️ Edit</button>
+    <button onclick="duplicateGrant('${id}')" class="btn-secondary">Duplicate</button>
     <button onclick="deleteGrant('${id}')" class="btn-danger">Delete</button>
   </div>`, true)
 }
@@ -498,9 +508,52 @@ function updateGrantField(id, field, value) {
   if (g) { g[field]=value; save('grants') }
 }
 
+// ── Linked Tasks (Item 16) ────────────────────────────────────────────────────
+function renderGrantTasks(grantId) {
+  const tasks = (state.todos||[]).filter(t => t.grantId === grantId && !t.completedAt)
+  if (!tasks.length) return `<p class="text-xs text-slate-400 italic">No open tasks linked to this grant</p>`
+  return `<div class="space-y-1">` + tasks.map(t => {
+    const overdue = t.dueDate && t.dueDate < new Date().toISOString().split('T')[0]
+    return `<div class="flex items-center gap-2 py-1.5 px-2.5 rounded-lg bg-slate-50 border border-slate-100">
+      <input type="checkbox" onchange="todoToggle('${t.id}');setTimeout(()=>{document.getElementById('grant-task-list').innerHTML=renderGrantTasks('${grantId}')},150)"
+        class="rounded accent-indigo-600 flex-shrink-0"/>
+      <span class="flex-1 text-sm text-slate-700 truncate">${esc(t.title)}</span>
+      ${t.dueDate ? `<span class="text-xs flex-shrink-0 ${overdue?'text-red-500 font-semibold':'text-slate-400'}">${fmtDate(t.dueDate)}</span>` : ''}
+    </div>`
+  }).join('') + `</div>`
+}
+
+function createTaskForGrant(grantId) {
+  window._pendingTaskGrantId = grantId
+  openTodoModal(null)
+}
+
+// ── Duplicate (Item 15) ───────────────────────────────────────────────────────
+function duplicateGrant(id) {
+  const g = state.grants.find(x=>x.id===id)
+  if (!g) return
+  const copy = JSON.parse(JSON.stringify(g))
+  copy.id        = uid()
+  copy.title     = `Copy of ${g.title||g.funder}`
+  copy.status    = 'researching'
+  copy.createdAt = new Date().toISOString()
+  copy.updatedAt = new Date().toISOString()
+  // Reset checklist — fresh application
+  ;(copy.requirements||[]).forEach(r => { r.done = false })
+  state.grants.push(copy)
+  save('grants')
+  closeModal()
+  renderGrantTab()
+  showToast(`"${copy.title}" created ✓`)
+}
+
 async function deleteGrant(id) {
-  if (!await confirmDlg('Delete this grant?', 'Delete Grant')) return
+  const snap  = [...state.grants]
+  const title = state.grants.find(g=>g.id===id)?.title || 'Grant'
   state.grants = state.grants.filter(g=>g.id!==id)
   save('grants'); closeModal(); renderGrantTab()
-  showToast('Grant deleted')
+  showUndoToast(`"${title}" deleted`, () => {
+    state.grants = snap
+    save('grants'); renderGrantTab(); showToast('Grant restored ✓')
+  })
 }

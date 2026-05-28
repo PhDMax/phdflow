@@ -48,20 +48,43 @@ function render_dashboard() {
   // ── Derived counts ───────────────────────────────────────────────────────────
   const overdueCount = overdueTodos.length
 
+  // Today's progress
+  const todayFocusTasks = state.todos.filter(t =>
+    t.status !== 'done' && !t.completedAt && (t.todayFlag || t.dueDate === today)
+  )
+  const completedTodayTasks = state.todos.filter(t =>
+    t.completedAt && t.completedAt.startsWith(today)
+  )
+  const totalTodayCount = todayFocusTasks.length + completedTodayTasks.length
+  const progressPct     = totalTodayCount ? Math.round(completedTodayTasks.length / totalTodayCount * 100) : 0
+  const progressColor   = progressPct >= 80 ? '#22c55e' : progressPct >= 40 ? '#6366f1' : '#f59e0b'
+
   vc.innerHTML = `
   <div class="flex-1 overflow-y-auto bg-slate-50">
 
     <!-- ── Header ──────────────────────────────────────────────────────────── -->
     <div class="bg-white border-b border-slate-200 px-6 py-5">
-      <div class="flex items-end justify-between">
-        <div>
+      <div class="flex items-end justify-between gap-6">
+        <div class="flex-1 min-w-0">
           <p class="text-xs text-slate-400 mb-0.5">${dateStr}</p>
           <h1 class="text-xl font-bold text-slate-900">${greeting}, ${esc(name)} 👋</h1>
           ${overdueCount > 0
             ? `<p class="text-xs text-red-600 mt-1 font-medium">⚠️ You have ${overdueCount} overdue task${overdueCount>1?'s':''}</p>`
             : `<p class="text-xs text-slate-400 mt-1">Here's your research overview for today</p>`}
         </div>
-        <button onclick="showView('calendar')" class="text-xs text-indigo-600 hover:underline">Open Calendar →</button>
+        ${totalTodayCount > 0 ? `
+        <div class="flex-shrink-0 min-w-[160px] cursor-pointer" onclick="showView('todos')">
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-xs font-semibold text-slate-700">Today's Tasks</span>
+            <span class="text-xs font-bold" style="color:${progressColor}">${completedTodayTasks.length}/${totalTodayCount}</span>
+          </div>
+          <div class="w-full bg-slate-100 rounded-full h-2">
+            <div class="h-2 rounded-full transition-all" style="width:${progressPct}%;background:${progressColor}"></div>
+          </div>
+          ${progressPct === 100
+            ? `<p class="text-xs text-green-600 font-medium mt-1 text-right">All done! 🎉</p>`
+            : `<p class="text-xs text-slate-400 mt-1 text-right">${100-progressPct}% remaining</p>`}
+        </div>` : `<button onclick="showView('calendar')" class="text-xs text-indigo-600 hover:underline flex-shrink-0">Open Calendar →</button>`}
       </div>
 
     </div>

@@ -38,8 +38,8 @@ function render_library() {
     </div>`)}
 
   <!-- Filter bar -->
-  <div class="bg-white border-b border-slate-200 px-5 py-3 flex gap-2 flex-shrink-0 flex-wrap">
-    <input id="lib-search" type="text" placeholder="Search title or author..."
+  <div class="bg-white border-b border-slate-200 px-5 py-3 flex gap-2 flex-shrink-0 flex-wrap items-center">
+    <input id="lib-search" type="text" placeholder="Search title, author or journal..."
       oninput="renderLibrary()"
       class="flex-1 min-w-48 px-3 py-1.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
     <select id="lib-project" onchange="renderLibrary()" class="input" style="width:auto;padding:.35rem .75rem;font-size:.8rem">
@@ -53,6 +53,19 @@ function render_library() {
       <option value="reading">Reading</option>
       <option value="read">Read</option>
     </select>
+    <select id="lib-sort" onchange="renderLibrary()" class="input" style="width:auto;padding:.35rem .75rem;font-size:.8rem" title="Sort by">
+      <option value="added-desc">Date added ↓</option>
+      <option value="added-asc">Date added ↑</option>
+      <option value="year-desc">Year ↓</option>
+      <option value="year-asc">Year ↑</option>
+      <option value="title-asc">Title A–Z</option>
+      <option value="author-asc">Author A–Z</option>
+    </select>
+    <select id="lib-collection" onchange="renderLibrary()" class="input" style="width:auto;padding:.35rem .75rem;font-size:.8rem" title="Filter by reading list">
+      <option value="all">All papers</option>
+      ${(state.paperCollections||[]).map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}
+    </select>
+    <button onclick="openCollectionManager()" class="flex-shrink-0 text-slate-400 hover:text-indigo-600 text-base leading-none transition-colors" title="Manage reading lists">📚</button>
   </div>
 
   <!-- DOI / arXiv fetch bar -->
@@ -104,8 +117,10 @@ function renderLibrary() {
   const q    = document.getElementById('lib-search')?.value.toLowerCase()  || ''
   const proj = document.getElementById('lib-project')?.value  || 'all'
   const sta  = document.getElementById('lib-status')?.value   || 'all'
+  const sort = document.getElementById('lib-sort')?.value     || 'added-desc'
+  const coll = document.getElementById('lib-collection')?.value || 'all'
 
-  let papers = [...state.papers].reverse()
+  let papers = [...state.papers]
 
   if (q) papers = papers.filter(p =>
     p.title?.toLowerCase().includes(q) ||
@@ -116,6 +131,22 @@ function renderLibrary() {
   else if (proj !== 'all')  papers = papers.filter(p => p.projectIds?.includes(proj))
 
   if (sta !== 'all') papers = papers.filter(p => p.status === sta)
+
+  if (coll !== 'all') {
+    const col = (state.paperCollections||[]).find(c => c.id === coll)
+    papers = col ? papers.filter(p => col.paperIds?.includes(p.id)) : []
+  }
+
+  papers.sort((a, b) => {
+    switch (sort) {
+      case 'added-asc':  return (a.addedAt||'').localeCompare(b.addedAt||'')
+      case 'year-desc':  return (b.year||0) - (a.year||0)
+      case 'year-asc':   return (a.year||0) - (b.year||0)
+      case 'title-asc':  return (a.title||'').localeCompare(b.title||'')
+      case 'author-asc': return (_authorStr(a)||'').localeCompare(_authorStr(b)||'')
+      default:           return (b.addedAt||'').localeCompare(a.addedAt||'')
+    }
+  })
 
   const list = document.getElementById('papers-list')
   if (!papers.length) {
@@ -326,11 +357,16 @@ function _getFilteredPapers() {
   const q    = document.getElementById('lib-search')?.value.toLowerCase() || ''
   const proj = document.getElementById('lib-project')?.value || 'all'
   const sta  = document.getElementById('lib-status')?.value  || 'all'
+  const coll = document.getElementById('lib-collection')?.value || 'all'
   let papers = [...state.papers]
-  if (q)           papers = papers.filter(p => p.title?.toLowerCase().includes(q) || _authorStr(p).toLowerCase().includes(q))
-  if (proj==='none')     papers = papers.filter(p => !p.projectIds?.length)
+  if (q)             papers = papers.filter(p => p.title?.toLowerCase().includes(q) || _authorStr(p).toLowerCase().includes(q))
+  if (proj==='none') papers = papers.filter(p => !p.projectIds?.length)
   else if (proj!=='all') papers = papers.filter(p => p.projectIds?.includes(proj))
   if (sta !== 'all') papers = papers.filter(p => p.status === sta)
+  if (coll !== 'all') {
+    const col = (state.paperCollections||[]).find(c => c.id === coll)
+    papers = col ? papers.filter(p => col.paperIds?.includes(p.id)) : []
+  }
   return papers
 }
 
@@ -405,8 +441,27 @@ function openPaperDetail(id) {
     <textarea rows="3" class="input resize-none" placeholder="Key findings, how it relates to your work..."
       onchange="updatePaperField('${id}','notes',this.value)">${esc(p.notes||'')}</textarea></div>
 
+  ${(() => {
+    const colls = state.paperCollections || []
+    if (!colls.length) return ''
+    return `<div class="mb-3">
+      <label class="label">Reading Lists</label>
+      <div class="flex flex-wrap gap-1.5">
+        ${colls.map(c => {
+          const inColl = (c.paperIds||[]).includes(id)
+          return `<button onclick="togglePaperInCollection('${id}','${c.id}',this)"
+            class="text-xs px-2.5 py-0.5 rounded-full border transition-colors ${inColl
+              ? 'bg-indigo-100 border-indigo-300 text-indigo-700 font-medium'
+              : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-indigo-300 hover:text-indigo-600'}"
+            >${esc(c.name)}</button>`
+        }).join('')}
+      </div>
+    </div>`
+  })()}
+
   <div class="flex gap-3 border-t border-slate-100 pt-4">
     <button onclick="closeModal()" class="flex-1 btn-secondary">Close</button>
+    <button onclick="copyPaperBib('${id}')" class="btn-secondary text-xs">Copy BibTeX</button>
     <button onclick="deletePaper('${id}')" class="btn-danger">Remove</button>
   </div>`, true)
 }
@@ -424,9 +479,130 @@ function linkPaperToProject(id, projectId) {
   if (p) { p.projectIds = projectId ? [projectId] : []; save('papers'); renderLibrary() }
 }
 async function deletePaper(id) {
-  if (!await confirmDlg('Remove this paper from your library?', 'Remove Paper')) return
+  const snapPapers = [...state.papers]
+  const snapColls  = JSON.parse(JSON.stringify(state.paperCollections || []))
   state.papers = state.papers.filter(p=>p.id!==id)
-  save('papers'); closeModal(); renderLibrary(); showToast('Paper removed')
+  ;(state.paperCollections||[]).forEach(c => {
+    if (c.paperIds) c.paperIds = c.paperIds.filter(pid => pid !== id)
+  })
+  save('papers'); save('paperCollections'); closeModal(); renderLibrary()
+  showUndoToast('Paper removed', () => {
+    state.papers = snapPapers
+    state.paperCollections = snapColls
+    save('papers'); save('paperCollections'); renderLibrary(); showToast('Paper restored ✓')
+  })
+}
+
+function copyPaperBib(id) {
+  const p = state.papers.find(x=>x.id===id)
+  if (!p) return
+  const bib = _toBib([p])
+  navigator.clipboard.writeText(bib).then(() => showToast('BibTeX copied ✓'))
+}
+
+// ── Reading Lists (Collections) ───────────────────────────────────────────────
+function openCollectionManager() {
+  const colls = state.paperCollections || []
+  openModal(`
+  <div class="mb-4">
+    <h3 class="text-base font-bold">Reading Lists</h3>
+    <p class="text-xs text-slate-400 mt-0.5">Group papers into themed reading lists for quick filtering.</p>
+  </div>
+  <div id="coll-mgr-list" class="space-y-2 mb-4 max-h-60 overflow-y-auto">
+    ${_renderCollMgrList(colls)}
+  </div>
+  <div class="flex gap-2 border-t border-slate-100 pt-3">
+    <input id="new-coll-name" type="text" placeholder="New reading list name…" class="input flex-1 text-sm"
+      onkeydown="if(event.key==='Enter')createCollection()"/>
+    <button onclick="createCollection()" class="btn-primary text-sm">+ Create</button>
+  </div>
+  <div class="mt-3">
+    <button onclick="closeModal();renderLibrary()" class="w-full btn-secondary">Done</button>
+  </div>`, false)
+}
+
+function _renderCollMgrList(colls) {
+  if (!colls.length) return `<p class="text-sm text-slate-400 text-center py-6">No reading lists yet.<br/>Create one below.</p>`
+  return colls.map(c => `
+    <div class="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2.5" id="coll-item-${c.id}">
+      <span class="flex-1 text-sm font-medium truncate">${esc(c.name)}</span>
+      <span class="text-xs text-slate-400 flex-shrink-0">${(c.paperIds||[]).length} paper${(c.paperIds||[]).length!==1?'s':''}</span>
+      <button onclick="renameCollection('${c.id}')" class="text-slate-400 hover:text-indigo-600 text-sm px-1 flex-shrink-0" title="Rename">✏</button>
+      <button onclick="deleteCollection('${c.id}')" class="text-slate-400 hover:text-red-500 text-sm px-1 flex-shrink-0" title="Delete">✕</button>
+    </div>`).join('')
+}
+
+function createCollection() {
+  const input = document.getElementById('new-coll-name')
+  const name  = input?.value.trim()
+  if (!name) { showToast('Enter a name first', 'error'); return }
+  if (!state.paperCollections) state.paperCollections = []
+  state.paperCollections.push({ id: uid(), name, paperIds: [] })
+  save('paperCollections')
+  if (input) input.value = ''
+  const listEl = document.getElementById('coll-mgr-list')
+  if (listEl) listEl.innerHTML = _renderCollMgrList(state.paperCollections)
+  renderLibrary()
+  showToast(`"${name}" created ✓`)
+}
+
+function renameCollection(id) {
+  const coll = (state.paperCollections||[]).find(c => c.id === id)
+  if (!coll) return
+  const item = document.getElementById(`coll-item-${id}`)
+  if (!item) return
+  const nameSpan = item.querySelector('span.flex-1')
+  if (!nameSpan) return
+  const oldName = coll.name
+  const inp = document.createElement('input')
+  inp.type = 'text'; inp.value = oldName
+  inp.className = 'flex-1 text-sm border border-indigo-300 rounded-lg px-2 py-0 focus:outline-none'
+  nameSpan.replaceWith(inp)
+  inp.focus(); inp.select()
+  const commit = () => {
+    const newName = inp.value.trim()
+    if (newName && newName !== oldName) { coll.name = newName; save('paperCollections'); renderLibrary() }
+    const span = document.createElement('span')
+    span.className = 'flex-1 text-sm font-medium truncate'
+    span.textContent = coll.name
+    inp.replaceWith(span)
+  }
+  inp.addEventListener('blur', commit)
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); inp.blur() }
+    if (e.key === 'Escape') { inp.value = oldName; inp.blur() }
+  })
+}
+
+async function deleteCollection(id) {
+  const coll = (state.paperCollections||[]).find(c => c.id === id)
+  if (!coll) return
+  if (!await confirmDlg(`Delete reading list "${coll.name}"?\n\nPapers won't be removed from your library.`, 'Delete List')) return
+  state.paperCollections = (state.paperCollections||[]).filter(c => c.id !== id)
+  save('paperCollections')
+  renderLibrary()
+  // Reopen the manager since confirmDlg closes it
+  openCollectionManager()
+}
+
+function togglePaperInCollection(paperId, collId, btn) {
+  if (!state.paperCollections) state.paperCollections = []
+  const coll = state.paperCollections.find(c => c.id === collId)
+  if (!coll) return
+  if (!coll.paperIds) coll.paperIds = []
+  const idx = coll.paperIds.indexOf(paperId)
+  if (idx === -1) {
+    coll.paperIds.push(paperId)
+    if (btn) btn.className = btn.className
+      .replace('bg-slate-50 border-slate-200 text-slate-500 hover:border-indigo-300 hover:text-indigo-600',
+               'bg-indigo-100 border-indigo-300 text-indigo-700 font-medium')
+  } else {
+    coll.paperIds.splice(idx, 1)
+    if (btn) btn.className = btn.className
+      .replace('bg-indigo-100 border-indigo-300 text-indigo-700 font-medium',
+               'bg-slate-50 border-slate-200 text-slate-500 hover:border-indigo-300 hover:text-indigo-600')
+  }
+  save('paperCollections')
 }
 
 // ── DOI / arXiv metadata fetch ────────────────────────────────────────────────

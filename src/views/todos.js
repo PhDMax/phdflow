@@ -117,9 +117,14 @@ function renderTodayTab() {
   const doneTasks = state.todos.filter(t => t.status === 'done' && (t.todayFlag || t.dueDate === today))
 
   const totalPending = overdue.length + todayTasks.length
+  const totalEstMins = [...overdue, ...todayTasks]
+    .reduce((sum, t) => sum + (t.estimatedMinutes || 0), 0)
+  const estStr = totalEstMins >= 60
+    ? `${Math.floor(totalEstMins / 60)}h ${totalEstMins % 60 ? (totalEstMins % 60) + 'm' : ''}`.trim()
+    : totalEstMins > 0 ? `${totalEstMins}m` : ''
   const motiveLine = totalPending === 0
     ? `<span class="text-emerald-600 font-semibold">All clear! 🎉 Great work today.</span>`
-    : `<span class="font-bold text-slate-800">${totalPending}</span> task${totalPending !== 1 ? 's' : ''} on your plate today`
+    : `<span class="font-bold text-slate-800">${totalPending}</span> task${totalPending !== 1 ? 's' : ''} on your plate today${estStr ? ` · <span class="text-slate-400">~${estStr} estimated</span>` : ''}`
 
   body.innerHTML = `
   <div class="px-6 pt-4 pb-8">
@@ -412,6 +417,17 @@ function _todoCard(t, eff, pri, groups, highlightOverdue = false) {
         ${grp ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full font-medium ${c.light} ${c.text}">${grp.icon} ${esc(grp.name)}</span>` : ''}
       </div>
       ${t.description ? `<p class="text-xs text-slate-500 truncate mb-0.5">${esc(t.description)}</p>` : ''}
+      ${(t.subtasks?.length) ? (() => {
+        const done  = t.subtasks.filter(s => s.done).length
+        const total = t.subtasks.length
+        const pct   = Math.round(done / total * 100)
+        return `<div class="flex items-center gap-2 mb-0.5">
+          <div class="flex-1 bg-slate-100 rounded-full h-1 max-w-[80px]">
+            <div class="h-1 rounded-full bg-indigo-400 transition-all" style="width:${pct}%"></div>
+          </div>
+          <span class="text-[10px] text-slate-400">${done}/${total}</span>
+        </div>`
+      })() : ''}
       <div class="flex items-center gap-3 text-xs flex-wrap">
         ${dueHtml}
         ${t.repeat && t.repeat !== 'none' ? `<span class="text-indigo-400">🔁 ${({daily:'Daily',weekdays:'Weekdays',weekly:'Weekly',biweekly:'Biweekly',monthly:'Monthly'})[t.repeat]||''}</span>` : ''}
@@ -420,6 +436,11 @@ function _todoCard(t, eff, pri, groups, highlightOverdue = false) {
       </div>
     </div>
     <div class="flex items-center gap-1 flex-shrink-0">
+      ${_isOverdue(t) ? `
+        <button onclick="event.stopPropagation();todoDefer('${t.id}',1)"
+          title="Defer 1 day" class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 hover:bg-amber-100 hover:text-amber-700 transition-colors font-semibold">+1d</button>
+        <button onclick="event.stopPropagation();todoDefer('${t.id}',7)"
+          title="Defer 1 week" class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 hover:bg-amber-100 hover:text-amber-700 transition-colors font-semibold">+7d</button>` : ''}
       ${t.status !== 'done' && !t.todayFlag && !_isDueToday(t)
         ? `<button onclick="todoAddToToday('${t.id}')" title="Add to Today's focus"
             class="text-slate-300 hover:text-indigo-500 text-sm transition-colors">📌</button>` : ''}
@@ -478,6 +499,20 @@ function todoToggle(id) {
 // Alias used by dashboard
 function toggleTodo(id) { todoToggle(id) }
 
+function todoDefer(id, days) {
+  const t = state.todos.find(x => x.id === id)
+  if (!t) return
+  const base = t.dueDate && t.dueDate >= _todayStr() ? t.dueDate : _todayStr()
+  const d = new Date(base + 'T00:00:00')
+  d.setDate(d.getDate() + days)
+  t.dueDate    = d.toISOString().slice(0, 10)
+  t.todayFlag  = false
+  t.updatedAt  = new Date().toISOString()
+  save('todos')
+  todoSetTab(_todoTab)
+  showToast(`Deferred to ${fmtDate(t.dueDate)}`)
+}
+
 function todoAddToToday(id) {
   const t = state.todos.find(x => x.id === id)
   if (!t) return
@@ -489,10 +524,48 @@ function todoAddToToday(id) {
 }
 
 function deleteTodo(id) {
+  const snap = [...state.todos]
+  const title = state.todos.find(t => t.id === id)?.title || 'Task'
   state.todos = state.todos.filter(t => t.id !== id)
   save('todos')
   todoSetTab(_todoTab)
-  showToast('Task removed')
+  showUndoToast(`"${title}" deleted`, () => {
+    state.todos = snap
+    save('todos'); todoSetTab(_todoTab); showToast('Task restored ✓')
+  })
+}
+
+// ── Task modal — subtask buffer ───────────────────────────────────────────────
+
+let _modalSubtasks = []   // [{id, title, done}] — ephemeral, reset on each modal open
+
+function _renderSubtaskList() {
+  const el = document.getElementById('td-subtask-list')
+  if (!el) return
+  if (!_modalSubtasks.length) {
+    el.innerHTML = `<p class="text-xs text-slate-400 italic py-1">No subtasks yet.</p>`
+    return
+  }
+  el.innerHTML = _modalSubtasks.map((s, i) => `
+    <div class="flex items-center gap-2 py-1 group">
+      <input type="checkbox" ${s.done ? 'checked' : ''}
+        class="w-3.5 h-3.5 rounded accent-indigo-600 flex-shrink-0 cursor-pointer"
+        onchange="_modalSubtasks[${i}].done=this.checked;_renderSubtaskList()"/>
+      <span class="flex-1 text-xs ${s.done ? 'line-through text-slate-400' : 'text-slate-700'}">${esc(s.title)}</span>
+      <button onclick="_modalSubtasks.splice(${i},1);_renderSubtaskList()"
+        class="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-rose-400 transition-all text-xs leading-none">✕</button>
+    </div>`).join('')
+}
+
+function _addModalSubtask() {
+  const inp = document.getElementById('td-subtask-input')
+  if (!inp) return
+  const title = inp.value.trim()
+  if (!title) return
+  _modalSubtasks.push({ id: uid(), title, done: false })
+  inp.value = ''
+  _renderSubtaskList()
+  inp.focus()
 }
 
 // ── Task modal ────────────────────────────────────────────────────────────────
@@ -502,6 +575,23 @@ function openTodoModal(id, prefillGroupId, prefillToday) {
   const eff    = _todoEff(), pri = _todoPri()
   const groups = _ensureGroups()
   const today  = _todayStr()
+  // Support pre-linking to a project (from project detail)
+  const prefillProjectId = window._pendingTaskProjectId || t?.projectId || ''
+  if (!id) window._pendingTaskProjectId = null
+
+  // Support pre-linking to a grant (from grant detail)
+  const prefillGrantId = window._pendingTaskGrantId || t?.grantId || ''
+  if (!id) window._pendingTaskGrantId = null
+
+  // Support pre-filling from a calendar event
+  const _fromEvent = !id ? (window._pendingTaskFromEvent || null) : null
+  if (_fromEvent) window._pendingTaskFromEvent = null
+  const prefillTitle   = _fromEvent?.title || t?.title || ''
+  const prefillDueDate = _fromEvent?.dueDate || t?.dueDate || ''
+  const prefillEventId = _fromEvent?.linkedEventId || t?.linkedEventId || ''
+
+  // Seed subtask buffer from existing task, or empty for new
+  _modalSubtasks = (t?.subtasks || []).map(s => ({ ...s }))
 
   // Upcoming events for deadline linking
   const upcomingEvents = state.events
@@ -509,12 +599,12 @@ function openTodoModal(id, prefillGroupId, prefillToday) {
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(0, 30)
 
-  openModal(`
+  const modalHtml = openModal(`
   <h3 class="text-base font-bold mb-4">${t ? 'Edit Task' : 'New Task'}</h3>
   <div class="space-y-3">
     <div>
       <label class="label">Title *</label>
-      <input id="td-title" type="text" value="${esc(t?.title)}"
+      <input id="td-title" type="text" value="${esc(prefillTitle)}"
         placeholder="What needs to get done?" class="input"/>
     </div>
     <div>
@@ -552,7 +642,7 @@ function openTodoModal(id, prefillGroupId, prefillToday) {
       </div>
       <div>
         <label class="label">Due Date</label>
-        <input id="td-due" type="date" value="${t?.dueDate||''}" class="input"/>
+        <input id="td-due" type="date" value="${prefillDueDate}" class="input"/>
       </div>
     </div>
     <div>
@@ -560,9 +650,19 @@ function openTodoModal(id, prefillGroupId, prefillToday) {
       <select id="td-event" class="input">
         <option value="">— none —</option>
         ${upcomingEvents.map(e =>
-          `<option value="${e.id}" ${t?.linkedEventId===e.id?'selected':''}>${fmtDate(e.date)} · ${esc(e.title)}</option>`
+          `<option value="${e.id}" ${prefillEventId===e.id?'selected':''}>${fmtDate(e.date)} · ${esc(e.title)}</option>`
         ).join('')}
       </select>
+    </div>
+    <div>
+      <label class="label">Time estimate <span class="text-slate-400 font-normal">(optional)</span></label>
+      <div class="flex items-center gap-2">
+        <input id="td-estimate" type="number" min="1" max="999" step="1"
+          value="${t?.estimatedMinutes||''}"
+          placeholder="e.g. 45" class="input w-24"/>
+        <span class="text-xs text-slate-500">minutes</span>
+        ${t?.estimatedMinutes ? `<span class="text-xs text-slate-400">(≈ ${t.estimatedMinutes >= 60 ? Math.floor(t.estimatedMinutes/60)+'h '+(t.estimatedMinutes%60?t.estimatedMinutes%60+'m':'') : t.estimatedMinutes+'m'})</span>` : ''}
+      </div>
     </div>
     <div>
       <label class="label">Repeat</label>
@@ -575,6 +675,26 @@ function openTodoModal(id, prefillGroupId, prefillToday) {
         <option value="monthly"  ${t?.repeat==='monthly'  ?'selected':''}>🔁 Monthly</option>
       </select>
     </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="label">Link to Project</label>
+        <select id="td-project" class="input">
+          <option value="">— none —</option>
+          ${(state.projects||[]).filter(p=>p.status!=='archived').map(p=>
+            `<option value="${p.id}" ${prefillProjectId===p.id?'selected':''}>${esc(p.name)}</option>`
+          ).join('')}
+        </select>
+      </div>
+      <div>
+        <label class="label">Link to Grant</label>
+        <select id="td-grant" class="input">
+          <option value="">— none —</option>
+          ${(state.grants||[]).map(g=>
+            `<option value="${g.id}" ${prefillGrantId===g.id?'selected':''}>${esc(g.title||g.funder)}</option>`
+          ).join('')}
+        </select>
+      </div>
+    </div>
     <div class="flex items-center gap-2">
       <input type="checkbox" id="td-today" ${(t?.todayFlag || prefillToday) ? 'checked' : ''}
         class="w-4 h-4 rounded accent-indigo-600"/>
@@ -582,11 +702,24 @@ function openTodoModal(id, prefillGroupId, prefillToday) {
         📌 Add to Today's focus
       </label>
     </div>
+    <div>
+      <label class="label">Subtasks</label>
+      <div id="td-subtask-list" class="mb-1.5 pl-1 space-y-0"></div>
+      <div class="flex gap-1.5">
+        <input id="td-subtask-input" type="text" placeholder="Add a subtask…"
+          class="input flex-1 text-xs py-1.5"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();_addModalSubtask()}"/>
+        <button onclick="_addModalSubtask()"
+          class="btn-secondary text-xs py-1.5 px-3 flex-shrink-0">Add</button>
+      </div>
+    </div>
     <div class="flex gap-3 pt-2">
       <button onclick="closeModal()" class="flex-1 btn-secondary">Cancel</button>
       <button onclick="saveTodo('${t?.id||''}')" class="flex-1 btn-primary">Save Task</button>
     </div>
   </div>`)
+  // Render initial subtask list after DOM is ready
+  setTimeout(() => _renderSubtaskList(), 0)
 }
 
 function saveTodo(id) {
@@ -610,8 +743,12 @@ function saveTodo(id) {
     effort:        document.getElementById('td-effort').value,
     groupId:       document.getElementById('td-group').value,
     dueDate,
-    repeat:        repeat || '',
+    repeat:           repeat || '',
+    estimatedMinutes: parseInt(document.getElementById('td-estimate').value) || null,
+    subtasks:         _modalSubtasks.map(s => ({ id: s.id, title: s.title, done: s.done })),
     linkedEventId: linkedId,
+    projectId:     document.getElementById('td-project')?.value || '',
+    grantId:       document.getElementById('td-grant')?.value   || '',
     todayFlag:     document.getElementById('td-today').checked,
     status:        id ? (state.todos.find(t=>t.id===id)?.status || 'pending') : 'pending',
     tags:          [],
