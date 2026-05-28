@@ -19,6 +19,9 @@ autoUpdater.on('download-progress',    (p)   => _sendUpdate('downloading',  { pe
 autoUpdater.on('update-downloaded',    (i)   => _sendUpdate('ready',        { version: i.version }))
 autoUpdater.on('error',                (err) => _sendUpdate('error',        { message: err.message }))
 
+// Single-instance lock — if a second instance launches, focus the existing window
+if (!app.requestSingleInstanceLock()) { app.quit() }
+
 let mainWindow
 let tray = null
 let _quitting = false
@@ -119,14 +122,9 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'))
   mainWindow.once('ready-to-show', () => mainWindow.show())
 
-  // ✕ button → hide to tray + lock session (does NOT quit the app)
-  mainWindow.on('close', e => {
-    if (!_quitting) {
-      e.preventDefault()
-      _auth.loggedIn = false
-      mainWindow.webContents.send('auth-locked')
-      mainWindow.hide()
-    }
+  mainWindow.on('close', () => {
+    _quitting = true
+    app.quit()
   })
 }
 
@@ -160,8 +158,15 @@ app.whenReady().then(() => {
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
 })
 
-// Keep app alive in tray — only exit when _quitting = true
-app.on('window-all-closed', () => { /* intentionally empty — tray keeps app running */ })
+app.on('second-instance', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.show()
+    mainWindow.focus()
+  }
+})
+
+app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
 
 // ─── IPC: Core ────────────────────────────────────────────────────────────────
 
