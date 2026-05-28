@@ -363,32 +363,82 @@ async function doAuthLogin() {
   }
 }
 
+const _updCard = {
+  _s: `background:#1e293b;border:1px solid rgba(148,163,184,.12);border-radius:.875rem;padding:.875rem 1rem`,
+  _row: `display:flex;align-items:center;gap:.625rem`,
+  _label: `color:#94a3b8;font-size:.72rem`,
+  _spinner: `<div class="spin" style="width:.875rem;height:.875rem;border:2px solid #6366f1;border-top-color:transparent;border-radius:9999px;flex-shrink:0"></div>`,
+  show(html) { const d = document.getElementById('login-update'); if (d) d.innerHTML = html },
+  clear()    { const d = document.getElementById('login-update'); if (d) d.innerHTML = '' },
+}
+
 let _updateListenerSet = false
 function _initUpdateListener() {
   if (_updateListenerSet) return
   _updateListenerSet = true
   window.api.onUpdateStatus(({ status, version, percent }) => {
-    const div = document.getElementById('login-update')
     if (status === 'checking') {
-      if (div) div.innerHTML = `<span style="color:#475569;font-size:.7rem">Checking for updates…</span>`
+      _updCard.show(`
+        <div style="${_updCard._s}">
+          <div style="${_updCard._row}">
+            ${_updCard._spinner}
+            <span style="${_updCard._label}">Checking for updates…</span>
+          </div>
+        </div>`)
     } else if (status === 'current') {
-      if (div) { div.innerHTML = `<span style="color:#334155;font-size:.7rem">✓ Up to date</span>`; setTimeout(() => { if (div) div.innerHTML = '' }, 3000) }
+      _updCard.show(`
+        <div style="${_updCard._s}">
+          <div style="${_updCard._row}">
+            <span style="color:#4ade80;font-size:.875rem;flex-shrink:0">✓</span>
+            <span style="color:#4ade80;font-size:.72rem;font-weight:600">You're on the latest version</span>
+          </div>
+        </div>`)
+      setTimeout(() => _updCard.clear(), 4000)
     } else if (status === 'available') {
-      if (div) div.innerHTML = `<span style="color:#a5b4fc;font-size:.7rem">⬇️ Downloading v${esc(version)}…</span>`
+      _updCard.show(`
+        <div style="${_updCard._s}">
+          <div style="${_updCard._row};margin-bottom:.5rem">
+            ${_updCard._spinner}
+            <span style="color:#a5b4fc;font-size:.72rem;font-weight:600">Update found — downloading v${esc(version)}</span>
+          </div>
+          <div style="background:#0f172a;border-radius:9999px;height:.3rem;overflow:hidden">
+            <div style="background:#4f46e5;height:100%;border-radius:9999px;width:5%;transition:width .4s ease"></div>
+          </div>
+        </div>`)
     } else if (status === 'downloading') {
-      if (div) div.innerHTML = `<span style="color:#a5b4fc;font-size:.7rem">⬇️ Downloading… ${percent}%</span>`
+      const pct = percent ?? 0
+      _updCard.show(`
+        <div style="${_updCard._s}">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+            <div style="${_updCard._row}">
+              ${_updCard._spinner}
+              <span style="color:#a5b4fc;font-size:.72rem;font-weight:600">Downloading v${esc(version)}</span>
+            </div>
+            <span style="color:#475569;font-size:.68rem;font-weight:600;flex-shrink:0">${pct}%</span>
+          </div>
+          <div style="background:#0f172a;border-radius:9999px;height:.3rem;overflow:hidden">
+            <div style="background:linear-gradient(90deg,#4f46e5,#818cf8);height:100%;border-radius:9999px;width:${pct}%;transition:width .4s ease"></div>
+          </div>
+        </div>`)
     } else if (status === 'ready') {
-      const btn = `<button onclick="window.api.installUpdate()"
-        style="background:#4f46e5;color:#fff;font-size:.72rem;font-weight:600;padding:.3rem .875rem;border-radius:.5rem;border:none;cursor:pointer;margin-top:.4rem">
-        Restart to install v${esc(version)} →</button>`
-      if (div) div.innerHTML = `
-        <div style="background:rgba(30,27,75,.8);border:1px solid #4338ca;border-radius:.75rem;padding:.7rem 1rem;text-align:center">
-          <p style="color:#a5b4fc;font-size:.72rem;font-weight:600;margin:0">🎉 Update ready — v${esc(version)}</p>
-          ${btn}
-        </div>`
-      showToast(`PhDFlow v${esc(version)} downloaded — restart to install`, 'info')
+      _updCard.show(`
+        <div style="background:#1e293b;border:1px solid #3730a3;border-radius:.875rem;padding:1rem">
+          <div style="${_updCard._row};margin-bottom:.75rem">
+            <span style="font-size:1.1rem">🎉</span>
+            <div>
+              <p style="color:#a5b4fc;font-size:.75rem;font-weight:700;margin:0">v${esc(version)} is ready to install</p>
+              <p style="color:#475569;font-size:.67rem;margin:.15rem 0 0">Restart the app to apply the update</p>
+            </div>
+          </div>
+          <button onclick="window.api.installUpdate()"
+            style="width:100%;background:#4f46e5;color:#fff;font-weight:600;padding:.55rem;border-radius:.625rem;font-size:.78rem;border:none;cursor:pointer;transition:background .15s"
+            onmouseover="this.style.background='#4338ca'" onmouseout="this.style.background='#4f46e5'">
+            Restart &amp; Install →
+          </button>
+        </div>`)
+      showToast(`v${esc(version)} downloaded — restart to install`, 'info')
     } else if (status === 'error') {
-      if (div) div.innerHTML = ''
+      _updCard.clear()
     }
   })
 }
