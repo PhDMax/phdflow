@@ -190,8 +190,34 @@ function renderAppTab(body) {
   const discord = state.profile?.discordWebhook || ''
   const citStyle= state.profile?.defaultCitationStyle || 'APA'
 
+  const currentTheme = document.documentElement.dataset.theme || 'light'
+
   body.innerHTML = `
   <div class="p-6 max-w-2xl space-y-5">
+
+    <!-- Appearance -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-5">
+      <h3 class="text-sm font-bold text-slate-700 mb-1">🎨 Appearance</h3>
+      <p class="text-xs text-slate-400 mb-3">Choose how PhDFlow looks. Your preference is saved locally.</p>
+      <div class="grid grid-cols-2 gap-3 max-w-xs">
+        <button onclick="settingsSetTheme('light')" id="theme-btn-light"
+          class="flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${currentTheme==='light'?'border-indigo-500':'border-slate-200 hover:border-slate-300'}">
+          <div class="w-full h-10 rounded-lg bg-slate-50 border border-slate-200 flex items-center gap-1.5 px-2">
+            <div class="w-2 h-2 rounded-full bg-indigo-500 flex-shrink-0"></div>
+            <div class="flex-1 h-1.5 rounded bg-slate-200"></div>
+          </div>
+          <span class="text-xs font-semibold text-slate-700">☀️ Light</span>
+        </button>
+        <button onclick="settingsSetTheme('dark')" id="theme-btn-dark"
+          class="flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all ${currentTheme==='dark'?'border-indigo-500':'border-slate-200 hover:border-slate-300'}">
+          <div class="w-full h-10 rounded-lg bg-slate-800 border border-slate-700 flex items-center gap-1.5 px-2">
+            <div class="w-2 h-2 rounded-full bg-indigo-400 flex-shrink-0"></div>
+            <div class="flex-1 h-1.5 rounded bg-slate-600"></div>
+          </div>
+          <span class="text-xs font-semibold text-slate-700">🌙 Dark</span>
+        </button>
+      </div>
+    </div>
 
     <!-- Research topics -->
     <div class="bg-white rounded-2xl border border-slate-200 p-5">
@@ -280,6 +306,13 @@ function appAddTopic() {
   topics.push({ id: uid(), label: '', keywords: '' })
   state.newsTopics = topics
   renderAppTab(document.getElementById('settings-body'))
+}
+
+async function settingsSetTheme(t) {
+  applyTheme(t)
+  await api.storeSet('theme', t)
+  renderAppTab(document.getElementById('settings-body'))
+  showToast(`${t === 'dark' ? '🌙 Dark' : '☀️ Light'} mode applied`)
 }
 
 async function appRemoveTopic(i) {
