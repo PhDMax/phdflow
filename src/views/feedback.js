@@ -2,7 +2,6 @@
 // Send feedback directly to your Discord server via webhook
 
 function render_feedback() {
-  const webhook = state.profile?.discordWebhook || ''
   const vc = document.getElementById('view-content')
   vc.innerHTML = `
   ${pageHeader('💬 Feedback', '')}
@@ -11,10 +10,9 @@ function render_feedback() {
 
       <!-- Send feedback card -->
       <div class="bg-white rounded-2xl border border-slate-200 p-6">
-        <h3 class="text-base font-bold text-slate-900 mb-1">Send to Your Discord</h3>
+        <h3 class="text-base font-bold text-slate-900 mb-1">Send Feedback</h3>
         <p class="text-xs text-slate-400 mb-4">
-          Bug report, feature idea, or just a note to yourself — it goes straight to your Discord server.
-          ${!webhook ? `<span class="text-amber-600"> Set your webhook URL in <button onclick="showView('settings')" class="underline">Settings → App</button> first.</span>` : ''}
+          Bug report, feature idea, or just a note — it goes straight to the developer. Everything stays between you and PhDFlow.
         </p>
 
         <div class="space-y-3">
@@ -46,17 +44,9 @@ function render_feedback() {
 
           <div id="fb-status" class="text-xs text-slate-400"></div>
 
-          <button onclick="sendFeedback()"
-            class="btn-primary w-full py-2.5 ${!webhook ? 'opacity-50 cursor-not-allowed' : ''}"
-            ${!webhook ? 'disabled' : ''}>
-            Send to Discord →
+          <button onclick="sendFeedback()" class="btn-primary w-full py-2.5">
+            Send Feedback →
           </button>
-
-          ${!webhook ? `
-          <button onclick="showView('settings')"
-            class="btn-secondary w-full text-xs py-2">
-            ⚙️ Configure Discord Webhook First
-          </button>` : ''}
         </div>
       </div>
 
@@ -98,9 +88,6 @@ function render_feedback() {
 }
 
 async function sendFeedback() {
-  const webhook = state.profile?.discordWebhook
-  if (!webhook) { showToast('Configure your Discord webhook in Settings → App', 'error'); return }
-
   const msg  = document.getElementById('fb-msg')?.value.trim()
   const type = document.querySelector('input[name="fb-type"]:checked')?.value || 'other'
   const ctx  = document.getElementById('fb-ctx')?.checked
@@ -115,13 +102,13 @@ async function sendFeedback() {
   }
 
   if (el) el.innerHTML = `<span class="text-slate-400">Sending…</span>`
-  const r = await api.sendDiscord({ webhookUrl: webhook, message: fullMsg, type })
+  const r = await api.sendFeedback({ message: fullMsg, type })
 
   if (r.success) {
-    if (el) el.innerHTML = `<span class="text-emerald-600 font-semibold">✓ Sent to your Discord!</span>`
+    if (el) el.innerHTML = `<span class="text-emerald-600 font-semibold">✓ Feedback sent — thank you!</span>`
     document.getElementById('fb-msg').value = ''
-    showToast('Feedback sent to Discord ✓')
+    showToast('Feedback sent ✓')
   } else {
-    if (el) el.innerHTML = `<span class="text-rose-500">✕ ${esc(r.error || 'Could not reach Discord — check your webhook URL')}</span>`
+    if (el) el.innerHTML = `<span class="text-rose-500">✕ ${esc(r.error || 'Could not send — check your internet connection')}</span>`
   }
 }

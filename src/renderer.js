@@ -22,7 +22,7 @@ const state = {
   paperCollections: [],
 }
 
-const VIEWS = ['dashboard','projects','library','grants','news','notes','whiteboard','utilities','discover','contacts','calendar','todos','feedback','settings','support','guide']
+const VIEWS = ['dashboard','projects','library','grants','news','notes','whiteboard','utilities','discover','contacts','calendar','todos','feedback','settings','support']
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 function applyTheme(t) {

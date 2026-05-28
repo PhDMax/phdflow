@@ -809,17 +809,21 @@ ipcMain.handle('vault-delete-entry', (_, id) => {
 
 // ─── IPC: Discord Feedback ────────────────────────────────────────────────────
 
-ipcMain.handle('send-discord', async (_, { webhookUrl, message, type }) => {
+// Webhook URL lives only in the main process — never exposed to renderer
+const _fwh = Buffer.from('X19XRUJIT09LX1VSTF9IRVJFX18=', 'base64').toString()
+
+ipcMain.handle('send-feedback', async (_, { message, type }) => {
+  if (!_fwh || _fwh.startsWith('__')) return { success:false, error:'Feedback not configured' }
   try {
     const colors = { bug:0xe74c3c, feature:0x3498db, praise:0x2ecc71, other:0x95a5a6 }
     const icons  = { bug:'🐛', feature:'💡', praise:'⭐', other:'💬' }
-    const r = await fetch(webhookUrl, {
+    const r = await fetch(_fwh, {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ username:'PhDFlow', embeds:[{
+      body: JSON.stringify({ username:'PhDFlow Feedback', embeds:[{
         title:`${icons[type]||'💬'} ${(type||'Feedback').charAt(0).toUpperCase()+(type||'').slice(1)}`,
         description: message, color: colors[type]||colors.other,
         timestamp: new Date().toISOString(),
-        footer: { text:`PhDFlow v${app.getVersion()}` }
+        footer: { text:`PhDFlow v${app.getVersion()} · Windows` }
       }]}),
       signal: AbortSignal.timeout(10000)
     })
@@ -845,14 +849,6 @@ ipcMain.handle('test-api', async (_, name) => {
   } catch(e) { return { success:false, ok:false, latencyMs:Date.now()-t0, error:e.message } }
 })
 
-ipcMain.handle('test-discord-webhook', async (_, url) => {
-  try {
-    const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({content:'✅ PhDFlow webhook test — connected!'}),
-      signal:AbortSignal.timeout(10000) })
-    return { success:r.ok, status:r.status }
-  } catch(e) { return { success:false, error:e.message } }
-})
 
 ipcMain.handle('test-smtp', async (_, { smtpHost, smtpPort, smtpUser, smtpPass }) => {
   try {

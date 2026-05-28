@@ -48,9 +48,8 @@ contextBridge.exposeInMainWorld('api', {
   onVaultLocked:     (cb)                => ipcRenderer.on('vault-locked', cb),
 
   // ── Feedback & diagnostics ────────────────────────────────────────────────
-  sendDiscord:       (opts)              => ipcRenderer.invoke('send-discord', opts),
+  sendFeedback:      (opts)              => ipcRenderer.invoke('send-feedback', opts),
   testApi:           (name)              => ipcRenderer.invoke('test-api', name),
-  testDiscordWebhook:(url)               => ipcRenderer.invoke('test-discord-webhook', url),
   testSmtp:          (opts)              => ipcRenderer.invoke('test-smtp', opts),
 
   // ── Data backup / restore ─────────────────────────────────────────────────

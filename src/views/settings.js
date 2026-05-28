@@ -301,7 +301,6 @@ function personSaveWidgets() {
 
 function renderAppTab(body) {
   const topics  = (state.newsTopics || [])
-  const discord = state.profile?.discordWebhook || ''
   const citStyle= state.profile?.defaultCitationStyle || 'APA'
   const dms     = state.darkModeSchedule || {}
 
@@ -404,21 +403,6 @@ function renderAppTab(body) {
         ).join('')}
       </select>
       <button onclick="appSaveCiteStyle()" class="btn-primary text-xs py-1.5 px-3 ml-3">Save</button>
-    </div>
-
-    <!-- Discord webhook -->
-    <div class="bg-white rounded-2xl border border-slate-200 p-5">
-      <h3 class="text-sm font-bold text-slate-700 mb-1">💬 Discord Feedback Webhook</h3>
-      <p class="text-xs text-slate-400 mb-3">
-        Create a webhook in your Discord server: Server Settings → Integrations → Webhooks → New Webhook → Copy URL.
-      </p>
-      <div class="flex gap-2">
-        <input id="app-discord" type="url" value="${esc(discord)}"
-          placeholder="https://discord.com/api/webhooks/..." class="input flex-1"/>
-        <button onclick="appTestDiscord()" class="btn-secondary text-xs py-1.5 px-3 flex-shrink-0">Test</button>
-        <button onclick="appSaveDiscord()" class="btn-primary text-xs py-1.5 px-3 flex-shrink-0">Save</button>
-      </div>
-      <div id="app-discord-status" class="mt-2"></div>
     </div>
 
     <!-- Change app password -->
@@ -562,23 +546,6 @@ function appSaveCiteStyle() {
   showToast('Citation style saved ✓')
 }
 
-async function appTestDiscord() {
-  const url = document.getElementById('app-discord')?.value.trim()
-  if (!url) { showToast('Enter a webhook URL first', 'error'); return }
-  const el = document.getElementById('app-discord-status')
-  el.innerHTML = `<span class="text-xs text-slate-400">Testing…</span>`
-  const r = await api.testDiscordWebhook(url)
-  el.innerHTML = r.success
-    ? `<span class="text-xs text-emerald-600 font-semibold">✓ Connected — check your Discord channel</span>`
-    : `<span class="text-xs text-rose-600">✕ Failed: ${esc(r.error || 'HTTP ' + r.status)}</span>`
-}
-
-function appSaveDiscord() {
-  state.profile = state.profile || {}
-  state.profile.discordWebhook = document.getElementById('app-discord')?.value.trim() || ''
-  save('profile')
-  showToast('Webhook saved ✓')
-}
 
 async function appChangePassword() {
   const cur  = document.getElementById('app-pw-cur')?.value
