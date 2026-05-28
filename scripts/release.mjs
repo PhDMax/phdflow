@@ -90,9 +90,10 @@ function gitLogSinceLastTag() {
   const token = loadToken()
   console.log('✓ GitHub token loaded')
 
-  // 2. Check working tree
+  // 2. Check working tree (untracked files are fine, only block on modified/staged)
   const dirty = run('git status --porcelain', { silent: true })
-  if (dirty) { console.error('✗ Working tree has uncommitted changes. Commit or stash first.'); process.exit(1) }
+    .split('\n').filter(l => l && !l.startsWith('??')).join('\n')
+  if (dirty) { console.error('✗ Working tree has uncommitted changes. Commit or stash first.\n' + dirty); process.exit(1) }
 
   // 3. Collect changelog before bumping
   const changelog = gitLogSinceLastTag()

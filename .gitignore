@@ -34,3 +34,10 @@ electron-log.txt
 
 # Local secrets (GitHub token for release script)
 .env
+
+# Dev / debug artefacts
+debug-shots/
+bmac-banner.png
+scripts/_publish-now.mjs
+scripts/make-banner.mjs
+scripts/make-icons.mjs
