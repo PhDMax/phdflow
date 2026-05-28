@@ -1,6 +1,6 @@
 # ⚗️ PhDFlow
 
-> **Closed Alpha — v0.3.0**  
+> **Open Alpha — v0.4.0**  
 > This is an early access build shared with trusted testers. Features are incomplete and things will break. Feedback is welcome and extremely valuable.
 
 **Your all-in-one research workspace — open source, local-first. All data stays on your device.**
@@ -36,7 +36,7 @@
 
 ## 📥 Installation (Alpha Testers)
 
-1. Download `PhDFlow-Setup-0.3.0.exe` from the [Releases page](../../releases)
+1. Download `PhDFlow-Setup-0.4.0.exe` from the [Releases page](../../releases)
 2. Run the installer — you can choose any installation directory
 3. Launch **PhDFlow** from the desktop shortcut or Start Menu
 4. Create your account (name + password) on first launch
@@ -98,6 +98,6 @@ PhDFlow has **no servers, no telemetry, no accounts**.
 Your data is stored locally in `%APPDATA%\phdflow\`.  
 The only outbound connections are:
 - arXiv, OpenAlex, Semantic Scholar, CrossRef — paper/author search (open APIs)
-- Your own Discord webhook — only when you click "Send" in Feedback
-- Your own SMTP server — only for Vault OTP emails
+- Discord webhook — only when you click "Send" in Feedback
+- SMTP server — only for Vault OTP emails
 - GitHub API — only for the update version check (no auth, no data sent)
