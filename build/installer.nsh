@@ -1,3 +1,3 @@
 !macro customInit
-  StrCpy $INSTDIR "$PROGRAMFILES32\PhDFlow"
+  StrCpy $INSTDIR "$LOCALAPPDATA\Programs\PhDFlow"
 !macroend
