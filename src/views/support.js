@@ -1,7 +1,7 @@
 // ══ Support View ═══════════════════════════════════════════════════════════════
 
-const BMAC_URL        = 'https://buymeacoffee.com/YOUR_BMAC_USERNAME'
-const BMAC_MONTHLY    = 'https://buymeacoffee.com/YOUR_BMAC_USERNAME/membership'
+const BMAC_URL        = 'https://buymeacoffee.com/phdmax'
+const BMAC_MONTHLY    = 'https://buymeacoffee.com/phdmax/membership'
 
 function render_support() {
   const vc = document.getElementById('view-content')
