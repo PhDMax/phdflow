@@ -59,6 +59,9 @@ function render_dashboard() {
   const progressPct     = totalTodayCount ? Math.round(completedTodayTasks.length / totalTodayCount * 100) : 0
   const progressColor   = progressPct >= 80 ? '#22c55e' : progressPct >= 40 ? '#6366f1' : '#f59e0b'
 
+  const wgt = state.profile?.dashboardWidgets || {}
+  const wShow = id => wgt[id] !== false
+
   vc.innerHTML = `
   <div class="flex-1 overflow-y-auto bg-slate-50">
 
@@ -96,6 +99,7 @@ function render_dashboard() {
       <div class="space-y-5">
 
         <!-- Upcoming events & deadlines -->
+        ${wShow('events') ? `
         <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
           <div class="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
             <h3 class="text-sm font-bold text-slate-800">📅 Upcoming Events &amp; Deadlines</h3>
@@ -130,9 +134,10 @@ function render_dashboard() {
                 </div>`
               }).join('')}
             </div>`}
-        </div>
+        </div>` : ''}
 
         <!-- Active projects -->
+        ${wShow('projects') ? `
         <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
           <div class="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
             <h3 class="text-sm font-bold text-slate-800">📋 Active Projects</h3>
@@ -161,7 +166,7 @@ function render_dashboard() {
                 </div>`
               }).join('')}
             </div>`}
-        </div>
+        </div>` : ''}
 
       </div>
 
@@ -169,52 +174,51 @@ function render_dashboard() {
       <div class="space-y-5">
 
         <!-- Task widget (Today focus + overdue) -->
+        ${wShow('tasks') ? `
         <div class="bg-white rounded-2xl border border-slate-200 px-5 py-4" id="dash-todos-widget">
           <!-- populated by renderTodosWidget() after render -->
-        </div>
+        </div>` : ''}
 
         <!-- Grants pipeline -->
-        <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-          <div class="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
-            <h3 class="text-sm font-bold text-slate-800">✍️ Grant Pipeline</h3>
-            <button onclick="showView('grants')" class="text-xs text-indigo-500 hover:underline">All grants →</button>
-          </div>
-          ${openGrants.length === 0
-            ? `<div class="px-5 py-8 text-center text-slate-400 text-sm">No active grant applications.<br/><button onclick="showView('grants')" class="text-indigo-500 hover:underline mt-1">Track one →</button></div>`
-            : `<div class="divide-y divide-slate-50">
-              ${openGrants.map(g => {
-                const grantStatusColors = {
-                  researching:'bg-slate-100 text-slate-600',
-                  drafting:'bg-amber-100 text-amber-700',
-                  submitted:'bg-blue-100 text-blue-700',
-                }
-                const sc = grantStatusColors[g.status] || 'bg-slate-100 text-slate-600'
-                let deadlineHtml = ''
-                if (g.deadline) {
-                  const daysLeft = Math.round((new Date(g.deadline) - now) / 864e5)
-                  const urgent = daysLeft >= 0 && daysLeft <= 14
-                  const past   = daysLeft < 0
-                  deadlineHtml = `<span class="text-xs ${past ? 'text-red-500' : urgent ? 'text-amber-600' : 'text-slate-400'}">
-                    ${past ? `${Math.abs(daysLeft)}d ago` : daysLeft === 0 ? 'Today!' : `${daysLeft}d left`}
-                  </span>`
-                }
-                return `
-                <div class="px-5 py-3 flex items-center gap-3 hover:bg-slate-50 transition-colors cursor-pointer" onclick="showView('grants')">
-                  <div class="flex-1 min-w-0">
-                    <div class="text-sm font-medium text-slate-800 truncate">${esc(g.title)}</div>
-                    <div class="text-xs text-slate-400 truncate">${esc(g.agency||'No agency')}</div>
-                  </div>
-                  <div class="flex items-center gap-2 flex-shrink-0">
-                    ${deadlineHtml}
-                    <span class="text-xs px-2 py-0.5 rounded-full ${sc}">${g.status||'researching'}</span>
-                  </div>
-                </div>`
-              }).join('')}
-            </div>`}
-        </div>
+        ${wShow('grants') ? (() => {
+          const grantRows = openGrants.map(g => {
+            const grantStatusColors = {
+              researching:'bg-slate-100 text-slate-600',
+              drafting:'bg-amber-100 text-amber-700',
+              submitted:'bg-blue-100 text-blue-700',
+            }
+            const sc = grantStatusColors[g.status] || 'bg-slate-100 text-slate-600'
+            let dlHtml = ''
+            if (g.deadline) {
+              const daysLeft = Math.round((new Date(g.deadline) - now) / 864e5)
+              const urgent = daysLeft >= 0 && daysLeft <= 14
+              const past   = daysLeft < 0
+              dlHtml = `<span class="text-xs ${past ? 'text-red-500' : urgent ? 'text-amber-600' : 'text-slate-400'}">${past ? `${Math.abs(daysLeft)}d ago` : daysLeft === 0 ? 'Today!' : `${daysLeft}d left`}</span>`
+            }
+            return `<div class="px-5 py-3 flex items-center gap-3 hover:bg-slate-50 transition-colors cursor-pointer" onclick="showView('grants')">
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium text-slate-800 truncate">${esc(g.title)}</div>
+                <div class="text-xs text-slate-400 truncate">${esc(g.agency||'No agency')}</div>
+              </div>
+              <div class="flex items-center gap-2 flex-shrink-0">
+                ${dlHtml}
+                <span class="text-xs px-2 py-0.5 rounded-full ${sc}">${g.status||'researching'}</span>
+              </div>
+            </div>`
+          }).join('')
+          return `<div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
+              <h3 class="text-sm font-bold text-slate-800">✍️ Grant Pipeline</h3>
+              <button onclick="showView('grants')" class="text-xs text-indigo-500 hover:underline">All grants →</button>
+            </div>
+            ${openGrants.length === 0
+              ? `<div class="px-5 py-8 text-center text-slate-400 text-sm">No active grant applications.<br/><button onclick="showView('grants')" class="text-indigo-500 hover:underline mt-1">Track one →</button></div>`
+              : `<div class="divide-y divide-slate-50">${grantRows}</div>`}
+          </div>`
+        })() : ''}
 
         <!-- Recent papers -->
-        ${recentPapers.length > 0 ? `
+        ${wShow('papers') && recentPapers.length > 0 ? `
         <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden">
           <div class="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
             <h3 class="text-sm font-bold text-slate-800">📚 Recently Added Papers</h3>

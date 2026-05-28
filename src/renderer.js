@@ -29,6 +29,52 @@ function applyTheme(t) {
   document.documentElement.dataset.theme = (t === 'dark') ? 'dark' : 'light'
 }
 
+// ── Accent color ──────────────────────────────────────────────────────────────
+const _ACCENT_PALETTES = {
+  indigo:  { 50:'#eef2ff',100:'#e0e7ff',200:'#c7d2fe',400:'#818cf8',500:'#6366f1',600:'#4f46e5',700:'#4338ca',800:'#3730a3' },
+  violet:  { 50:'#f5f3ff',100:'#ede9fe',200:'#ddd6fe',400:'#a78bfa',500:'#8b5cf6',600:'#7c3aed',700:'#6d28d9',800:'#5b21b6' },
+  teal:    { 50:'#f0fdfa',100:'#ccfbf1',200:'#99f6e4',400:'#2dd4bf',500:'#14b8a6',600:'#0d9488',700:'#0f766e',800:'#115e59' },
+  rose:    { 50:'#fff1f2',100:'#ffe4e6',200:'#fecdd3',400:'#fb7185',500:'#f43f5e',600:'#e11d48',700:'#be123c',800:'#9f1239' },
+  amber:   { 50:'#fffbeb',100:'#fef3c7',200:'#fde68a',400:'#fbbf24',500:'#f59e0b',600:'#d97706',700:'#b45309',800:'#92400e' },
+  emerald: { 50:'#ecfdf5',100:'#d1fae5',200:'#a7f3d0',400:'#34d399',500:'#10b981',600:'#059669',700:'#047857',800:'#065f46' },
+}
+
+function applyAccent(color) {
+  const c = _ACCENT_PALETTES[color] || _ACCENT_PALETTES.indigo
+  let el = document.getElementById('ph-accent-style')
+  if (!el) { el = document.createElement('style'); el.id = 'ph-accent-style'; document.head.appendChild(el) }
+  if (!color || color === 'indigo') { el.textContent = ''; return }
+  el.textContent = [
+    `.bg-indigo-600{background-color:${c[600]}!important}`,
+    `.bg-indigo-500{background-color:${c[500]}!important}`,
+    `.bg-indigo-400{background-color:${c[400]}!important}`,
+    `.bg-indigo-100{background-color:${c[100]}!important}`,
+    `.bg-indigo-50{background-color:${c[50]}!important}`,
+    `.text-indigo-600{color:${c[600]}!important}`,
+    `.text-indigo-700{color:${c[700]}!important}`,
+    `.text-indigo-500{color:${c[500]}!important}`,
+    `.text-indigo-400{color:${c[400]}!important}`,
+    `.border-indigo-500{border-color:${c[500]}!important}`,
+    `.border-indigo-600{border-color:${c[600]}!important}`,
+    `.border-indigo-300{border-color:${c[200]}!important}`,
+    `.nav-btn.active{background:${c[800]}!important}`,
+    `.accent-indigo-600{accent-color:${c[600]}!important}`,
+    `#dash-fab-btn{background:${c[600]}!important}`,
+  ].join('\n')
+}
+
+// ── Font family ───────────────────────────────────────────────────────────────
+const _FONT_STACKS = {
+  system:  "'Segoe UI', system-ui, sans-serif",
+  serif:   "Georgia, 'Times New Roman', serif",
+  mono:    "'Cascadia Code', Consolas, 'Courier New', monospace",
+  rounded: "'Trebuchet MS', Verdana, sans-serif",
+}
+
+function applyFont(font) {
+  document.body.style.fontFamily = _FONT_STACKS[font] || _FONT_STACKS.system
+}
+
 // ── Onboarding + view init are called after login via loadAndShowApp() ─────────
 
 // ── Onboarding ────────────────────────────────────────────────────────────────
@@ -500,6 +546,8 @@ async function loadAndShowApp() {
                  'grants','newsFeeds','newsTopics','newsRead','calGoals','calFeeds','todoGroups','darkModeSchedule','paperCollections']
   const [, ...vals] = await Promise.all([
     window.api.storeGet('theme').then(t => applyTheme(t || 'light')),
+    window.api.storeGet('accentColor').then(c => applyAccent(c || 'indigo')),
+    window.api.storeGet('fontFamily').then(f => applyFont(f || 'system')),
     ...keys.map(async k => { const val = await window.api.storeGet(k); if (val !== null) state[k] = val })
   ])
   updateSidebarProfile()

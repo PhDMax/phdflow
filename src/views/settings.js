@@ -12,7 +12,7 @@ async function render_settings() {
   vc.innerHTML = `
   ${pageHeader('⚙️ Settings', '')}
   <div class="flex border-b border-slate-200 bg-white flex-shrink-0 px-6">
-    ${[['profile','👤 Profile'],['app','🔧 App'],['diagnostics','🩺 Diagnostics'],['backup','💾 Backup'],['vault','🔐 Vault']].map(([v,l]) =>
+    ${[['profile','👤 Profile'],['app','🔧 App'],['personalize','🎨 Personalize'],['diagnostics','🩺 Diagnostics'],['backup','💾 Backup'],['vault','🔐 Vault']].map(([v,l]) =>
       `<button id="stab-${v}" onclick="settingsTab('${v}')"
         class="px-4 py-3 text-xs font-semibold border-b-2 transition-colors mr-1">${l}</button>`
     ).join('')}
@@ -34,7 +34,7 @@ async function render_settings() {
 
 function settingsTab(tab) {
   _settingsTab = tab
-  ;['profile','app','diagnostics','backup','vault'].forEach(t => {
+  ;['profile','app','personalize','diagnostics','backup','vault'].forEach(t => {
     const btn = document.getElementById(`stab-${t}`)
     if (!btn) return
     btn.className = `px-4 py-3 text-xs font-semibold border-b-2 transition-colors mr-1 ${
@@ -47,6 +47,7 @@ function settingsTab(tab) {
   if (!body) return
   if      (tab === 'profile')     renderProfileTab(body)
   else if (tab === 'app')         renderAppTab(body)
+  else if (tab === 'personalize') renderPersonalizeTab(body)
   else if (tab === 'diagnostics') renderDiagnosticsTab(body)
   else if (tab === 'backup')      renderBackupTab(body)
   else                            renderVaultTab(body)
@@ -181,6 +182,119 @@ function saveProfileFull() {
   save('profile')
   showToast('Profile saved ✓')
   updateSidebarProfile()
+}
+
+// ── Personalize tab ───────────────────────────────────────────────────────────
+
+async function renderPersonalizeTab(body) {
+  const currentAccent = (await api.storeGet('accentColor')) || 'indigo'
+  const currentFont   = (await api.storeGet('fontFamily'))  || 'system'
+  const widgets       = state.profile?.dashboardWidgets || {}
+
+  const ACCENTS = [
+    { id:'indigo',  label:'Indigo',  hex:'#4f46e5' },
+    { id:'violet',  label:'Violet',  hex:'#7c3aed' },
+    { id:'teal',    label:'Teal',    hex:'#0d9488' },
+    { id:'rose',    label:'Rose',    hex:'#e11d48' },
+    { id:'amber',   label:'Amber',   hex:'#d97706' },
+    { id:'emerald', label:'Emerald', hex:'#059669' },
+  ]
+
+  const FONTS = [
+    { id:'system',  label:'System',   sub:'Segoe UI · Default',       style:"font-family:'Segoe UI',system-ui,sans-serif" },
+    { id:'serif',   label:'Serif',    sub:'Georgia · Academic',        style:"font-family:Georgia,serif" },
+    { id:'mono',    label:'Monospace',sub:'Cascadia Code · Technical', style:"font-family:'Cascadia Code',Consolas,monospace" },
+    { id:'rounded', label:'Rounded',  sub:'Trebuchet MS · Friendly',   style:"font-family:'Trebuchet MS',Verdana,sans-serif" },
+  ]
+
+  const WIDGET_LIST = [
+    { id:'events',   label:'📅 Upcoming Events',    desc:'Calendar events in the next 14 days' },
+    { id:'projects', label:'📋 Active Projects',    desc:'Projects with active or planning status' },
+    { id:'tasks',    label:'✅ Task Widget',         desc:'Today\'s focus tasks and overdue items' },
+    { id:'grants',   label:'✍️ Grant Pipeline',     desc:'Open grant applications and deadlines' },
+    { id:'papers',   label:'📚 Recent Papers',      desc:'Papers most recently added to your library' },
+  ]
+
+  body.innerHTML = `
+  <div class="p-6 max-w-2xl space-y-5">
+
+    <!-- Accent colour -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-5">
+      <h3 class="text-sm font-bold text-slate-700 mb-1">🎨 Accent Colour</h3>
+      <p class="text-xs text-slate-400 mb-4">Sets the primary colour used for buttons, links, and highlights throughout the app.</p>
+      <div class="flex gap-3 flex-wrap" id="accent-swatches">
+        ${ACCENTS.map(a => `
+        <button onclick="personSetAccent('${a.id}')" id="accent-swatch-${a.id}"
+          title="${a.label}"
+          class="flex flex-col items-center gap-1.5 p-2.5 rounded-xl border-2 transition-all ${a.id === currentAccent ? 'border-slate-700 shadow-md scale-105' : 'border-transparent hover:border-slate-300'}">
+          <div class="w-9 h-9 rounded-full shadow-sm" style="background:${a.hex}"></div>
+          <span class="text-[10px] font-semibold text-slate-600">${a.label}</span>
+        </button>`).join('')}
+      </div>
+    </div>
+
+    <!-- Font family -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-5">
+      <h3 class="text-sm font-bold text-slate-700 mb-1">🔤 Font Family</h3>
+      <p class="text-xs text-slate-400 mb-4">Changes the typeface used across the app. All fonts are built into Windows.</p>
+      <div class="grid grid-cols-2 gap-3" id="font-cards">
+        ${FONTS.map(f => `
+        <button onclick="personSetFont('${f.id}')" id="font-card-${f.id}"
+          class="text-left p-3.5 rounded-xl border-2 transition-all ${f.id === currentFont ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 hover:border-slate-300'}">
+          <div class="text-base font-semibold text-slate-800 mb-0.5" style="${f.style}">Aa 123</div>
+          <div class="text-xs font-bold text-slate-700" style="${f.style}">${f.label}</div>
+          <div class="text-[10px] text-slate-400 mt-0.5">${f.sub}</div>
+        </button>`).join('')}
+      </div>
+    </div>
+
+    <!-- Dashboard widgets -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-5">
+      <h3 class="text-sm font-bold text-slate-700 mb-1">🏠 Dashboard Widgets</h3>
+      <p class="text-xs text-slate-400 mb-4">Choose which sections appear on your dashboard. Changes apply instantly.</p>
+      <div class="space-y-2.5">
+        ${WIDGET_LIST.map(w => {
+          const enabled = widgets[w.id] !== false
+          return `
+          <label class="flex items-center gap-3 cursor-pointer select-none group p-2.5 rounded-xl hover:bg-slate-50 transition-colors">
+            <input type="checkbox" id="widget-${w.id}" class="accent-indigo-600 w-4 h-4 flex-shrink-0"
+              ${enabled ? 'checked' : ''} onchange="personSaveWidgets()"/>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-semibold text-slate-700">${w.label}</div>
+              <div class="text-xs text-slate-400">${w.desc}</div>
+            </div>
+          </label>`
+        }).join('')}
+      </div>
+    </div>
+
+  </div>`
+}
+
+async function personSetAccent(color) {
+  applyAccent(color)
+  await api.storeSet('accentColor', color)
+  // Re-render the tab to update selected state
+  renderPersonalizeTab(document.getElementById('settings-body'))
+  showToast(`Accent colour set to ${color[0].toUpperCase() + color.slice(1)} ✓`)
+}
+
+async function personSetFont(font) {
+  applyFont(font)
+  await api.storeSet('fontFamily', font)
+  renderPersonalizeTab(document.getElementById('settings-body'))
+  showToast('Font updated ✓')
+}
+
+function personSaveWidgets() {
+  const ids = ['events','projects','tasks','grants','papers']
+  const widgets = {}
+  ids.forEach(id => { widgets[id] = document.getElementById(`widget-${id}`)?.checked !== false })
+  state.profile = state.profile || {}
+  state.profile.dashboardWidgets = widgets
+  save('profile')
+  // Refresh dashboard if it's the current view
+  if (state.currentView === 'dashboard') render_dashboard()
 }
 
 // ── App tab ───────────────────────────────────────────────────────────────────
