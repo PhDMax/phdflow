@@ -38,16 +38,15 @@ function render_support() {
         </div>
 
         <!-- Monthly support -->
-        <div class="bg-white border border-indigo-200 rounded-2xl p-5 flex flex-col gap-3 relative overflow-hidden">
-          <div class="absolute top-3 right-3 text-xs bg-indigo-100 text-indigo-700 font-semibold px-2 py-0.5 rounded-full">Best</div>
-          <div class="text-2xl">⭐</div>
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 flex flex-col gap-3">
+          <div class="text-2xl">🔁</div>
           <div>
             <h3 class="font-bold text-slate-900 text-sm">Monthly Supporter</h3>
-            <p class="text-xs text-slate-500 mt-1">Join as a recurring supporter and get your name in the credits + early access to new features.</p>
+            <p class="text-xs text-slate-500 mt-1">A tiny amount each month makes a huge difference in my life.</p>
           </div>
           <button onclick="window.api.openExternal('${BMAC_MONTHLY}')"
-            class="mt-auto w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors">
-            ⭐ Become a supporter
+            class="mt-auto w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium py-2.5 rounded-xl text-sm transition-colors">
+            Become a supporter
           </button>
         </div>
       </div>
