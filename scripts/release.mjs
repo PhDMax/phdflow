@@ -132,7 +132,25 @@ function gitLogSinceLastTag() {
 
   // 8. Create release
   console.log('\n📋  Creating GitHub release…')
-  const releaseBody = `## PhDFlow v${newVersion}\n\n### Changes\n${changelog}\n\n---\n☕ [Buy me a coffee](https://buymeacoffee.com/phdmax)`
+  const releaseBody = `## PhDFlow v${newVersion}
+
+Your all-in-one research workspace. Open source, local-first, free to use.
+
+### Changes
+${changelog}
+
+### Installation
+1. Download **PhDFlow Setup ${newVersion}.exe** and run it
+2. Create your account on first launch — stored locally, no servers
+3. No API keys, no account required
+
+> Windows SmartScreen may warn on first run — click **More info → Run anyway**
+
+### Portable version
+**PhDFlow-Portable-${newVersion}.exe** — runs without installing, useful for USB drives or restricted machines.
+
+---
+☕ If PhDFlow saves you time, [buy me a coffee](https://buymeacoffee.com/phdmax)`
   const release = await ghPost('/releases', {
     tag_name:         `v${newVersion}`,
     target_commitish: 'master',
