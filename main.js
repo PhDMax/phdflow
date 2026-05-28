@@ -155,6 +155,7 @@ function setupTray() {
 app.whenReady().then(() => {
   createWindow()
   setupTray()
+  autoUpdater.checkForUpdates().catch(() => null)
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
 })
 
