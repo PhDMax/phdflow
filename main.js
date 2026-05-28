@@ -964,7 +964,7 @@ function _semverGt(a, b) {
 
 ipcMain.handle('check-for-updates', async () => {
   try {
-    const r = await fetch('https://api.github.com/repos/PhDMax/phd-command-center/releases/latest', {
+    const r = await fetch('https://api.github.com/repos/PhDMax/phdflow/releases/latest', {
       headers: { 'User-Agent': 'PhD-Command-Center', 'Accept': 'application/vnd.github.v3+json' },
       signal: AbortSignal.timeout(10000)
     })
@@ -975,7 +975,7 @@ ipcMain.handle('check-for-updates', async () => {
     return {
       success: true, currentVersion: current, latestVersion: latest,
       hasUpdate: _semverGt(latest, current),
-      releaseUrl: data.html_url || 'https://github.com/PhDMax/phd-command-center/releases/latest',
+      releaseUrl: data.html_url || 'https://github.com/PhDMax/phdflow/releases/latest',
       releaseNotes: (data.body || '').slice(0, 600)
     }
   } catch(e) { return { success: false, error: e.message } }

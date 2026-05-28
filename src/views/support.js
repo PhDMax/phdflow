@@ -75,7 +75,7 @@ function render_support() {
         <div class="space-y-2 text-sm text-slate-600">
           <div class="flex items-center gap-2.5">
             <span>⭐</span>
-            <span>Star the project on <button onclick="window.api.openExternal('https://github.com/PhDMax/phd-command-center')" class="text-indigo-600 hover:underline font-medium">GitHub</button></span>
+            <span>Star the project on <button onclick="window.api.openExternal('https://github.com/PhDMax/phdflow')" class="text-indigo-600 hover:underline font-medium">GitHub</button></span>
           </div>
           <div class="flex items-center gap-2.5">
             <span>💬</span>

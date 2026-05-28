@@ -54,8 +54,8 @@
 ### Steps
 
 ```bash
-git clone https://github.com/PhDMax/phd-command-center.git
-cd phd-command-center
+git clone https://github.com/PhDMax/phdflow.git
+cd phdflow
 npm install
 npm run build:css      # Compile Tailwind CSS
 npm start              # Run in development
