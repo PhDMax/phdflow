@@ -1,7 +1,7 @@
 {
-  "name": "phd-command-center",
+  "name": "phdflow",
   "version": "0.3.0",
-  "description": "The PhD Command Center — free, local-first research tool",
+  "description": "PhDFlow — free, local-first research tool for PhD students",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -26,7 +26,7 @@
   },
   "build": {
     "appId": "com.phdflow.commandcenter",
-    "productName": "PhD Command Center",
+    "productName": "PhDFlow",
     "copyright": "Copyright © 2025 PhDFlow",
     "directories": {
       "output": "dist",
@@ -66,10 +66,10 @@
       "include": "build/installer.nsh",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "PhD Command Center"
+      "shortcutName": "PhDFlow"
     },
     "portable": {
-      "artifactName": "PhD-Command-Center-Portable-${version}.exe"
+      "artifactName": "PhDFlow-Portable-${version}.exe"
     }
   }
 }

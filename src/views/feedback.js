@@ -77,7 +77,7 @@ function render_feedback() {
       <!-- Privacy note -->
       <p class="text-xs text-slate-400 text-center">
         Feedback is sent directly from your device to your own Discord server via your webhook.<br/>
-        PhD Command Center never sees or stores your feedback.
+        PhDFlow never sees or stores your feedback.
       </p>
     </div>
   </div>`

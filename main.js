@@ -96,7 +96,7 @@ function createWindow() {
     backgroundColor: '#0f172a',
     icon: appIcon,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
-    title: 'PhD Command Center',
+    title: 'PhDFlow',
     show: false
   })
   mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'))
@@ -120,9 +120,9 @@ function setupTray() {
       ? nativeImage.createFromPath(iconPath)
       : nativeImage.createEmpty()
     tray = new Tray(rawIcon)
-    tray.setToolTip('PhD Command Center')
+    tray.setToolTip('PhDFlow')
     const menu = Menu.buildFromTemplate([
-      { label: '📖  Open PhD Command Center', click: () => { mainWindow.show(); mainWindow.focus() } },
+      { label: '📖  Open PhDFlow', click: () => { mainWindow.show(); mainWindow.focus() } },
       { type: 'separator' },
       { label: '🔒  Lock & Minimise to Tray', click: () => {
           _auth.loggedIn = false
@@ -130,7 +130,7 @@ function setupTray() {
           mainWindow.hide()
       }},
       { type: 'separator' },
-      { label: '✕  Quit PhD Command Center', click: () => { _quitting = true; app.quit() } }
+      { label: '✕  Quit PhDFlow', click: () => { _quitting = true; app.quit() } }
     ])
     tray.setContextMenu(menu)
     tray.on('double-click', () => { mainWindow.show(); mainWindow.focus() })
@@ -708,10 +708,10 @@ ipcMain.handle('vault-step3-send', async () => {
     const tr = nm.createTransport({ host, port:parseInt(cfg.smtpPort)||587,
       secure:parseInt(cfg.smtpPort)===465, auth:{user,pass} })
     await tr.sendMail({
-      from:`"PhD Command Center" <${user}>`, to,
+      from:`"PhDFlow" <${user}>`, to,
       subject:`Vault access code: ${otp}`,
       html:`<div style="font-family:sans-serif;max-width:420px;margin:0 auto;padding:32px;background:#f8fafc;border-radius:12px">
-        <h2 style="color:#1e293b;margin:0 0 8px">🔐 PhD Command Center</h2>
+        <h2 style="color:#1e293b;margin:0 0 8px">🔐 PhDFlow</h2>
         <p style="color:#64748b;margin:0 0 24px">Your one-time vault access code:</p>
         <div style="background:#4f46e5;color:#fff;font-size:36px;font-weight:700;letter-spacing:10px;text-align:center;padding:24px;border-radius:8px">${otp}</div>
         <p style="color:#94a3b8;font-size:12px;margin-top:16px">Expires in 5 minutes. Never share this code.</p>
@@ -792,11 +792,11 @@ ipcMain.handle('send-discord', async (_, { webhookUrl, message, type }) => {
     const icons  = { bug:'🐛', feature:'💡', praise:'⭐', other:'💬' }
     const r = await fetch(webhookUrl, {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ username:'PhD Command Center', embeds:[{
+      body: JSON.stringify({ username:'PhDFlow', embeds:[{
         title:`${icons[type]||'💬'} ${(type||'Feedback').charAt(0).toUpperCase()+(type||'').slice(1)}`,
         description: message, color: colors[type]||colors.other,
         timestamp: new Date().toISOString(),
-        footer: { text:`PhD Command Center v${app.getVersion()}` }
+        footer: { text:`PhDFlow v${app.getVersion()}` }
       }]}),
       signal: AbortSignal.timeout(10000)
     })
@@ -825,7 +825,7 @@ ipcMain.handle('test-api', async (_, name) => {
 ipcMain.handle('test-discord-webhook', async (_, url) => {
   try {
     const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({content:'✅ PhD Command Center webhook test — connected!'}),
+      body:JSON.stringify({content:'✅ PhDFlow webhook test — connected!'}),
       signal:AbortSignal.timeout(10000) })
     return { success:r.ok, status:r.status }
   } catch(e) { return { success:false, error:e.message } }

@@ -263,7 +263,7 @@ function renderAppTab(body) {
     <!-- Privacy notice -->
     <div class="bg-slate-50 rounded-2xl border border-slate-200 p-5">
       <h3 class="text-sm font-bold text-slate-700 mb-2">🔒 Data & Privacy</h3>
-      <p class="text-xs text-slate-500 mb-2">All data lives on your machine. No PhD Command Center server ever receives your data.</p>
+      <p class="text-xs text-slate-500 mb-2">All data lives on your machine. No PhDFlow server ever receives your data.</p>
       <div class="space-y-1 text-xs text-slate-500">
         ${[['arXiv','Paper discovery (open API)'],['OpenAlex','Paper & author metadata (open API)'],
            ['Semantic Scholar','Author search (open API)'],['CrossRef','Citation metadata (open API)'],
@@ -689,7 +689,7 @@ async function vaultDoSetup() {
       <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-5 text-xs text-amber-700">
         ⚠️ <strong>Save this secret now.</strong> It will never be shown again. Write it down and store it safely offline.
       </div>
-      <p class="text-xs text-slate-500 mb-4">Account name in your app: <strong>PhD Command Center</strong></p>
+      <p class="text-xs text-slate-500 mb-4">Account name in your app: <strong>PhDFlow</strong></p>
       <button onclick="vaultSetupDone()" class="btn-primary w-full py-2.5">I've saved the secret → Continue</button>
     </div>
   </div>`

@@ -1,4 +1,4 @@
-# ⚗️ PhD Command Center
+# ⚗️ PhDFlow
 
 > **Closed Alpha — v0.3.0**  
 > This is an early access build shared with trusted testers. Features are incomplete and things will break. Feedback is welcome and extremely valuable.
@@ -36,9 +36,9 @@
 
 ## 📥 Installation (Alpha Testers)
 
-1. Download `PhD-Command-Center-Setup-0.3.0.exe` from the [Releases page](../../releases)
+1. Download `PhDFlow-Setup-0.3.0.exe` from the [Releases page](../../releases)
 2. Run the installer — you can choose any installation directory
-3. Launch **PhD Command Center** from the desktop shortcut or Start Menu
+3. Launch **PhDFlow** from the desktop shortcut or Start Menu
 4. Create your account (name + password) on first launch
 
 > **No account required. No data leaves your device. No API keys needed.**
@@ -63,7 +63,7 @@ npm start              # Run in development
 
 ### Build Windows installer
 ```bash
-npm run build          # Produces dist/PhD-Command-Center-Setup-x.x.x.exe
+npm run build          # Produces dist/PhDFlow-Setup-x.x.x.exe
 ```
 
 > **Note:** Code signing is disabled for alpha builds. Windows Defender SmartScreen may show a warning — click "More info → Run anyway" to proceed.
@@ -94,8 +94,8 @@ Free to use, modify, and distribute. No warranty expressed or implied.
 
 ## 🔒 Privacy
 
-PhD Command Center has **no servers, no telemetry, no accounts**.  
-Your data is stored locally in `%APPDATA%\phd-command-center\`.  
+PhDFlow has **no servers, no telemetry, no accounts**.  
+Your data is stored locally in `%APPDATA%\phdflow\`.  
 The only outbound connections are:
 - arXiv, OpenAlex, Semantic Scholar, CrossRef — paper/author search (open APIs)
 - Your own Discord webhook — only when you click "Send" in Feedback

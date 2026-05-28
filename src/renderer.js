@@ -1,4 +1,4 @@
-// ══ PhD Command Center — Core State & Router ══════════════════════════════════
+// ══ PhDFlow — Core State & Router ══════════════════════════════════════════════
 
 const state = {
   currentView: null,
@@ -31,7 +31,7 @@ function showOnboarding() {
     <div class="w-full max-w-sm">
       <div class="text-center mb-8">
         <div class="text-5xl mb-4">⚗️</div>
-        <h1 class="text-2xl font-bold text-slate-900">PhD Command Center</h1>
+        <h1 class="text-2xl font-bold text-slate-900">PhDFlow</h1>
         <p class="text-slate-500 mt-2 text-sm">Your all-in-one research workspace.<br/>100% free. All data stays on your device.</p>
       </div>
       <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
