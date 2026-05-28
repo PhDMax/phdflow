@@ -810,7 +810,7 @@ ipcMain.handle('vault-delete-entry', (_, id) => {
 // ─── IPC: Discord Feedback ────────────────────────────────────────────────────
 
 // Webhook URL lives only in the main process — never exposed to renderer
-const _fwh = Buffer.from('X19XRUJIT09LX1VSTF9IRVJFX18=', 'base64').toString()
+const _fwh = Buffer.from('aHR0cHM6Ly9kaXNjb3JkLmNvbS9hcGkvd2ViaG9va3MvMTUwOTU2MzI3MTc0MzgwMzQyMi9NbWtrZjFYWWtZTkpFeVJEOFd5VENvWHVTZ09lVHBYR3BIdGF1Y2U0UUVHQ3dWS3dvakRGaG5KcENlS1RkeEhaVENXcA==', 'base64').toString()
 
 ipcMain.handle('send-feedback', async (_, { message, type }) => {
   if (!_fwh || _fwh.startsWith('__')) return { success:false, error:'Feedback not configured' }
