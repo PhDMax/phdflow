@@ -71,7 +71,7 @@ function render_feedback() {
           <p class="text-sm font-semibold text-slate-800">Step-by-step guides for every tool</p>
           <p class="text-xs text-slate-500 mt-0.5">Getting started, tips, and full feature walkthroughs — all in one place.</p>
         </div>
-        <button onclick="api.openExternal('https://github.com/PhDMax/phdflow/tree/master/docs')"
+        <button onclick="api.openExternal('https://github.com/PhDMax/phdflow/wiki')"
           class="flex-shrink-0 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-xl text-xs transition-colors whitespace-nowrap">
           Open Docs →
         </button>
