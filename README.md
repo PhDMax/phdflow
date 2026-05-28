@@ -3,7 +3,7 @@
 > **Closed Alpha — v0.3.0**  
 > This is an early access build shared with trusted testers. Features are incomplete and things will break. Feedback is welcome and extremely valuable.
 
-**Your all-in-one research workspace — 100% free, forever. All data stays on your device.**
+**Your all-in-one research workspace — open source, local-first. All data stays on your device.**
 
 ---
 

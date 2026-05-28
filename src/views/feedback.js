@@ -79,6 +79,20 @@ function render_feedback() {
         Feedback is sent directly from your device to your own Discord server via your webhook.<br/>
         PhDFlow never sees or stores your feedback.
       </p>
+
+      <!-- Support nudge -->
+      <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center gap-4">
+        <div class="text-3xl flex-shrink-0">☕</div>
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-semibold text-slate-800">PhDFlow is free to use</p>
+          <p class="text-xs text-slate-500 mt-0.5">If it saves you time, consider buying me a coffee — it keeps development going.</p>
+        </div>
+        <button onclick="showView('support')"
+          class="flex-shrink-0 bg-amber-400 hover:bg-amber-500 text-white font-semibold px-4 py-2 rounded-xl text-xs transition-colors whitespace-nowrap">
+          Support ☕
+        </button>
+      </div>
+
     </div>
   </div>`
 }

@@ -20,7 +20,7 @@ const state = {
   todoGroups: []
 }
 
-const VIEWS = ['dashboard','projects','library','grants','news','notes','whiteboard','utilities','discover','contacts','calendar','todos','feedback','settings']
+const VIEWS = ['dashboard','projects','library','grants','news','notes','whiteboard','utilities','discover','contacts','calendar','todos','feedback','settings','support']
 
 // ── Onboarding + view init are called after login via loadAndShowApp() ─────────
 
@@ -32,7 +32,7 @@ function showOnboarding() {
       <div class="text-center mb-8">
         <div class="text-5xl mb-4">⚗️</div>
         <h1 class="text-2xl font-bold text-slate-900">PhDFlow</h1>
-        <p class="text-slate-500 mt-2 text-sm">Your all-in-one research workspace.<br/>100% free. All data stays on your device.</p>
+        <p class="text-slate-500 mt-2 text-sm">Your all-in-one research workspace.<br/>Open source. All data stays on your device.</p>
       </div>
       <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
         <div>
@@ -48,9 +48,9 @@ function showOnboarding() {
         </div>
         <button onclick="completeOnboarding()"
           class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors">
-          Enter the Command Center →
+          Get Started →
         </button>
-        <p class="text-center text-xs text-slate-400">No account · No API key · No cost · Ever</p>
+        <p class="text-center text-xs text-slate-400">No account · No API key · Open source</p>
       </div>
     </div>
   </div>`
@@ -207,7 +207,7 @@ function emptyState(icon, title, sub) {
 async function checkAuthAndStart() {
   const ver   = await window.api.getAppVersion().catch(() => '0.3')
   const verEl = document.getElementById('login-version')
-  if (verEl) verEl.textContent = `v${ver} · free & open`
+  if (verEl) verEl.textContent = `v${ver} · open source`
 
   const status = await window.api.authStatus()
   renderLoginCard(status.initialized ? 'login' : 'setup')
