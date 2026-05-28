@@ -31,3 +31,6 @@ data/
 # Electron logs
 electron-log.txt
 *.log
+
+# Local secrets (GitHub token for release script)
+.env
