@@ -1,6 +1,23 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage } = require('electron')
+const { autoUpdater } = require('electron-updater')
 const path = require('path')
 const fs   = require('fs')
+
+// ─── Auto-updater setup ───────────────────────────────────────────────────────
+autoUpdater.autoDownload    = true   // download silently in background
+autoUpdater.autoInstallOnAppQuit = true  // install when user quits normally
+
+function _sendUpdate(status, extra = {}) {
+  if (mainWindow?.webContents && !mainWindow.webContents.isDestroyed())
+    mainWindow.webContents.send('update-status', { status, ...extra })
+}
+
+autoUpdater.on('checking-for-update',  ()    => _sendUpdate('checking'))
+autoUpdater.on('update-not-available', ()    => _sendUpdate('current'))
+autoUpdater.on('update-available',     (i)   => _sendUpdate('available',    { version: i.version }))
+autoUpdater.on('download-progress',    (p)   => _sendUpdate('downloading',  { percent: Math.round(p.percent) }))
+autoUpdater.on('update-downloaded',    (i)   => _sendUpdate('ready',        { version: i.version }))
+autoUpdater.on('error',                (err) => _sendUpdate('error',        { message: err.message }))
 
 let mainWindow
 let tray = null
@@ -949,37 +966,10 @@ ipcMain.handle('auth-change-password', async (_, { currentPassword, newPassword 
   } catch(e) { return { success: false, error: e.message } }
 })
 
-// ─── IPC: Update Check (GitHub Releases) ─────────────────────────────────────
+// ─── IPC: Auto-updater ───────────────────────────────────────────────────────
 
-function _semverGt(a, b) {
-  const pa = (a || '').split('.').map(Number)
-  const pb = (b || '').split('.').map(Number)
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const na = pa[i] || 0, nb = pb[i] || 0
-    if (na > nb) return true
-    if (na < nb) return false
-  }
-  return false
-}
-
-ipcMain.handle('check-for-updates', async () => {
-  try {
-    const r = await fetch('https://api.github.com/repos/PhDMax/phdflow/releases/latest', {
-      headers: { 'User-Agent': 'PhD-Command-Center', 'Accept': 'application/vnd.github.v3+json' },
-      signal: AbortSignal.timeout(10000)
-    })
-    if (!r.ok) return { success: false, error: `GitHub API returned ${r.status}` }
-    const data    = await r.json()
-    const latest  = (data.tag_name || '').replace(/^v/, '')
-    const current = app.getVersion()
-    return {
-      success: true, currentVersion: current, latestVersion: latest,
-      hasUpdate: _semverGt(latest, current),
-      releaseUrl: data.html_url || 'https://github.com/PhDMax/phdflow/releases/latest',
-      releaseNotes: (data.body || '').slice(0, 600)
-    }
-  } catch(e) { return { success: false, error: e.message } }
-})
+ipcMain.handle('check-for-updates', () => autoUpdater.checkForUpdates().catch(() => null))
+ipcMain.handle('updater-install',   () => autoUpdater.quitAndInstall(false, true))
 
 // ─── IPC: Calendar ICS Fetch ─────────────────────────────────────────────────
 ipcMain.handle('fetch-ics', async (_, url) => {

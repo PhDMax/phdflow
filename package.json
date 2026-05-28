@@ -10,6 +10,7 @@
     "build": "npm run build:css && electron-builder --win"
   },
   "dependencies": {
+    "electron-updater": "^6.8.3",
     "nodemailer": "^8.0.9",
     "pdf-lib": "^1.17.1",
     "pdf-parse": "^1.1.1",
@@ -70,6 +71,11 @@
     },
     "portable": {
       "artifactName": "PhDFlow-Portable-${version}.exe"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "PhDMax",
+      "repo": "phdflow"
     }
   }
 }

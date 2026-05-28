@@ -324,27 +324,39 @@ async function doAuthLogin() {
   }
 }
 
-async function checkForUpdates() {
-  const div = document.getElementById('login-update')
-  if (div) div.innerHTML = `<span style="color:#475569;font-size:.7rem">Checking for updates…</span>`
-  const r = await window.api.checkForUpdates().catch(() => null)
-  if (!r?.success) { if (div) div.innerHTML = ''; return }
-  if (r.hasUpdate) {
-    if (div) div.innerHTML = `
-      <div style="background:rgba(30,27,75,.8);border:1px solid #4338ca;border-radius:.75rem;padding:.7rem 1rem;text-align:center">
-        <p style="color:#a5b4fc;font-size:.72rem;font-weight:600;margin:0 0 .5rem">🎉 Update available — v${esc(r.latestVersion)}</p>
-        <button onclick="window.api.openExternal(${JSON.stringify(r.releaseUrl)})"
-          style="background:#4f46e5;color:#fff;font-size:.72rem;font-weight:600;padding:.3rem .875rem;border-radius:.5rem;border:none;cursor:pointer">
-          Download v${esc(r.latestVersion)} →
-        </button>
-        ${r.releaseNotes ? `<p style="color:#64748b;font-size:.68rem;margin:.5rem 0 0;white-space:pre-wrap;text-align:left;max-height:80px;overflow:auto">${esc(r.releaseNotes)}</p>` : ''}
-      </div>`
-  } else {
-    if (div) {
-      div.innerHTML = `<span style="color:#334155;font-size:.7rem">✓ Up to date (v${esc(r.currentVersion)})</span>`
-      setTimeout(() => { if (div) div.innerHTML = '' }, 3000)
+let _updateListenerSet = false
+function _initUpdateListener() {
+  if (_updateListenerSet) return
+  _updateListenerSet = true
+  window.api.onUpdateStatus(({ status, version, percent }) => {
+    const div = document.getElementById('login-update')
+    if (status === 'checking') {
+      if (div) div.innerHTML = `<span style="color:#475569;font-size:.7rem">Checking for updates…</span>`
+    } else if (status === 'current') {
+      if (div) { div.innerHTML = `<span style="color:#334155;font-size:.7rem">✓ Up to date</span>`; setTimeout(() => { if (div) div.innerHTML = '' }, 3000) }
+    } else if (status === 'available') {
+      if (div) div.innerHTML = `<span style="color:#a5b4fc;font-size:.7rem">⬇️ Downloading v${esc(version)}…</span>`
+    } else if (status === 'downloading') {
+      if (div) div.innerHTML = `<span style="color:#a5b4fc;font-size:.7rem">⬇️ Downloading… ${percent}%</span>`
+    } else if (status === 'ready') {
+      const btn = `<button onclick="window.api.installUpdate()"
+        style="background:#4f46e5;color:#fff;font-size:.72rem;font-weight:600;padding:.3rem .875rem;border-radius:.5rem;border:none;cursor:pointer;margin-top:.4rem">
+        Restart to install v${esc(version)} →</button>`
+      if (div) div.innerHTML = `
+        <div style="background:rgba(30,27,75,.8);border:1px solid #4338ca;border-radius:.75rem;padding:.7rem 1rem;text-align:center">
+          <p style="color:#a5b4fc;font-size:.72rem;font-weight:600;margin:0">🎉 Update ready — v${esc(version)}</p>
+          ${btn}
+        </div>`
+      showToast(`PhDFlow v${esc(version)} downloaded — restart to install`, 'info')
+    } else if (status === 'error') {
+      if (div) div.innerHTML = ''
     }
-  }
+  })
+}
+
+async function checkForUpdates() {
+  _initUpdateListener()
+  window.api.checkForUpdates().catch(() => null)
 }
 
 async function lockApp() {

@@ -67,5 +67,7 @@ contextBridge.exposeInMainWorld('api', {
 
   // ── Update & Quit ─────────────────────────────────────────────────────────
   checkForUpdates:   ()                  => ipcRenderer.invoke('check-for-updates'),
+  installUpdate:     ()                  => ipcRenderer.invoke('updater-install'),
+  onUpdateStatus:    (cb)                => ipcRenderer.on('update-status', (_, d) => cb(d)),
   quitApp:           ()                  => ipcRenderer.invoke('quit-app'),
 })
