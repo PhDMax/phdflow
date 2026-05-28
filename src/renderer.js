@@ -754,10 +754,10 @@ function _runGlobalSearch(q) {
 function _gsearchKey(e) {
   const items = document.querySelectorAll('.gsearch-item')
   if (e.key === 'Escape') { closeGlobalSearch(); return }
-  if (e.key === 'ArrowDown' || e.key === 'j') {
+  if (e.key === 'ArrowDown') {
     e.preventDefault()
     _gsearchIdx = Math.min(_gsearchIdx + 1, items.length - 1)
-  } else if (e.key === 'ArrowUp' || e.key === 'k') {
+  } else if (e.key === 'ArrowUp') {
     e.preventDefault()
     _gsearchIdx = Math.max(_gsearchIdx - 1, 0)
   } else if (e.key === 'Enter' && _gsearchIdx >= 0) {

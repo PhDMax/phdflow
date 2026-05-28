@@ -67,7 +67,8 @@
       "include": "build/installer.nsh",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "PhDFlow"
+      "shortcutName": "PhDFlow",
+      "artifactName": "PhDFlow-Setup-${version}.exe"
     },
     "portable": {
       "artifactName": "PhDFlow-Portable-${version}.exe"

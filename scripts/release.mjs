@@ -164,7 +164,7 @@ ${changelog}
   // 9. Upload assets
   console.log('\n📤  Uploading assets…')
   const assets = [
-    join(ROOT, 'dist', `PhDFlow Setup ${newVersion}.exe`),
+    join(ROOT, 'dist', `PhDFlow-Setup-${newVersion}.exe`),
     join(ROOT, 'dist', `PhDFlow-Portable-${newVersion}.exe`),
     join(ROOT, 'dist', 'latest.yml'),
   ]
