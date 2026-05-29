@@ -1,40 +1,97 @@
-// ══ Grant Writing View ════════════════════════════════════════════════════════
+// ══ Grant Scan View ═══════════════════════════════════════════════════════════
 
 // ── Built-in grant database ───────────────────────────────────────────────────
 const GRANT_DB = [
-  // PhD Students
-  { id:'gdb1',  name:'Marie Curie Doctoral Networks',          funder:'European Commission',    stage:['phd'],            region:['EU','International'],  fields:['All'],                  amount:'~€3,500/mo',    duration:'3 years',   url:'https://marie-sklodowska-curie-actions.ec.europa.eu/', desc:'EU-funded doctoral training. Apply through host universities.' },
-  { id:'gdb2',  name:'NSF Graduate Research Fellowship (GRFP)',funder:'NSF (USA)',              stage:['phd'],            region:['USA'],                 fields:['STEM','Social Sciences'],amount:'$37k/year',     duration:'3 years',   url:'https://www.nsfgrfp.org/',                            desc:'Prestigious US fellowship for early-stage PhD students in STEM & social sciences.' },
-  { id:'gdb3',  name:'NIH NRSA Predoctoral Fellowship (F31)',  funder:'NIH (USA)',              stage:['phd'],            region:['USA'],                 fields:['Biomedical','Life Sciences'], amount:'~$26k/year + fees', duration:'Up to 5 years', url:'https://researchtraining.nih.gov/programs/fellowships/F31', desc:'Predoctoral fellowship for US PhD students in biomedical & behavioral sciences.' },
-  { id:'gdb4',  name:'Gates Cambridge Scholarship',            funder:'Gates Cambridge Trust',  stage:['phd'],            region:['International'],       fields:['All'],                  amount:'Full + stipend',duration:'PhD length', url:'https://www.gatescambridge.org/',                     desc:'Full scholarships for outstanding PhD students at Cambridge. Non-UK only.' },
-  { id:'gdb5',  name:'Rhodes Scholarship',                     funder:'Rhodes Trust (Oxford)',  stage:['phd'],            region:['International'],       fields:['All'],                  amount:'Full + stipend',duration:'2+ years',  url:'https://www.rhodeshouse.ox.ac.uk/',                   desc:'Prestigious scholarship for study at Oxford. Country quotas apply.' },
-  { id:'gdb6',  name:'Fulbright U.S. Student Program',         funder:'U.S. Dept. of State',   stage:['phd','masters'],  region:['USA','International'], fields:['All'],                  amount:'Varies',        duration:'1 year',    url:'https://foreign.fulbrightonline.org/',                desc:'Study, research or teaching abroad. Highly competitive.' },
-  { id:'gdb7',  name:'EPSRC Doctoral Training Partnership',    funder:'EPSRC (UK)',             stage:['phd'],            region:['UK'],                  fields:['Engineering','Physical Sciences'], amount:'Fees + stipend', duration:'3.5 years', url:'https://www.ukri.org/councils/epsrc/', desc:'UK engineering & physical sciences doctoral training. Apply via UK universities.' },
-  { id:'gdb8',  name:'Wellcome Trust PhD Studentship',         funder:'Wellcome Trust (UK)',    stage:['phd'],            region:['UK'],                  fields:['Biomedical','Life Sciences'], amount:'Full costs',  duration:'4 years',   url:'https://wellcome.org/',                               desc:'Prestigious biomedical PhD funding for UK institutions.' },
-  { id:'gdb9',  name:'L\'Oréal-UNESCO For Women in Science',   funder:'L\'Oréal / UNESCO',     stage:['phd','postdoc'],  region:['International'],       fields:['STEM'],                 amount:'Varies',        duration:'1 year',    url:'https://www.forwomeninscience.com/',                  desc:'National & international fellowships for women researchers in STEM.' },
-  { id:'gdb10', name:'Swiss Govt Excellence Scholarship',      funder:'SBFI (Switzerland)',     stage:['phd','postdoc'],  region:['Switzerland'],         fields:['All'],                  amount:'CHF 1,920/mo',  duration:'1–3 years', url:'https://www.sbfi.admin.ch/',                          desc:'Scholarships for foreign researchers to study or research in Switzerland.' },
-  // Postdocs
-  { id:'gdb11', name:'Marie Curie Postdoctoral Fellowship',    funder:'European Commission',    stage:['postdoc'],        region:['EU','International'],  fields:['All'],                  amount:'~€4,500/mo',    duration:'1–2 years', url:'https://marie-sklodowska-curie-actions.ec.europa.eu/', desc:'Postdoctoral fellowships in any field. Two calls per year.' },
-  { id:'gdb12', name:'Alexander von Humboldt Fellowship',      funder:'Humboldt Foundation',    stage:['postdoc'],        region:['Germany','International'], fields:['All'],              amount:'~€2,670/mo',    duration:'6–24 months',url:'https://www.humboldt-foundation.de/',                desc:'Research stays in Germany for highly qualified international scientists.' },
-  { id:'gdb13', name:'NIH Postdoctoral Fellowship (F32)',      funder:'NIH (USA)',              stage:['postdoc'],        region:['USA'],                 fields:['Biomedical','Life Sciences'], amount:'$60–70k/year', duration:'1–3 years', url:'https://researchtraining.nih.gov/programs/fellowships/F32', desc:'Individual postdoctoral fellowship for biomedical research at US institutions.' },
-  { id:'gdb14', name:'EMBO Long-Term Fellowship',              funder:'EMBO',                   stage:['postdoc'],        region:['Europe'],              fields:['Life Sciences','Chemistry'], amount:'Scales with family', duration:'2 years', url:'https://www.embo.org/', desc:'For life scientists moving to a new European country for postdoc research.' },
-  { id:'gdb15', name:'EMBO Short-Term Fellowship',             funder:'EMBO',                   stage:['phd','postdoc'],  region:['Europe'],              fields:['Life Sciences'],        amount:'Living expenses',duration:'1–3 months',url:'https://www.embo.org/',                               desc:'Short research visits in the life sciences within Europe.' },
-  { id:'gdb16', name:'Newton International Fellowship',        funder:'Royal Society / Brit. Academy', stage:['postdoc'], region:['UK'],                 fields:['All'],                  amount:'£33k/year',     duration:'2 years',   url:'https://royalsociety.org/',                           desc:'Brings outstanding early-career researchers to the UK. Non-UK applicants only.' },
-  { id:'gdb17', name:'HFSP Long-Term Fellowship',              funder:'HFSP',                   stage:['postdoc'],        region:['International'],       fields:['Life Sciences','Biology'], amount:'~$55k/year',  duration:'3 years',   url:'https://www.hfsp.org/',                               desc:'International postdoctoral fellowships for life scientists changing research area or country.' },
-  { id:'gdb18', name:'SNSF Early Postdoc.Mobility',            funder:'SNSF (Switzerland)',     stage:['postdoc'],        region:['Switzerland','International'], fields:['All'],          amount:'~CHF 80k',      duration:'18 months', url:'https://www.snf.ch/',                                 desc:'Swiss NSF mobility grants for early postdocs going abroad.' },
-  { id:'gdb19', name:'DAAD Research Grants',                   funder:'DAAD (Germany)',         stage:['phd','postdoc'],  region:['Germany','International'], fields:['All'],              amount:'Varies',        duration:'1–24 months',url:'https://www.daad.de/en/',                            desc:'German Academic Exchange Service. Supports research stays in Germany and abroad.' },
-  // PIs / Early-career
-  { id:'gdb20', name:'ERC Starting Grant',                     funder:'European Research Council', stage:['pi'],          region:['EU'],                  fields:['All'],                  amount:'Up to €1.5M',   duration:'5 years',   url:'https://erc.europa.eu/',                              desc:'For early-career researchers 2–7 years post-PhD with a European host institution.' },
-  { id:'gdb21', name:'ERC Consolidator Grant',                 funder:'European Research Council', stage:['pi'],          region:['EU'],                  fields:['All'],                  amount:'Up to €2M',     duration:'5 years',   url:'https://erc.europa.eu/',                              desc:'For researchers 7–12 years post-PhD with a European host institution.' },
-  { id:'gdb22', name:'DFG Research Grant',                     funder:'DFG (Germany)',          stage:['postdoc','pi'],   region:['Germany'],             fields:['All'],                  amount:'Project-based',  duration:'1–3 years', url:'https://www.dfg.de/',                                 desc:'German Research Foundation grants for individual research projects.' },
-  { id:'gdb23', name:'ANR Young Researcher (JCJC)',             funder:'ANR (France)',           stage:['pi'],             region:['France'],              fields:['All'],                  amount:'~€300k',        duration:'4 years',   url:'https://anr.fr/',                                     desc:'French ANR grants for early-career PIs. Excellent track record required.' },
-  { id:'gdb24', name:'FWF Individual Project',                  funder:'FWF (Austria)',          stage:['pi'],             region:['Austria'],             fields:['All'],                  amount:'Project-based',  duration:'1–4 years', url:'https://www.fwf.ac.at/',                              desc:'Austrian Science Fund standalone grants for research projects.' },
-  { id:'gdb25', name:'Volkswagen Foundation Freigeist',         funder:'Volkswagen Foundation',  stage:['postdoc','pi'],   region:['Germany'],             fields:['All'],                  amount:'Up to €1M',     duration:'5 years',   url:'https://www.volkswagenstiftung.de/',                  desc:'For bold, unconventional research ideas. Exceptional track record required.' },
+  // ── PhD Students ─────────────────────────────────────────────────────────────
+  { id:'gdb1',  name:'Marie Curie Doctoral Networks',             funder:'European Commission',         stage:['phd'],            region:['EU','International'],           fields:['All'],                           amount:'~€3,500/mo',         duration:'3 years',     url:'https://marie-sklodowska-curie-actions.ec.europa.eu/', desc:'EU-funded doctoral training through university consortia. Apply through host universities.' },
+  { id:'gdb2',  name:'NSF Graduate Research Fellowship (GRFP)',   funder:'NSF (USA)',                   stage:['phd'],            region:['USA'],                          fields:['STEM','Social Sciences'],        amount:'$37k/year',          duration:'3 years',     url:'https://www.nsfgrfp.org/',                             desc:'Prestigious US fellowship for early-stage PhD students in STEM and social sciences.' },
+  { id:'gdb3',  name:'NIH NRSA Predoctoral Fellowship (F31)',     funder:'NIH (USA)',                   stage:['phd'],            region:['USA'],                          fields:['Biomedical','Life Sciences'],    amount:'~$26k/year + fees',  duration:'Up to 5 years',url:'https://researchtraining.nih.gov/programs/fellowships/F31', desc:'Predoctoral fellowship for US PhD students in biomedical and behavioral sciences.' },
+  { id:'gdb4',  name:'Gates Cambridge Scholarship',               funder:'Gates Cambridge Trust',       stage:['phd'],            region:['International'],                fields:['All'],                           amount:'Full + stipend',     duration:'PhD length',  url:'https://www.gatescambridge.org/',                      desc:'Full scholarships for outstanding PhD students at Cambridge. Non-UK citizens only.' },
+  { id:'gdb5',  name:'Rhodes Scholarship',                        funder:'Rhodes Trust (Oxford)',       stage:['phd'],            region:['International'],                fields:['All'],                           amount:'Full + stipend',     duration:'2+ years',    url:'https://www.rhodeshouse.ox.ac.uk/',                    desc:'One of the most prestigious scholarships for study at Oxford. Country quotas apply.' },
+  { id:'gdb6',  name:'Fulbright U.S. Student Program',            funder:'U.S. Dept. of State',        stage:['phd','masters'],  region:['USA','International'],          fields:['All'],                           amount:'Varies',             duration:'1 year',      url:'https://foreign.fulbrightonline.org/',                 desc:'Study, research or teaching abroad. Non-US citizens apply through home country.' },
+  { id:'gdb7',  name:'EPSRC Doctoral Training Partnership',       funder:'EPSRC (UK)',                  stage:['phd'],            region:['UK'],                           fields:['Engineering','Physical Sciences'],amount:'Fees + stipend',     duration:'3.5 years',   url:'https://www.ukri.org/councils/epsrc/',                 desc:'UK engineering and physical sciences doctoral training. Apply via UK universities.' },
+  { id:'gdb8',  name:'Wellcome Trust PhD Studentship',            funder:'Wellcome Trust (UK)',         stage:['phd'],            region:['UK'],                           fields:['Biomedical','Life Sciences'],    amount:'Full costs',         duration:'4 years',     url:'https://wellcome.org/',                                desc:'Prestigious biomedical PhD funding for UK institutions.' },
+  { id:'gdb9',  name:'L\'Oréal-UNESCO For Women in Science',      funder:'L\'Oréal / UNESCO',          stage:['phd','postdoc'],  region:['International'],                fields:['STEM'],                          amount:'Varies',             duration:'1 year',      url:'https://www.forwomeninscience.com/',                   desc:'National and international fellowships for women researchers in STEM.' },
+  { id:'gdb10', name:'Swiss Govt Excellence Scholarship',         funder:'SBFI (Switzerland)',          stage:['phd','postdoc'],  region:['Switzerland'],                  fields:['All'],                           amount:'CHF 1,920/mo',       duration:'1–3 years',   url:'https://www.sbfi.admin.ch/',                           desc:'Scholarships for foreign researchers to study or research in Switzerland.' },
+  { id:'gdb26', name:'NSERC CGS Doctoral (CGS-D)',                funder:'NSERC (Canada)',              stage:['phd'],            region:['Canada'],                       fields:['STEM'],                          amount:'$35k CAD/year',      duration:'3 years',     url:'https://www.nserc-crsng.gc.ca/',                       desc:'Canada Graduate Scholarships for doctoral students in natural sciences and engineering.' },
+  { id:'gdb27', name:'SSHRC Doctoral Fellowship',                 funder:'SSHRC (Canada)',              stage:['phd'],            region:['Canada'],                       fields:['Social Sciences','Humanities'],  amount:'$20k CAD/year',      duration:'Up to 4 years',url:'https://www.sshrc-crsh.gc.ca/',                        desc:'Canadian doctoral fellowships in social sciences and humanities. Canadian citizens and permanent residents.' },
+  { id:'gdb28', name:'Australian Research Training Program',      funder:'Australian Government',       stage:['phd','masters'],  region:['Australia'],                    fields:['All'],                           amount:'Fees + ~$32k AUD/yr',duration:'3.5 years',   url:'https://www.education.gov.au/',                        desc:'Tuition fee offset and stipend for domestic PhD/masters students in Australia.' },
+  { id:'gdb29', name:'IMPRS Doctoral Programs (Max Planck)',      funder:'Max Planck Society',          stage:['phd'],            region:['Germany','International'],      fields:['STEM','Life Sciences'],          amount:'TVöD-level stipend', duration:'3–4 years',   url:'https://www.mpg.de/en/imprs',                          desc:'International Max Planck Research Schools offer structured PhD programs in STEM across Germany.' },
+  { id:'gdb30', name:'Boehringer Ingelheim Fonds Fellowship',     funder:'Boehringer Ingelheim Fonds',  stage:['phd'],            region:['International'],                fields:['Biomedical'],                    amount:'€1,575+/mo',         duration:'Up to 3 years',url:'https://www.bifonds.de/',                              desc:'Highly competitive fellowship for outstanding PhD students in basic biomedical research. International.' },
+  { id:'gdb31', name:'EMBL International PhD Programme',          funder:'EMBL',                        stage:['phd'],            region:['Europe','International'],       fields:['Life Sciences','Biology'],       amount:'Salary + benefits',  duration:'4 years',     url:'https://www.embl.org/about/info/phd-programme/',       desc:'PhD program across EMBL sites in Europe. Competitive stipend, outstanding facilities.' },
+  { id:'gdb32', name:'MEXT Japanese Government Scholarship',      funder:'Ministry of Education (Japan)',stage:['phd','masters'], region:['Japan','International'],        fields:['All'],                           amount:'¥148–250k/mo',       duration:'3–5 years',   url:'https://www.mext.go.jp/a_menu/koutou/ryugaku/boshu/1330996.htm', desc:'Japanese government funding for foreign students to study and research in Japan.' },
+  { id:'gdb33', name:'President\'s PhD Scholarship (Imperial)',   funder:'Imperial College London',     stage:['phd'],            region:['UK','International'],           fields:['STEM','Medicine'],               amount:'Full + £25k/year',   duration:'4 years',     url:'https://www.imperial.ac.uk/study/fees-and-funding/postgraduate/scholarships/presidents-phd-scholarships/', desc:'One of the most generous UK PhD scholarships. Full fees plus living stipend for outstanding international applicants.' },
+  { id:'gdb34', name:'DFG Research Training Group (GRK)',         funder:'DFG (Germany)',               stage:['phd'],            region:['Germany'],                      fields:['All'],                           amount:'TVöD stipend',       duration:'3 years',     url:'https://www.dfg.de/en/research_funding/programmes/coordinated_programmes/research_training_groups/', desc:'Structured PhD training within a coordinated research group. Apply through the hosting German university.' },
+  { id:'gdb35', name:'Erasmus Mundus Joint Doctoral Programmes',  funder:'European Commission',         stage:['phd'],            region:['EU','International'],           fields:['All'],                           amount:'~€2,500/mo',         duration:'3 years',     url:'https://erasmus-plus.ec.europa.eu/',                   desc:'Joint EU doctoral programs with multiple partner universities. Full scholarship with mobility component.' },
+  { id:'gdb36', name:'China Scholarship Council (CSC) PhD',       funder:'CSC (China)',                 stage:['phd'],            region:['International'],                fields:['All'],                           amount:'Varies by country',  duration:'3–5 years',   url:'https://www.csc.edu.cn/en',                            desc:'Chinese government funding for PhD students to study at partner universities abroad.' },
+  // ── Postdoctoral Researchers ──────────────────────────────────────────────────
+  { id:'gdb11', name:'Marie Curie Postdoctoral Fellowship',       funder:'European Commission',         stage:['postdoc'],        region:['EU','International'],           fields:['All'],                           amount:'~€4,500/mo',         duration:'1–2 years',   url:'https://marie-sklodowska-curie-actions.ec.europa.eu/', desc:'Postdoctoral fellowships in any field. Two calls per year. Highly competitive.' },
+  { id:'gdb12', name:'Alexander von Humboldt Fellowship',         funder:'Humboldt Foundation',         stage:['postdoc'],        region:['Germany','International'],      fields:['All'],                           amount:'~€2,670–3,170/mo',   duration:'6–24 months', url:'https://www.humboldt-foundation.de/',                  desc:'Research stays in Germany for highly qualified international scientists. Rolling deadline.' },
+  { id:'gdb13', name:'NIH Postdoctoral Fellowship (F32)',         funder:'NIH (USA)',                   stage:['postdoc'],        region:['USA'],                          fields:['Biomedical','Life Sciences'],    amount:'$60–70k/year',       duration:'1–3 years',   url:'https://researchtraining.nih.gov/programs/fellowships/F32', desc:'Individual postdoctoral fellowship for biomedical research at US institutions.' },
+  { id:'gdb14', name:'EMBO Long-Term Fellowship',                 funder:'EMBO',                        stage:['postdoc'],        region:['Europe'],                       fields:['Life Sciences','Chemistry'],     amount:'Scales with family', duration:'2 years',     url:'https://www.embo.org/funding/fellowships-and-grants/', desc:'For life scientists moving to a new European country for postdoc research.' },
+  { id:'gdb15', name:'EMBO Short-Term Fellowship',                funder:'EMBO',                        stage:['phd','postdoc'],  region:['Europe'],                       fields:['Life Sciences'],                 amount:'Living expenses',    duration:'1–3 months',  url:'https://www.embo.org/funding/fellowships-and-grants/', desc:'Short research visits in the life sciences within Europe.' },
+  { id:'gdb16', name:'Newton International Fellowship',           funder:'Royal Society / Brit. Academy',stage:['postdoc'],       region:['UK'],                           fields:['All'],                           amount:'£33k/year',          duration:'2 years',     url:'https://royalsociety.org/grants/newton-international/', desc:'Brings outstanding early-career researchers to the UK. Non-UK applicants only.' },
+  { id:'gdb17', name:'HFSP Long-Term Fellowship',                 funder:'HFSP',                        stage:['postdoc'],        region:['International'],                fields:['Life Sciences','Biology'],       amount:'~$55k/year',         duration:'3 years',     url:'https://www.hfsp.org/funding/hfsp-funding/research-fellowships', desc:'International postdoctoral fellowships for life scientists changing research area or country.' },
+  { id:'gdb18', name:'SNSF Postdoc.Mobility',                    funder:'SNSF (Switzerland)',           stage:['postdoc'],        region:['Switzerland','International'],  fields:['All'],                           amount:'~CHF 80k',           duration:'18 months',   url:'https://www.snf.ch/en/funding/careers/postdoc-mobility', desc:'Swiss NSF grants for postdocs going abroad. Swiss-based researchers only.' },
+  { id:'gdb19', name:'DAAD Research Grants',                      funder:'DAAD (Germany)',              stage:['phd','postdoc'],  region:['Germany','International'],      fields:['All'],                           amount:'Varies',             duration:'1–24 months', url:'https://www.daad.de/en/',                              desc:'German Academic Exchange Service. Supports research stays in Germany and abroad.' },
+  { id:'gdb37', name:'Branco Weiss Fellowship',                   funder:'Branco Weiss Society',        stage:['postdoc'],        region:['International'],                fields:['All'],                           amount:'CHF 200k/year',      duration:'Up to 5 years',url:'https://brancoweiss.ethz.ch/',                         desc:'Extremely competitive fellowship for independent thinkers. Funds unconventional, early-career research worldwide.' },
+  { id:'gdb38', name:'Banting Postdoctoral Fellowship',           funder:'Government of Canada',        stage:['postdoc'],        region:['Canada'],                       fields:['All'],                           amount:'$70k CAD/year',      duration:'2 years',     url:'https://banting.fellowships-bourses.gc.ca/',           desc:'Canada\'s most prestigious postdoctoral fellowship. Open to domestic and international applicants.' },
+  { id:'gdb39', name:'JSPS Postdoctoral Fellowship',              funder:'JSPS (Japan)',                stage:['postdoc'],        region:['Japan'],                        fields:['All'],                           amount:'¥362k/mo + allowance',duration:'12–24 months',url:'https://www.jsps.go.jp/english/e-fellow/',             desc:'Japan Society for the Promotion of Science fellowships for overseas researchers to work in Japan.' },
+  { id:'gdb40', name:'NWO Veni Grant',                            funder:'NWO (Netherlands)',           stage:['postdoc'],        region:['Netherlands'],                  fields:['All'],                           amount:'Up to €320k',        duration:'3 years',     url:'https://www.nwo.nl/en/calls/nwo-talent-programme-veni-2025', desc:'Dutch talent grant for researchers who recently received their PhD. Funds independent research at Dutch institutions.' },
+  { id:'gdb41', name:'DFG Walter Benjamin Programme',             funder:'DFG (Germany)',               stage:['postdoc'],        region:['Germany','International'],      fields:['All'],                           amount:'Project-based',      duration:'2 years',     url:'https://www.dfg.de/en/research_funding/programmes/individual/walter-benjamin/', desc:'DFG mobility programme for early postdocs to pursue independent research at host institutions worldwide.' },
+  { id:'gdb42', name:'Leverhulme Trust Early Career Fellowship',  funder:'Leverhulme Trust (UK)',       stage:['postdoc'],        region:['UK'],                           fields:['All'],                           amount:'50% salary match',   duration:'3 years',     url:'https://www.leverhulme.ac.uk/early-career-fellowships', desc:'For early-career researchers at UK institutions. Leverhulme covers 50%, host institution 50%.' },
+  { id:'gdb43', name:'British Academy Postdoctoral Fellowship',   funder:'British Academy (UK)',        stage:['postdoc'],        region:['UK'],                           fields:['Humanities','Social Sciences'],  amount:'~£30k/year',         duration:'3 years',     url:'https://www.thebritishacademy.ac.uk/funding/postdoctoral-fellowships/', desc:'Humanities and social sciences postdoctoral fellowship at UK institutions. Highly prestigious.' },
+  { id:'gdb44', name:'EMBL Interdisciplinary Postdoc Programme',  funder:'EMBL',                        stage:['postdoc'],        region:['Europe'],                       fields:['Life Sciences','Computer Science'],amount:'Salary + benefits', duration:'2+1 years',   url:'https://www.embl.org/about/info/postdoctoral-programme/', desc:'Interdisciplinary postdoc positions across EMBL sites. Strong computational/quantitative biology component.' },
+  { id:'gdb45', name:'Ford Foundation Postdoctoral Fellowship',   funder:'Ford Foundation (USA)',       stage:['postdoc'],        region:['USA'],                          fields:['All'],                           amount:'$45k/year',          duration:'1 year',      url:'https://www.nationalacademies.org/our-work/ford-foundation-fellowships', desc:'For US-based scholars from underrepresented groups. All disciplines. Administered by National Academies.' },
+  { id:'gdb46', name:'Burroughs Wellcome Fund Career Award',      funder:'Burroughs Wellcome Fund',     stage:['postdoc'],        region:['USA','Canada'],                 fields:['Biomedical','Life Sciences'],    amount:'$500k–$1M',          duration:'5 years',     url:'https://www.bwfund.org/',                              desc:'Prestigious career development award for postdocs transitioning to independent biomedical research positions.' },
+  // ── PIs / Early-Career Researchers ────────────────────────────────────────────
+  { id:'gdb20', name:'ERC Starting Grant',                        funder:'European Research Council',   stage:['pi'],             region:['EU'],                           fields:['All'],                           amount:'Up to €1.5M',        duration:'5 years',     url:'https://erc.europa.eu/apply-grant/starting-grant',     desc:'For early-career researchers 2–7 years post-PhD with a European host institution.' },
+  { id:'gdb21', name:'ERC Consolidator Grant',                    funder:'European Research Council',   stage:['pi'],             region:['EU'],                           fields:['All'],                           amount:'Up to €2M',          duration:'5 years',     url:'https://erc.europa.eu/apply-grant/consolidator-grant', desc:'For researchers 7–12 years post-PhD with a European host institution.' },
+  { id:'gdb22', name:'DFG Research Grant',                        funder:'DFG (Germany)',               stage:['postdoc','pi'],   region:['Germany'],                      fields:['All'],                           amount:'Project-based',      duration:'1–3 years',   url:'https://www.dfg.de/',                                  desc:'German Research Foundation grants for individual research projects. Open to researchers worldwide at German institutions.' },
+  { id:'gdb23', name:'ANR Young Researcher (JCJC)',               funder:'ANR (France)',                stage:['pi'],             region:['France'],                       fields:['All'],                           amount:'~€300k',             duration:'4 years',     url:'https://anr.fr/en/call-for-proposals-details/',        desc:'French ANR grants for early-career PIs at French institutions. Strong track record required.' },
+  { id:'gdb24', name:'FWF Individual Project',                    funder:'FWF (Austria)',               stage:['pi'],             region:['Austria'],                      fields:['All'],                           amount:'Project-based',      duration:'1–4 years',   url:'https://www.fwf.ac.at/en/research-funding/fwf-programmes/standalone-projects', desc:'Austrian Science Fund standalone grants for all research areas.' },
+  { id:'gdb25', name:'Volkswagen Foundation Freigeist',           funder:'Volkswagen Foundation',       stage:['postdoc','pi'],   region:['Germany'],                      fields:['All'],                           amount:'Up to €1M',          duration:'5 years',     url:'https://www.volkswagenstiftung.de/en/funding/for-researchers-at-a-transitional-stage/freigeist-fellowships', desc:'For bold, unconventional research ideas. Exceptional track record required.' },
+  { id:'gdb47', name:'ERC Advanced Grant',                        funder:'European Research Council',   stage:['pi'],             region:['EU'],                           fields:['All'],                           amount:'Up to €3.5M',        duration:'5 years',     url:'https://erc.europa.eu/apply-grant/advanced-grant',     desc:'For established research leaders 10+ years post-PhD at European institutions.' },
+  { id:'gdb48', name:'Wellcome Trust Investigator Award',         funder:'Wellcome Trust (UK)',         stage:['pi'],             region:['UK','International'],           fields:['Biomedical','Life Sciences'],    amount:'Up to £4M',          duration:'5–7 years',   url:'https://wellcome.org/grant-funding/schemes/investigator-awards-science', desc:'For outstanding research leaders in biomedical sciences. UK and certain low/middle income countries.' },
+  { id:'gdb49', name:'NIH K99/R00 Pathway to Independence',       funder:'NIH (USA)',                   stage:['pi'],             region:['USA'],                          fields:['Biomedical','Life Sciences'],    amount:'~$250k/year',        duration:'2+3 years',   url:'https://grants.nih.gov/grants/guide/pa-files/PA-24-171.html', desc:'Career transition award for late-stage postdocs moving to independent faculty positions in the USA.' },
+  { id:'gdb50', name:'NSF CAREER Award',                          funder:'NSF (USA)',                   stage:['pi'],             region:['USA'],                          fields:['STEM'],                          amount:'$400–500k',          duration:'5 years',     url:'https://www.nsf.gov/funding/pgm_summ.jsp?pims_id=503214', desc:'NSF\'s most prestigious award for early-career faculty. Integrates research and education missions.' },
+  { id:'gdb51', name:'Royal Society Research Grant',              funder:'Royal Society (UK)',          stage:['pi'],             region:['UK'],                           fields:['All'],                           amount:'Up to £20k',         duration:'1 year',      url:'https://royalsociety.org/grants/research-grants/',     desc:'Equipment and consumable costs for early-career UK researchers setting up their first lab.' },
+  { id:'gdb52', name:'British Academy Small Research Grant',      funder:'British Academy (UK)',        stage:['pi'],             region:['UK'],                           fields:['Humanities','Social Sciences'],  amount:'Up to £10k',         duration:'1–2 years',   url:'https://www.thebritishacademy.ac.uk/funding/small-research-grants/', desc:'Supports primary research in humanities and social sciences for UK-based researchers.' },
+  { id:'gdb53', name:'NWO Vidi Grant',                            funder:'NWO (Netherlands)',           stage:['pi'],             region:['Netherlands'],                  fields:['All'],                           amount:'Up to €800k',        duration:'5 years',     url:'https://www.nwo.nl/en/calls/nwo-talent-programme-vidi-2025', desc:'Dutch talent grant for researchers several years post-PhD establishing their own research line.' },
+  { id:'gdb54', name:'Swedish Research Council Starting Grant',   funder:'Vetenskapsrådet (Sweden)',    stage:['pi'],             region:['Scandinavia'],                  fields:['All'],                           amount:'4–7M SEK/year',      duration:'4 years',     url:'https://www.vr.se/english.html',                       desc:'For researchers 2–7 years post-PhD at Swedish institutions. Covers all scientific disciplines.' },
+  { id:'gdb55', name:'ARC Discovery Early Career Award (DECRA)',  funder:'Australian Research Council', stage:['pi'],             region:['Australia'],                    fields:['All'],                           amount:'~$425k AUD',         duration:'3 years',     url:'https://www.arc.gov.au/funding-research/funding-schemes/discovery-program/discovery-early-career-researcher-award-decra', desc:'Australian Research Council fellowship for early-career researchers at Australian institutions.' },
+  { id:'gdb56', name:'Academy of Finland Research Fellow',        funder:'Academy of Finland',          stage:['pi'],             region:['Scandinavia'],                  fields:['All'],                           amount:'~€350k',             duration:'4 years',     url:'https://www.aka.fi/en/funding/',                       desc:'Four-year research positions at Finnish universities for early-career researchers.' },
+  { id:'gdb57', name:'Novo Nordisk Foundation Postdoc + PI Grant',funder:'Novo Nordisk Foundation',     stage:['postdoc','pi'],   region:['Scandinavia','International'],  fields:['Biomedical','Life Sciences'],    amount:'Varies (large)',     duration:'2–5 years',   url:'https://novonordiskfonden.dk/en/grants/',               desc:'Danish foundation funding biomedical and life science research. Several international grant types available.' },
+  { id:'gdb58', name:'Research Corporation Cottrell Scholar',     funder:'Research Corporation (USA)',  stage:['pi'],             region:['USA'],                          fields:['Physics','Chemistry','Astronomy'],amount:'$100k',             duration:'3 years',     url:'https://rescorp.org/cottrell-scholars',                desc:'For early-career faculty in physical sciences at US universities. Integrates research and teaching.' },
 ]
 
-const STAGES  = ['phd','postdoc','pi']
-const REGIONS = ['EU','International','USA','UK','Germany','France','Austria','Switzerland','Europe']
-const FIELDS  = ['All','STEM','Life Sciences','Biomedical','Chemistry','Physics','Engineering','Social Sciences','Humanities','Biology']
+const STAGES  = ['phd','masters','postdoc','pi']
+const REGIONS = ['EU','International','USA','UK','Germany','France','Austria','Switzerland','Europe','Canada','Australia','Netherlands','Scandinavia','Japan','China']
+const FIELDS  = ['All','STEM','Life Sciences','Biomedical','Chemistry','Physics','Engineering','Computer Science','Mathematics','Social Sciences','Humanities','Psychology','Neuroscience','Economics','Biology','Environmental Sciences','Medicine','Astronomy']
+
+// ── Grant resource databases ──────────────────────────────────────────────────
+const GRANT_RESOURCES = [
+  { id:'gr1',  name:'Grants.gov',                                scope:'Global',         region:'USA',           desc:'All US federal grant opportunities. Search by keyword, agency, or CFDA number.',          url:'https://www.grants.gov/' },
+  { id:'gr2',  name:'NIH Research Portfolio (Reporter)',         scope:'National',       region:'USA',           desc:'Search NIH-funded projects by keyword, PI, institution, or disease area.',                  url:'https://reporter.nih.gov/' },
+  { id:'gr3',  name:'Horizon Europe Funding & Tenders Portal',  scope:'EU',             region:'EU',            desc:'Official portal for all Horizon Europe calls — ERC, MSCA, collaborative grants.',             url:'https://ec.europa.eu/info/funding-tenders/opportunities/portal/' },
+  { id:'gr4',  name:'UKRI Funding Finder',                      scope:'National',       region:'UK',            desc:'All UK Research and Innovation funding calls across AHRC, BBSRC, EPSRC, MRC, NERC, ESRC.',   url:'https://www.ukri.org/opportunity/' },
+  { id:'gr5',  name:'DFG GEPRIS (Funded Projects)',             scope:'National',       region:'Germany',       desc:'Database of DFG-funded projects — useful for finding collaborators and understanding DFG priorities.', url:'https://gepris.dfg.de/gepris/OCTOPUS' },
+  { id:'gr6',  name:'SNSF Funding Portal',                      scope:'National',       region:'Switzerland',   desc:'Swiss National Science Foundation calls and career funding (Ambizione, PRIMA, Spark, etc.).',  url:'https://www.snf.ch/en/funding' },
+  { id:'gr7',  name:'NWO Calls & Deadlines',                    scope:'National',       region:'Netherlands',   desc:'Netherlands Organisation for Scientific Research — Veni/Vidi/Vici talent program and open calls.', url:'https://www.nwo.nl/en/calls' },
+  { id:'gr8',  name:'ANR Open Calls',                           scope:'National',       region:'France',        desc:'French National Research Agency — generic call, young researcher grants, collaborative programs.', url:'https://anr.fr/en/open-calls-and-results/' },
+  { id:'gr9',  name:'FWF Grant Programmes',                     scope:'National',       region:'Austria',       desc:'Austrian Science Fund — standalone projects, Esprit, Elise Richter, and international programs.', url:'https://www.fwf.ac.at/en/research-funding/fwf-programmes' },
+  { id:'gr10', name:'Academy of Finland Calls',                 scope:'National',       region:'Scandinavia',   desc:'Finnish research funding — academy researcher posts, research projects, consortium funding.',     url:'https://www.aka.fi/en/funding/' },
+  { id:'gr11', name:'Research Council of Norway',               scope:'National',       region:'Scandinavia',   desc:'Norwegian research funding — FRIMEDBIO, FRINATEK, FRIPRO and NORCE calls.',                    url:'https://www.forskningsradet.no/en/' },
+  { id:'gr12', name:'Swedish Research Council (VR)',            scope:'National',       region:'Scandinavia',   desc:'Vetenskapsrådet — research project grants, international postdoc, starting grants.',             url:'https://www.vr.se/english/applyingforfunding.html' },
+  { id:'gr13', name:'Australian Research Council (ARC)',        scope:'National',       region:'Australia',     desc:'Discovery Early Career (DECRA), Discovery Projects, Future Fellowships, and Linkage grants.',   url:'https://www.arc.gov.au/funding-research' },
+  { id:'gr14', name:'NSERC / SSHRC / CIHR (Canada Tri-Agency)', scope:'National',       region:'Canada',        desc:'Canada\'s three federal research granting agencies for natural sciences, social sciences, and health.', url:'https://science.gc.ca/site/science/en/funding' },
+  { id:'gr15', name:'Wellcome Trust Grant Finder',              scope:'Global',         region:'International', desc:'Wellcome funding across biomedical, population health, social science, and humanities.',          url:'https://wellcome.org/grant-funding' },
+  { id:'gr16', name:'Volkswagen Foundation Funding',            scope:'National',       region:'Germany',       desc:'German foundation — Freigeist, Momentum, Peter Seligmann, and international programs.',          url:'https://www.volkswagenstiftung.de/en/funding' },
+  { id:'gr17', name:'Gates Foundation Grand Challenges',        scope:'Global',         region:'International', desc:'Bill and Melinda Gates Foundation — global health, agriculture, and development challenges.',      url:'https://gcgh.grandchallenges.org/' },
+  { id:'gr18', name:'Pivot-RP (ProQuest)',                      scope:'Global',         region:'International', desc:'Comprehensive funding database. Requires institutional subscription — check if your library has access.', url:'https://pivot.proquest.com/' },
+  { id:'gr19', name:'GrantForward',                             scope:'Global',         region:'International', desc:'Funding search engine with ~10,000+ sponsors. Many universities provide free institutional access.', url:'https://www.grantforward.com/' },
+  { id:'gr20', name:'OpenAIRE Funding',                         scope:'EU',             region:'EU',            desc:'EU and global open-access funding opportunities, linked to Horizon Europe and national funders.', url:'https://explore.openaire.eu/search/find/funding' },
+]
 
 // ── Active tab ────────────────────────────────────────────────────────────────
 let _grantTab = 'mine'
@@ -43,7 +100,7 @@ function render_grants() {
   const vc = document.getElementById('view-content')
   const myCount = state.grants.length
   vc.innerHTML = `
-  ${pageHeader('✍️ Grants', `
+  ${pageHeader('🔍 Grant Scan', `
     <div class="flex gap-2">
       ${_grantTab==='mine' ? `<button onclick="openGrantModal()" class="btn-primary text-xs py-2">+ Add Grant</button>` : ''}
     </div>`)}
@@ -54,9 +111,13 @@ function render_grants() {
       class="px-4 py-3 text-sm font-medium border-b-2 transition-colors ${_grantTab==='mine'?'border-indigo-600 text-indigo-700':'border-transparent text-slate-500 hover:text-slate-700'}">
       📊 My Grants${myCount ? ` <span class="ml-1 text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full">${myCount}</span>` : ''}
     </button>
-    <button onclick="switchGrantTab('discover')" data-gtab="discover"
-      class="px-4 py-3 text-sm font-medium border-b-2 transition-colors ${_grantTab==='discover'?'border-indigo-600 text-indigo-700':'border-transparent text-slate-500 hover:text-slate-700'}">
-      🔍 Discover
+    <button onclick="switchGrantTab('scan')" data-gtab="scan"
+      class="px-4 py-3 text-sm font-medium border-b-2 transition-colors ${_grantTab==='scan'?'border-indigo-600 text-indigo-700':'border-transparent text-slate-500 hover:text-slate-700'}">
+      🔍 Scan <span class="ml-1 text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full">${GRANT_DB.length}</span>
+    </button>
+    <button onclick="switchGrantTab('resources')" data-gtab="resources"
+      class="px-4 py-3 text-sm font-medium border-b-2 transition-colors ${_grantTab==='resources'?'border-indigo-600 text-indigo-700':'border-transparent text-slate-500 hover:text-slate-700'}">
+      🌐 Databases
     </button>
   </div>
 
@@ -75,8 +136,6 @@ function switchGrantTab(tab) {
       ? 'border-indigo-600 text-indigo-700'
       : 'border-transparent text-slate-500 hover:text-slate-700'}`
   })
-  // Update the "+ Add Grant" button
-  const hdr = document.querySelector('[data-gtab]')?.closest('div')?.previousElementSibling
   const btn = document.querySelector('[onclick="openGrantModal()"]')
   if (btn) btn.style.display = tab === 'mine' ? '' : 'none'
   renderGrantTab()
@@ -85,22 +144,21 @@ function switchGrantTab(tab) {
 function renderGrantTab() {
   const el = document.getElementById('grant-tab-content')
   if (!el) return
-  if (_grantTab === 'mine') el.innerHTML = buildMyGrantsHTML()
-  else                       el.innerHTML = buildDiscoverHTML()
+  if      (_grantTab === 'mine')      el.innerHTML = buildMyGrantsHTML()
+  else if (_grantTab === 'scan')      el.innerHTML = buildScanHTML()
+  else                                el.innerHTML = buildResourcesHTML()
 }
 
 // ── MY GRANTS ─────────────────────────────────────────────────────────────────
 function buildMyGrantsHTML() {
   if (!state.grants.length) return `
   <div class="p-6 flex flex-col items-center justify-center h-full text-center">
-    ${emptyState('✍️','No grants tracked yet','Add a grant you found, or discover opportunities in the Discover tab')}
-    <button onclick="switchGrantTab('discover')" class="mt-4 btn-primary text-sm">🔍 Browse grant opportunities</button>
+    ${emptyState('🔍','No grants tracked yet','Scan the database to find opportunities, or add a grant manually')}
+    <button onclick="switchGrantTab('scan')" class="mt-4 btn-primary text-sm">🔍 Scan grant database</button>
   </div>`
 
-  const now   = new Date()
-  const today = now.toISOString().split('T')[0]
+  const now = new Date()
 
-  // Pipeline counts
   const counts = {}
   const STATUSES = ['researching','drafting','submitted','awarded','rejected']
   STATUSES.forEach(s => counts[s] = state.grants.filter(g=>g.status===s).length)
@@ -113,7 +171,6 @@ function buildMyGrantsHTML() {
     rejected:   'bg-slate-100 text-slate-500 border-slate-200'
   }
 
-  // Sort: active (researching/drafting) by deadline first, then submitted, then awarded/rejected
   const sorted = [...state.grants].sort((a,b) => {
     const order = {researching:0,drafting:1,submitted:2,awarded:3,rejected:4}
     if ((order[a.status]||0) !== (order[b.status]||0)) return (order[a.status]||0)-(order[b.status]||0)
@@ -168,10 +225,10 @@ function buildMyGrantsHTML() {
   </div>`
 }
 
-// ── DISCOVER ──────────────────────────────────────────────────────────────────
+// ── SCAN ──────────────────────────────────────────────────────────────────────
 let _dStage = 'all', _dRegion = 'all', _dField = 'all', _dSearch = ''
 
-function buildDiscoverHTML() {
+function buildScanHTML() {
   let grants = GRANT_DB
 
   if (_dStage  !== 'all') grants = grants.filter(g => g.stage.includes(_dStage))
@@ -183,37 +240,38 @@ function buildDiscoverHTML() {
   const alreadyTracked = new Set(state.grants.map(g => g.sourceId).filter(Boolean))
 
   return `
-  <!-- Discover filters -->
+  <!-- Scan filters -->
   <div class="bg-white border-b border-slate-100 px-5 py-3 flex gap-2 flex-wrap items-center">
-    <input type="text" placeholder="Search grants..." value="${esc(_dSearch)}"
-      oninput="_dSearch=this.value;document.getElementById('grant-tab-content').innerHTML=buildDiscoverHTML()"
-      class="flex-1 min-w-40 px-3 py-1.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
-    <select onchange="_dStage=this.value;document.getElementById('grant-tab-content').innerHTML=buildDiscoverHTML()" class="input" style="width:auto;padding:.3rem .7rem;font-size:.8rem">
-      <option value="all" ${_dStage==='all'?'selected':''}>All career stages</option>
+    <input type="text" placeholder="Search grants, funders, keywords..." value="${esc(_dSearch)}"
+      oninput="_dSearch=this.value;document.getElementById('grant-tab-content').innerHTML=buildScanHTML()"
+      class="flex-1 min-w-48 px-3 py-1.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+    <select onchange="_dStage=this.value;document.getElementById('grant-tab-content').innerHTML=buildScanHTML()" class="input" style="width:auto;padding:.3rem .7rem;font-size:.8rem">
+      <option value="all"     ${_dStage==='all'    ?'selected':''}>All career stages</option>
       <option value="phd"     ${_dStage==='phd'    ?'selected':''}>PhD Student</option>
+      <option value="masters" ${_dStage==='masters'?'selected':''}>Masters</option>
       <option value="postdoc" ${_dStage==='postdoc'?'selected':''}>Postdoc</option>
       <option value="pi"      ${_dStage==='pi'     ?'selected':''}>PI / Group Leader</option>
     </select>
-    <select onchange="_dRegion=this.value;document.getElementById('grant-tab-content').innerHTML=buildDiscoverHTML()" class="input" style="width:auto;padding:.3rem .7rem;font-size:.8rem">
+    <select onchange="_dRegion=this.value;document.getElementById('grant-tab-content').innerHTML=buildScanHTML()" class="input" style="width:auto;padding:.3rem .7rem;font-size:.8rem">
       <option value="all" ${_dRegion==='all'?'selected':''}>All regions</option>
       ${REGIONS.map(r=>`<option value="${r}" ${_dRegion===r?'selected':''}>${r}</option>`).join('')}
     </select>
-    <select onchange="_dField=this.value;document.getElementById('grant-tab-content').innerHTML=buildDiscoverHTML()" class="input" style="width:auto;padding:.3rem .7rem;font-size:.8rem">
+    <select onchange="_dField=this.value;document.getElementById('grant-tab-content').innerHTML=buildScanHTML()" class="input" style="width:auto;padding:.3rem .7rem;font-size:.8rem">
       <option value="all" ${_dField==='all'?'selected':''}>All fields</option>
       ${FIELDS.filter(f=>f!=='All').map(f=>`<option value="${f}" ${_dField===f?'selected':''}>${f}</option>`).join('')}
     </select>
-    <span class="text-xs text-slate-400">${grants.length} found</span>
+    <span class="text-xs text-slate-400 whitespace-nowrap">${grants.length} of ${GRANT_DB.length} grants</span>
   </div>
 
   <!-- Grant cards -->
   <div class="p-5 grid grid-cols-1 gap-3 max-w-4xl lg:grid-cols-2">
     ${grants.length === 0
-      ? `<div class="col-span-2 py-16 text-center text-slate-400">No grants match your filters.<br/><button onclick="_dStage='all';_dRegion='all';_dField='all';_dSearch='';document.getElementById('grant-tab-content').innerHTML=buildDiscoverHTML()" class="mt-2 text-indigo-500 hover:underline text-sm">Clear filters</button></div>`
+      ? `<div class="col-span-2 py-16 text-center text-slate-400">No grants match your filters.<br/><button onclick="_dStage='all';_dRegion='all';_dField='all';_dSearch='';document.getElementById('grant-tab-content').innerHTML=buildScanHTML()" class="mt-2 text-indigo-500 hover:underline text-sm">Clear filters</button></div>`
       : grants.map(g => {
         const tracked = alreadyTracked.has(g.id)
         const stageChips = g.stage.map(s => {
           const sc = {phd:'bg-indigo-100 text-indigo-700',postdoc:'bg-purple-100 text-purple-700',pi:'bg-teal-100 text-teal-700',masters:'bg-slate-100 text-slate-600'}
-          return `<span class="text-xs px-2 py-0.5 rounded-full ${sc[s]||'bg-slate-100 text-slate-600'}">${s==='phd'?'PhD':s==='pi'?'PI':s}</span>`
+          return `<span class="text-xs px-2 py-0.5 rounded-full ${sc[s]||'bg-slate-100 text-slate-600'}">${s==='phd'?'PhD':s==='pi'?'PI':s==='masters'?'Masters':s}</span>`
         }).join('')
         return `
         <div class="bg-white border border-slate-200 rounded-2xl p-4 hover:shadow-md transition-shadow flex flex-col gap-3">
@@ -257,7 +315,65 @@ function trackDiscoveredGrant(dbId) {
   })
   save('grants')
   showToast(`"${g.name}" added to My Grants ✓`)
-  document.getElementById('grant-tab-content').innerHTML = buildDiscoverHTML()
+  document.getElementById('grant-tab-content').innerHTML = buildScanHTML()
+}
+
+// ── RESOURCES ─────────────────────────────────────────────────────────────────
+function buildResourcesHTML() {
+  const scopeColors = {
+    'Global':   'bg-indigo-100 text-indigo-700',
+    'EU':       'bg-blue-100 text-blue-700',
+    'National': 'bg-teal-100 text-teal-700',
+  }
+
+  const byRegion = {}
+  GRANT_RESOURCES.forEach(r => {
+    if (!byRegion[r.region]) byRegion[r.region] = []
+    byRegion[r.region].push(r)
+  })
+
+  const regionOrder = ['International','EU','USA','UK','Germany','France','Austria','Switzerland','Netherlands','Scandinavia','Australia','Canada']
+
+  return `
+  <div class="p-5 max-w-4xl space-y-6">
+    <!-- Intro -->
+    <div class="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 text-sm text-indigo-800">
+      <p class="font-semibold mb-1">💡 Finding more grants</p>
+      <p class="text-xs text-indigo-700 leading-relaxed">The built-in database covers major fellowships, but most funding is only discoverable through your institution's research office or a proper grant database. Use the portals below to search by your field, career stage, and eligibility — then add any find to <em>My Grants</em> for tracking.</p>
+    </div>
+
+    <!-- Database cards by region -->
+    ${regionOrder.filter(reg => byRegion[reg]).map(reg => `
+    <div>
+      <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">${reg}</h3>
+      <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        ${byRegion[reg].map(r => `
+        <div class="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col gap-2.5 hover:shadow-md transition-shadow">
+          <div class="flex items-start justify-between gap-2">
+            <h4 class="font-bold text-slate-900 text-sm leading-snug">${esc(r.name)}</h4>
+            <span class="text-xs px-2 py-0.5 rounded-full flex-shrink-0 font-medium ${scopeColors[r.scope]||'bg-slate-100 text-slate-600'}">${r.scope}</span>
+          </div>
+          <p class="text-xs text-slate-600 leading-relaxed flex-1">${esc(r.desc)}</p>
+          <button onclick="window.api.openExternal('${esc(r.url)}')"
+            class="self-start text-xs px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors">
+            Open Database ↗
+          </button>
+        </div>`).join('')}
+      </div>
+    </div>`).join('')}
+
+    <!-- Tips section -->
+    <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+      <p class="text-sm font-bold text-slate-800 mb-3">🎯 Tips for finding grants</p>
+      <ul class="text-xs text-slate-600 space-y-2 leading-relaxed">
+        <li><span class="font-semibold text-slate-700">Talk to your research office:</span> Most universities have a dedicated grants team who know country- and institution-specific opportunities not listed in public databases.</li>
+        <li><span class="font-semibold text-slate-700">Check your supervisor's funding:</span> Look up their grants on NIH Reporter, GEPRIS, or Horizon Europe — funders they use are likely relevant to your work too.</li>
+        <li><span class="font-semibold text-slate-700">Follow funding bodies on social media:</span> ERC, Wellcome, HFSP and others announce new calls on X/LinkedIn before they appear in databases.</li>
+        <li><span class="font-semibold text-slate-700">Ask your academic society:</span> Discipline-specific societies (ACS, SfN, ASA, etc.) often have their own travel and research grants not in general databases.</li>
+        <li><span class="font-semibold text-slate-700">Set up alerts:</span> Grants.gov and UKRI allow email alerts for new calls matching your keywords.</li>
+      </ul>
+    </div>
+  </div>`
 }
 
 // ── Grant modal (create / edit) ───────────────────────────────────────────────
@@ -508,7 +624,7 @@ function updateGrantField(id, field, value) {
   if (g) { g[field]=value; save('grants') }
 }
 
-// ── Linked Tasks (Item 16) ────────────────────────────────────────────────────
+// ── Linked Tasks ──────────────────────────────────────────────────────────────
 function renderGrantTasks(grantId) {
   const tasks = (state.todos||[]).filter(t => t.grantId === grantId && !t.completedAt)
   if (!tasks.length) return `<p class="text-xs text-slate-400 italic">No open tasks linked to this grant</p>`
@@ -528,7 +644,7 @@ function createTaskForGrant(grantId) {
   openTodoModal(null)
 }
 
-// ── Duplicate (Item 15) ───────────────────────────────────────────────────────
+// ── Duplicate ─────────────────────────────────────────────────────────────────
 function duplicateGrant(id) {
   const g = state.grants.find(x=>x.id===id)
   if (!g) return
@@ -538,7 +654,6 @@ function duplicateGrant(id) {
   copy.status    = 'researching'
   copy.createdAt = new Date().toISOString()
   copy.updatedAt = new Date().toISOString()
-  // Reset checklist — fresh application
   ;(copy.requirements||[]).forEach(r => { r.done = false })
   state.grants.push(copy)
   save('grants')
