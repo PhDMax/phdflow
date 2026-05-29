@@ -71,4 +71,32 @@ contextBridge.exposeInMainWorld('api', {
   installUpdate:     ()                  => ipcRenderer.invoke('updater-install'),
   onUpdateStatus:    (cb)                => ipcRenderer.on('update-status', (_, d) => cb(d)),
   quitApp:           ()                  => ipcRenderer.invoke('quit-app'),
+
+  // ── Bundle sharing (Option A) ─────────────────────────────────────────────
+  bundleExportProject: (opts)  => ipcRenderer.invoke('bundle-export-project', opts),
+  bundleExportFull:    (opts)  => ipcRenderer.invoke('bundle-export-full', opts),
+  bundleRead:          (src)   => ipcRenderer.invoke('bundle-read', src),
+  bundleImport:        (opts)  => ipcRenderer.invoke('bundle-import', opts),
+  openBundleDialog:    ()      => ipcRenderer.invoke('open-bundle-dialog'),
+  openBundleSaveDialog:(name)  => ipcRenderer.invoke('open-bundle-save-dialog', name),
+
+  // ── Cloud folder sync (Option B) ──────────────────────────────────────────
+  syncGetConfig:        ()       => ipcRenderer.invoke('sync-get-config'),
+  syncSetFolder:        (folder) => ipcRenderer.invoke('sync-set-folder', folder),
+  syncDisable:          ()       => ipcRenderer.invoke('sync-disable'),
+  syncOpenFolderDialog: ()       => ipcRenderer.invoke('sync-open-folder-dialog'),
+  syncWriteNow:         ()       => ipcRenderer.invoke('sync-write-now'),
+  syncApply:            (opts)   => ipcRenderer.invoke('sync-apply', opts),
+  onSyncIncoming:       (cb)     => ipcRenderer.on('sync-incoming',  (_, d) => cb(d)),
+
+  // ── LAN peer discovery (Option C) ────────────────────────────────────────
+  lanStart:            ()      => ipcRenderer.invoke('lan-start'),
+  lanStop:             ()      => ipcRenderer.invoke('lan-stop'),
+  lanGetPeers:         ()      => ipcRenderer.invoke('lan-get-peers'),
+  lanSendBundle:       (opts)  => ipcRenderer.invoke('lan-send-bundle', opts),
+  lanAcceptBundle:     ()      => ipcRenderer.invoke('lan-accept-bundle'),
+  lanRejectBundle:     ()      => ipcRenderer.invoke('lan-reject-bundle'),
+  onLanPeerDiscovered: (cb)    => ipcRenderer.on('lan-peer-discovered', (_, d) => cb(d)),
+  onLanPeerLost:       (cb)    => ipcRenderer.on('lan-peer-lost',       (_, d) => cb(d)),
+  onLanBundleIncoming: (cb)    => ipcRenderer.on('lan-bundle-incoming', (_, d) => cb(d)),
 })

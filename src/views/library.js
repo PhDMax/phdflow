@@ -21,8 +21,8 @@ function render_library() {
         <div id="lib-import-menu" class="hidden absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-20 w-52 py-1">
           <button onclick="openLibraryPicker();closeLibMenus()" class="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50">📄 Import PDF(s)</button>
           <div class="border-t border-slate-100 my-1"></div>
-          <button onclick="importCitation();closeLibMenus()" class="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50">🔗 Import .bib <span class="text-xs text-slate-400">(Zotero)</span></button>
-          <button onclick="importCitation();closeLibMenus()" class="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50">🔗 Import .ris <span class="text-xs text-slate-400">(Endnote)</span></button>
+          <button onclick="importCitation();closeLibMenus()" class="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50">🔗 Import .bib <span class="text-xs text-slate-400">(BibTeX)</span></button>
+          <button onclick="importCitation();closeLibMenus()" class="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50">🔗 Import .ris <span class="text-xs text-slate-400">(RIS format)</span></button>
         </div>
       </div>
       <div class="relative">

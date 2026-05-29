@@ -12,7 +12,7 @@ async function render_settings() {
   vc.innerHTML = `
   ${pageHeader('⚙️ Settings', '')}
   <div class="flex border-b border-slate-200 bg-white flex-shrink-0 px-6">
-    ${[['profile','👤 Profile'],['app','🔧 App'],['personalize','🎨 Personalize'],['diagnostics','🩺 Diagnostics'],['backup','💾 Backup'],['vault','🔐 Vault']].map(([v,l]) =>
+    ${[['profile','👤 Profile'],['app','🔧 App'],['personalize','🎨 Personalize'],['diagnostics','🩺 Diagnostics'],['backup','💾 Backup'],['share','🤝 Share & Sync'],['vault','🔐 Vault']].map(([v,l]) =>
       `<button id="stab-${v}" onclick="settingsTab('${v}')"
         class="px-4 py-3 text-xs font-semibold border-b-2 transition-colors mr-1">${l}</button>`
     ).join('')}
@@ -34,7 +34,7 @@ async function render_settings() {
 
 function settingsTab(tab) {
   _settingsTab = tab
-  ;['profile','app','personalize','diagnostics','backup','vault'].forEach(t => {
+  ;['profile','app','personalize','diagnostics','backup','share','vault'].forEach(t => {
     const btn = document.getElementById(`stab-${t}`)
     if (!btn) return
     btn.className = `px-4 py-3 text-xs font-semibold border-b-2 transition-colors mr-1 ${
@@ -50,6 +50,7 @@ function settingsTab(tab) {
   else if (tab === 'personalize') renderPersonalizeTab(body)
   else if (tab === 'diagnostics') renderDiagnosticsTab(body)
   else if (tab === 'backup')      renderBackupTab(body)
+  else if (tab === 'share')       renderShareTab(body)
   else                            renderVaultTab(body)
 }
 
@@ -845,6 +846,345 @@ async function backupClearAll() {
   if (!await confirmTypeDlg('⚠️ ERASE ALL APP DATA?\n\nThis permanently deletes all projects, papers, notes, contacts, events, todos, and grants. This cannot be undone.')) return
   _DATA_KEYS.forEach(k => api.storeSet(k, Array.isArray(state[k]) ? [] : null))
   showToast('All data erased — restart the app')
+}
+
+// ══ Share & Sync Tab ══════════════════════════════════════════════════════════
+
+let _shareTab    = 'bundle'
+let _lanActive   = false
+let _lanPeers    = []
+let _syncCfg     = {}
+
+async function renderShareTab(body) {
+  _syncCfg = await api.syncGetConfig() || {}
+
+  body.innerHTML = `
+  <div class="p-6 max-w-2xl space-y-0">
+
+    <!-- Sub-tab bar -->
+    <div class="flex gap-1 border-b border-slate-200 mb-5">
+      ${[['bundle','📦 Bundle'],['sync','☁ Folder Sync'],['lan','📡 Local Network']].map(([id,label]) => `
+      <button onclick="shareSubTab('${id}')"
+        class="px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors -mb-px
+          ${_shareTab===id?'border-indigo-600 text-indigo-600':'border-transparent text-slate-500 hover:text-slate-700'}">
+        ${label}
+      </button>`).join('')}
+    </div>
+
+    <div id="share-body"></div>
+  </div>`
+
+  shareSubTab(_shareTab)
+
+  // Wire up incoming events once
+  api.onSyncIncoming(d => _onSyncIncoming(d))
+  api.onLanBundleIncoming(d => _onLanBundleIncoming(d))
+  api.onLanPeerDiscovered(d => {
+    if (!_lanPeers.find(p => p.deviceId === d.deviceId)) _lanPeers.push(d)
+    _renderLanPeers()
+  })
+  api.onLanPeerLost(d => {
+    _lanPeers = _lanPeers.filter(p => p.deviceId !== d.deviceId)
+    _renderLanPeers()
+  })
+}
+
+function shareSubTab(id) {
+  _shareTab = id
+  document.querySelectorAll('[onclick^="shareSubTab"]').forEach(btn => {
+    const active = btn.getAttribute('onclick') === `shareSubTab('${id}')`
+    btn.className = `px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors -mb-px ${
+      active ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`
+  })
+  const body = document.getElementById('share-body')
+  if (!body) return
+  if (id === 'bundle') _renderBundleTab(body)
+  if (id === 'sync')   _renderSyncTab(body)
+  if (id === 'lan')    _renderLanTab(body)
+}
+
+// ── Option A: Bundle ─────────────────────────────────────────────────────────
+
+function _renderBundleTab(body) {
+  body.innerHTML = `
+  <div class="space-y-4">
+
+    <!-- Export -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-5">
+      <h3 class="text-sm font-bold text-slate-700 mb-1">📤 Export Full Workspace Bundle</h3>
+      <p class="text-xs text-slate-400 mb-3">
+        Package your entire workspace into a single <code>.phdflow</code> file.
+        Send it to a collaborator, move it to another machine, or keep it as a portable snapshot.
+      </p>
+      <div class="flex gap-2 flex-wrap">
+        <button onclick="shareBundleExportFull()" class="btn-primary text-xs py-2 px-4">Export Full Workspace</button>
+      </div>
+      <div id="bundle-export-status" class="mt-2 text-xs text-slate-400"></div>
+    </div>
+
+    <!-- Import -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-5">
+      <h3 class="text-sm font-bold text-slate-700 mb-1">📥 Import Bundle</h3>
+      <p class="text-xs text-slate-400 mb-3">
+        Load a <code>.phdflow</code> bundle shared by a colleague. Data is merged with your existing
+        workspace — newer entries always win over older ones.
+      </p>
+      <div class="flex items-center gap-4 mb-3">
+        ${['merge','replace'].map(s => `
+        <label class="flex items-center gap-1.5 text-xs cursor-pointer select-none">
+          <input type="radio" name="bundle-strat" value="${s}" ${s==='merge'?'checked':''} class="accent-indigo-600"/>
+          <div>
+            <div class="font-semibold text-slate-700">${s === 'merge' ? 'Merge (recommended)' : 'Replace'}</div>
+            <div class="text-slate-400">${s === 'merge' ? 'Combines data — newer updatedAt wins' : '⚠ Overwrites your existing data'}</div>
+          </div>
+        </label>`).join('')}
+      </div>
+      <button onclick="shareBundleImport()" class="btn-primary text-xs py-2 px-4">Choose Bundle File</button>
+      <div id="bundle-import-status" class="mt-2 text-xs text-slate-400"></div>
+    </div>
+
+    <!-- Tip -->
+    <div class="bg-indigo-50 rounded-2xl border border-indigo-100 p-4 text-xs text-indigo-700">
+      💡 <strong>Tip:</strong> To share just one project (with its linked notes, tasks, and papers),
+      open the project and click the <strong>Share</strong> button on the project card.
+    </div>
+  </div>`
+}
+
+async function shareBundleExportFull() {
+  const dest = await api.openBundleSaveDialog(`phdflow-workspace-${new Date().toISOString().slice(0,10)}`)
+  if (!dest) return
+  const el = document.getElementById('bundle-export-status')
+  if (el) el.innerHTML = `<span class="text-slate-400">Packaging…</span>`
+  const r = await api.bundleExportFull({ dest })
+  if (!el) return
+  el.innerHTML = r.success
+    ? `<span class="text-emerald-600 font-semibold">✓ Bundle saved — ${Object.entries(r.summary).filter(([,v])=>v>0).map(([k,v])=>`${v} ${k}`).join(', ')}</span>`
+    : `<span class="text-rose-500">✕ ${esc(r.error)}</span>`
+}
+
+async function shareBundleImport() {
+  const src = await api.openBundleDialog()
+  if (!src) return
+  const readResult = await api.bundleRead(src)
+  if (!readResult.success) { showToast(readResult.error, 'error'); return }
+  const { bundle } = readResult
+  const strategy = document.querySelector('input[name="bundle-strat"]:checked')?.value || 'merge'
+  if (strategy === 'replace' && !await confirmDlg('⚠️ Replace mode will overwrite your existing data with the bundle contents.\n\nThis cannot be undone — export a backup first.', 'Replace & Import')) return
+  const el = document.getElementById('bundle-import-status')
+  if (el) el.innerHTML = `<span class="text-slate-400">Importing…</span>`
+  const r = await api.bundleImport({ bundle, strategy })
+  if (!el) return
+  if (r.success) {
+    if (el) el.innerHTML = `<span class="text-emerald-600 font-semibold">✓ Bundle from "${esc(bundle._exportedBy)}" imported — ${esc(bundle.title)}</span>`
+    await _reloadStateFromStore()
+    showToast(`Bundle imported ✓`)
+  } else {
+    if (el) el.innerHTML = `<span class="text-rose-500">✕ ${esc(r.error)}</span>`
+  }
+}
+
+// ── Option B: Folder Sync ─────────────────────────────────────────────────────
+
+function _renderSyncTab(body) {
+  const folder  = _syncCfg.folder || ''
+  const enabled = !!_syncCfg.enabled
+  body.innerHTML = `
+  <div class="space-y-4">
+
+    <div class="bg-white rounded-2xl border border-slate-200 p-5">
+      <h3 class="text-sm font-bold text-slate-700 mb-1">☁ Shared Folder Sync</h3>
+      <p class="text-xs text-slate-400 mb-3">
+        Point PhDFlow at a shared folder — a Dropbox folder, OneDrive directory, university network drive,
+        or any folder multiple people can access. PhDFlow writes a sync file whenever you save data,
+        and automatically picks up changes from your collaborators.
+      </p>
+
+      ${folder ? `
+      <div class="flex items-center gap-2 mb-3 p-3 bg-${enabled?'emerald':'slate'}-50 border border-${enabled?'emerald':'slate'}-200 rounded-xl">
+        <div class="w-2 h-2 rounded-full bg-${enabled?'emerald-500':'slate-400'}"></div>
+        <div class="flex-1 min-w-0">
+          <div class="text-xs font-semibold text-slate-700">${enabled ? '✓ Sync active' : 'Sync paused'}</div>
+          <div class="text-xs text-slate-400 truncate">${esc(folder)}</div>
+        </div>
+      </div>` : ''}
+
+      <div class="flex gap-2 flex-wrap">
+        <button onclick="shareSyncChooseFolder()" class="btn-primary text-xs py-2 px-4">
+          ${folder ? '📁 Change Folder' : '📁 Choose Sync Folder'}
+        </button>
+        ${folder && enabled ? `<button onclick="shareSyncWriteNow()" class="btn-secondary text-xs py-2 px-4">Sync Now</button>` : ''}
+        ${folder && enabled ? `<button onclick="shareSyncDisable()" class="btn-secondary text-xs py-2 px-4 text-rose-600">Pause Sync</button>` : ''}
+      </div>
+      <div id="sync-status" class="mt-2 text-xs text-slate-400"></div>
+    </div>
+
+    <div class="bg-slate-50 rounded-2xl border border-slate-200 p-4 text-xs text-slate-600 space-y-1.5">
+      <div class="font-semibold text-slate-700 mb-1">How it works</div>
+      <div>📂 Each PhDFlow instance writes a small <code>.sync</code> file to the shared folder whenever data changes.</div>
+      <div>👀 PhDFlow watches the folder — when a colleague's sync file appears, you get a notification to review and accept the changes.</div>
+      <div>🔀 Conflicts resolve automatically: newer <code>updatedAt</code> timestamps win.</div>
+      <div>☁ Works with Dropbox, OneDrive, Google Drive (desktop), university NAS, or any shared network folder.</div>
+    </div>
+  </div>`
+}
+
+async function shareSyncChooseFolder() {
+  const folder = await api.syncOpenFolderDialog()
+  if (!folder) return
+  const r = await api.syncSetFolder(folder)
+  const el = document.getElementById('sync-status')
+  if (r.success) {
+    _syncCfg.folder = folder; _syncCfg.enabled = true
+    showToast('Sync folder set ✓')
+    shareSubTab('sync')
+  } else {
+    if (el) el.innerHTML = `<span class="text-rose-500">✕ ${esc(r.error)}</span>`
+  }
+}
+
+async function shareSyncWriteNow() {
+  const el = document.getElementById('sync-status')
+  if (el) el.innerHTML = `<span class="text-slate-400">Syncing…</span>`
+  const r = await api.syncWriteNow()
+  if (el) el.innerHTML = r.success
+    ? `<span class="text-emerald-600 font-semibold">✓ Sync file written — ${esc(r.filename)}</span>`
+    : `<span class="text-rose-500">✕ ${esc(r.error)}</span>`
+}
+
+async function shareSyncDisable() {
+  await api.syncDisable()
+  _syncCfg.enabled = false
+  shareSubTab('sync')
+  showToast('Sync paused')
+}
+
+async function _onSyncIncoming(d) {
+  const accept = await confirmDlg(
+    `📥 ${esc(d.syncedBy)} synced their workspace.\n\nAccept and merge their changes into yours?`,
+    'Accept & Merge'
+  )
+  if (!accept) return
+  const r = await api.syncApply({ data: d.data, strategy: 'merge' })
+  if (r.success) {
+    await _reloadStateFromStore()
+    showToast(`Changes from ${esc(d.syncedBy)} merged ✓`)
+  } else {
+    showToast(r.error, 'error')
+  }
+}
+
+// ── Option C: LAN Discovery ───────────────────────────────────────────────────
+
+function _renderLanTab(body) {
+  body.innerHTML = `
+  <div class="space-y-4">
+
+    <div class="bg-white rounded-2xl border border-slate-200 p-5">
+      <h3 class="text-sm font-bold text-slate-700 mb-1">📡 Local Network Sharing</h3>
+      <p class="text-xs text-slate-400 mb-3">
+        Share projects and bundles directly with colleagues on the same Wi-Fi or lab network —
+        no cloud, no accounts required. Both devices must have this panel open.
+      </p>
+      <div class="flex gap-2 mb-4">
+        ${_lanActive
+          ? `<button onclick="shareLanStop()" class="btn-danger text-xs py-2 px-4">Stop Discovery</button>`
+          : `<button onclick="shareLanStart()" class="btn-primary text-xs py-2 px-4">Start Discovery</button>`}
+      </div>
+      <div id="lan-status" class="text-xs text-slate-400 mb-3">
+        ${_lanActive ? '📡 Broadcasting presence on local network…' : 'Not active — click Start Discovery to find colleagues.'}
+      </div>
+      <div id="lan-peers-list"></div>
+    </div>
+
+    <div class="bg-slate-50 rounded-2xl border border-slate-200 p-4 text-xs text-slate-600 space-y-1.5">
+      <div class="font-semibold text-slate-700 mb-1">How it works</div>
+      <div>📡 PhDFlow broadcasts its presence on the local network (UDP multicast).</div>
+      <div>👥 Other PhDFlow instances on the same network appear in the list automatically.</div>
+      <div>📦 Select a peer and choose what to share — they get a notification to accept.</div>
+      <div>🔒 Transfers happen directly device-to-device over HTTP. Nothing goes to the internet.</div>
+    </div>
+  </div>`
+  _renderLanPeers()
+}
+
+function _renderLanPeers() {
+  const list = document.getElementById('lan-peers-list')
+  if (!list) return
+  if (!_lanPeers.length) {
+    list.innerHTML = `<div class="text-xs text-slate-400 italic">No peers found yet — make sure colleagues also have this panel open.</div>`
+    return
+  }
+  list.innerHTML = `
+  <div class="text-xs font-semibold text-slate-600 mb-2">Colleagues found (${_lanPeers.length}):</div>
+  <div class="space-y-2">
+    ${_lanPeers.map(p => `
+    <div class="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
+      <div class="flex items-center gap-2">
+        <div class="w-2 h-2 rounded-full bg-emerald-500"></div>
+        <div>
+          <div class="text-xs font-semibold text-slate-700">${esc(p.name)}</div>
+          <div class="text-xs text-slate-400">${esc(p.ip)}</div>
+        </div>
+      </div>
+      <button onclick="shareLanSendTo('${esc(p.ip)}','${esc(p.name)}')" class="btn-primary text-xs py-1 px-3">
+        📦 Send Bundle
+      </button>
+    </div>`).join('')}
+  </div>`
+}
+
+async function shareLanStart() {
+  const r = await api.lanStart()
+  if (!r.success) { showToast(r.error, 'error'); return }
+  _lanActive = true
+  _lanPeers  = await api.lanGetPeers()
+  shareSubTab('lan')
+}
+
+async function shareLanStop() {
+  await api.lanStop()
+  _lanActive = false
+  _lanPeers  = []
+  shareSubTab('lan')
+}
+
+async function shareLanSendTo(ip, name) {
+  const dataDir = await api.getDataDir()
+  if (!dataDir) { showToast('Could not get data directory', 'error'); return }
+  const dest = `${dataDir}\\lan-send-temp.phdflow`
+  showToast(`Building bundle for ${name}…`)
+  const exportResult = await api.bundleExportFull({ dest })
+  if (!exportResult.success) { showToast(exportResult.error, 'error'); return }
+  const readResult = await api.bundleRead(dest)
+  if (!readResult.success) { showToast(readResult.error, 'error'); return }
+  const r = await api.lanSendBundle({ targetIp: ip, bundleData: readResult.bundle })
+  showToast(r.success ? `✓ Bundle sent to ${name}` : `Failed: ${r.error}`, r.success ? 'success' : 'error')
+}
+
+async function _onLanBundleIncoming(d) {
+  const accept = await confirmDlg(
+    `📦 ${esc(d.sentBy)} wants to share "${esc(d.title)}" with you.\n\nContents: ${Object.entries(d.summary||{}).filter(([,v])=>v>0).map(([k,v])=>`${v} ${k}`).join(', ')}\n\nAccept and merge into your workspace?`,
+    'Accept Bundle'
+  )
+  if (!accept) { await api.lanRejectBundle(); return }
+  const r = await api.lanAcceptBundle()
+  if (r.success) {
+    await _reloadStateFromStore()
+    showToast(`Bundle from ${esc(d.sentBy)} merged ✓`)
+  } else {
+    await api.lanRejectBundle()
+    showToast(r.error, 'error')
+  }
+}
+
+async function _reloadStateFromStore() {
+  const keys = ['projects','papers','contacts','notes','whiteboards','events','todos','grants',
+                 'newsFeeds','newsTopics','newsRead','calGoals','calFeeds','todoGroups','paperCollections']
+  await Promise.all(keys.map(async k => {
+    const v = await api.storeGet(k)
+    if (v !== null) state[k] = v
+  }))
 }
 
 // ── Vault tab ─────────────────────────────────────────────────────────────────

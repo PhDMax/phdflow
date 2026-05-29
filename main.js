@@ -1,7 +1,10 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage } = require('electron')
 const { autoUpdater } = require('electron-updater')
-const path = require('path')
-const fs   = require('fs')
+const path  = require('path')
+const fs    = require('fs')
+const dgram = require('dgram')
+const http  = require('http')
+const os    = require('os')
 
 // ─── Auto-updater setup ───────────────────────────────────────────────────────
 autoUpdater.autoDownload         = true
@@ -1001,6 +1004,378 @@ ipcMain.handle('fetch-ics', async (_, url) => {
       return { success: false, error: 'URL did not return a valid ICS calendar file (no BEGIN:VCALENDAR found)' }
     return { success: true, text }
   } catch(e) { return { success: false, error: e.message } }
+})
+
+// ─── Share: Helpers ───────────────────────────────────────────────────────────
+
+const BUNDLE_VERSION = 1
+
+function _getDeviceId() {
+  const p = path.join(app.getPath('userData'), 'device-id.txt')
+  if (fs.existsSync(p)) return fs.readFileSync(p, 'utf-8').trim()
+  const id = require('crypto').randomUUID()
+  fs.writeFileSync(p, id, 'utf-8')
+  return id
+}
+
+// ─── Share: Bundle Export / Import (Option A) ────────────────────────────────
+
+ipcMain.handle('bundle-export-project', async (_, { projectId, include, dest }) => {
+  try {
+    const store   = readStore()
+    const project = (store.projects || []).find(p => p.id === projectId)
+    if (!project) return { success: false, error: 'Project not found' }
+
+    const data = { projects: [project] }
+    if (include.notes !== false)
+      data.notes       = (store.notes       || []).filter(x => x.projectId === projectId || (x.projectIds||[]).includes(projectId))
+    if (include.todos !== false)
+      data.todos       = (store.todos        || []).filter(x => x.projectId === projectId)
+    if (include.papers !== false)
+      data.papers      = (store.papers       || []).filter(x => (x.projectIds||[]).includes(projectId))
+    if (include.grants !== false)
+      data.grants      = (store.grants       || []).filter(x => x.linkedProjectId === projectId)
+    if (include.whiteboards !== false)
+      data.whiteboards = (store.whiteboards  || []).filter(x => x.projectId === projectId)
+    if (include.events !== false)
+      data.events      = (store.events       || []).filter(x => x.projectId === projectId)
+
+    const bundle = {
+      _type: 'phdflow-bundle', _bundleVersion: BUNDLE_VERSION,
+      _appVersion: app.getVersion(), _exportedAt: new Date().toISOString(),
+      _exportedBy: readAuthCfg()?.name || 'PhDFlow User',
+      _deviceId: _getDeviceId(), title: project.name,
+      summary: Object.fromEntries(Object.entries(data).map(([k,v]) => [k, v.length])),
+      data,
+    }
+    fs.writeFileSync(dest, JSON.stringify(bundle, null, 2), 'utf-8')
+    return { success: true, dest, summary: bundle.summary }
+  } catch(e) { return { success: false, error: e.message } }
+})
+
+ipcMain.handle('bundle-export-full', async (_, { dest }) => {
+  try {
+    const store = readStore()
+    const countKeys = ['projects','notes','todos','papers','grants','whiteboards','events','contacts']
+    const bundle = {
+      _type: 'phdflow-bundle', _bundleVersion: BUNDLE_VERSION,
+      _appVersion: app.getVersion(), _exportedAt: new Date().toISOString(),
+      _exportedBy: readAuthCfg()?.name || 'PhDFlow User',
+      _deviceId: _getDeviceId(), title: 'Full Workspace',
+      summary: Object.fromEntries(countKeys.map(k => [k, (store[k]||[]).length])),
+      data: store,
+    }
+    fs.writeFileSync(dest, JSON.stringify(bundle, null, 2), 'utf-8')
+    return { success: true, dest, summary: bundle.summary }
+  } catch(e) { return { success: false, error: e.message } }
+})
+
+ipcMain.handle('open-bundle-dialog', async () => {
+  const r = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    filters: [{ name: 'PhDFlow Bundle', extensions: ['phdflow'] }]
+  })
+  return r.canceled ? null : r.filePaths[0]
+})
+
+ipcMain.handle('open-bundle-save-dialog', async (_, defaultName) => {
+  const r = await dialog.showSaveDialog(mainWindow, {
+    defaultPath: (defaultName || 'phdflow-bundle').replace(/[/\\:*?"<>|]/g, '-'),
+    filters: [{ name: 'PhDFlow Bundle', extensions: ['phdflow'] }]
+  })
+  return r.canceled ? null : r.filePath
+})
+
+ipcMain.handle('bundle-read', async (_, src) => {
+  try {
+    const bundle = JSON.parse(fs.readFileSync(src, 'utf-8'))
+    if (bundle._type !== 'phdflow-bundle') return { success: false, error: 'Not a valid PhDFlow bundle' }
+    return { success: true, bundle }
+  } catch(e) { return { success: false, error: e.message } }
+})
+
+function _mergeBundle(current, bundleData, strategy) {
+  const keys = Object.keys(bundleData).filter(k => !k.startsWith('_'))
+  if (strategy === 'replace') {
+    keys.forEach(k => { current[k] = bundleData[k] })
+  } else {
+    keys.forEach(k => {
+      const inc = bundleData[k]
+      if (!Array.isArray(inc)) { current[k] = inc; return }
+      const cur    = Array.isArray(current[k]) ? current[k] : []
+      const merged = [...cur]
+      inc.forEach(item => {
+        if (!item?.id) return
+        const idx = merged.findIndex(c => c.id === item.id)
+        if (idx === -1) { merged.push(item); return }
+        const cd = merged[idx].updatedAt || merged[idx].createdAt || ''
+        const id = item.updatedAt       || item.createdAt        || ''
+        if (id > cd) merged[idx] = item
+      })
+      current[k] = merged
+    })
+  }
+}
+
+ipcMain.handle('bundle-import', async (_, { bundle, strategy }) => {
+  try {
+    const current = readStore()
+    _mergeBundle(current, bundle.data, strategy || 'merge')
+    writeStore(current)
+    return { success: true }
+  } catch(e) { return { success: false, error: e.message } }
+})
+
+// ─── Share: Cloud Folder Sync (Option B) ─────────────────────────────────────
+
+let _syncWatcher  = null
+let _syncDebounce = null
+
+function _syncConfigPath() { return path.join(getDataDir(), 'sync-config.json') }
+function _readSyncCfg()    { try { return JSON.parse(fs.readFileSync(_syncConfigPath(), 'utf-8')) } catch { return {} } }
+function _saveSyncCfg(cfg) { fs.writeFileSync(_syncConfigPath(), JSON.stringify(cfg), 'utf-8') }
+
+function _writeSyncFile(folderPath) {
+  try {
+    const deviceId = _getDeviceId()
+    const name     = readAuthCfg()?.name || 'PhDFlow User'
+    const ts       = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    const filename = `phdflow-${deviceId.slice(0, 8)}-${ts}.sync`
+    // Remove our own previous sync files in that folder
+    fs.readdirSync(folderPath)
+      .filter(f => f.startsWith(`phdflow-${deviceId.slice(0, 8)}`) && f.endsWith('.sync'))
+      .forEach(f => { try { fs.unlinkSync(path.join(folderPath, f)) } catch {} })
+    const payload = {
+      _type: 'phdflow-sync', _syncVersion: 1,
+      _appVersion: app.getVersion(), _syncedAt: new Date().toISOString(),
+      _syncedBy: name, _deviceId: deviceId,
+      data: readStore(),
+    }
+    fs.writeFileSync(path.join(folderPath, filename), JSON.stringify(payload, null, 2), 'utf-8')
+    return { success: true, filename }
+  } catch(e) { return { success: false, error: e.message } }
+}
+
+function _startFolderWatch(folderPath) {
+  if (_syncWatcher) { try { _syncWatcher.close() } catch {} ; _syncWatcher = null }
+  if (!folderPath || !fs.existsSync(folderPath)) return
+  _writeSyncFile(folderPath)
+  _syncWatcher = fs.watch(folderPath, (_, filename) => {
+    if (!filename?.endsWith('.sync') || !filename.startsWith('phdflow-')) return
+    const myPrefix = `phdflow-${_getDeviceId().slice(0, 8)}`
+    if (filename.startsWith(myPrefix)) return
+    if (_syncDebounce) clearTimeout(_syncDebounce)
+    _syncDebounce = setTimeout(() => {
+      try {
+        const fp = path.join(folderPath, filename)
+        if (!fs.existsSync(fp)) return
+        const payload = JSON.parse(fs.readFileSync(fp, 'utf-8'))
+        if (payload._type !== 'phdflow-sync') return
+        mainWindow?.webContents?.send('sync-incoming', {
+          syncedBy: payload._syncedBy, syncedAt: payload._syncedAt,
+          deviceId: payload._deviceId, data: payload.data,
+        })
+      } catch {}
+    }, 1200)
+  })
+}
+
+ipcMain.handle('sync-get-config', () => _readSyncCfg())
+
+ipcMain.handle('sync-set-folder', async (_, folderPath) => {
+  try {
+    const cfg = _readSyncCfg()
+    cfg.folder = folderPath; cfg.enabled = true
+    _saveSyncCfg(cfg)
+    _startFolderWatch(folderPath)
+    return { success: true }
+  } catch(e) { return { success: false, error: e.message } }
+})
+
+ipcMain.handle('sync-disable', () => {
+  const cfg = _readSyncCfg()
+  cfg.enabled = false; _saveSyncCfg(cfg)
+  if (_syncWatcher) { try { _syncWatcher.close() } catch {} ; _syncWatcher = null }
+  return { success: true }
+})
+
+ipcMain.handle('sync-open-folder-dialog', async () => {
+  const r = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory'],
+    title: 'Select sync folder (shared drive, Dropbox, OneDrive, etc.)'
+  })
+  return r.canceled ? null : r.filePaths[0]
+})
+
+ipcMain.handle('sync-write-now', () => {
+  const cfg = _readSyncCfg()
+  if (!cfg.enabled || !cfg.folder) return { success: false, error: 'Sync folder not set' }
+  return _writeSyncFile(cfg.folder)
+})
+
+ipcMain.handle('sync-apply', async (_, { data, strategy }) => {
+  try {
+    const current = readStore()
+    _mergeBundle(current, data, strategy || 'merge')
+    writeStore(current)
+    return { success: true }
+  } catch(e) { return { success: false, error: e.message } }
+})
+
+// ─── Share: LAN Peer Discovery (Option C) ────────────────────────────────────
+
+const LAN_UDP_PORT  = 41234
+const LAN_HTTP_PORT = 41235
+const LAN_MULTICAST = '239.255.41.23'
+
+let _lanUdp    = null
+let _lanHttp   = null
+let _lanPeers  = new Map()
+let _lanPendingBundle = null
+
+function _localIp() {
+  for (const ifaces of Object.values(os.networkInterfaces())) {
+    for (const addr of ifaces) {
+      if (addr.family === 'IPv4' && !addr.internal) return addr.address
+    }
+  }
+  return '127.0.0.1'
+}
+
+function _lanBroadcast() {
+  if (!_lanUdp) return
+  const msg = Buffer.from(JSON.stringify({
+    _type: 'PHDFLOW_HELLO', deviceId: _getDeviceId(),
+    name: readAuthCfg()?.name || 'PhDFlow User',
+  }))
+  try { _lanUdp.send(msg, LAN_UDP_PORT, LAN_MULTICAST) }   catch {}
+  try { _lanUdp.send(msg, LAN_UDP_PORT, '255.255.255.255') } catch {}
+}
+
+function _startLanUdp() {
+  if (_lanUdp) return
+  const sock = dgram.createSocket({ type: 'udp4', reuseAddr: true })
+  sock.on('error', () => { _lanUdp = null })
+  sock.on('message', (msg, rinfo) => {
+    try {
+      const p = JSON.parse(msg.toString())
+      if (p._type !== 'PHDFLOW_HELLO' || p.deviceId === _getDeviceId()) return
+      _lanPeers.set(p.deviceId, { name: p.name, ip: rinfo.address, port: LAN_HTTP_PORT, deviceId: p.deviceId, lastSeen: Date.now() })
+      mainWindow?.webContents?.send('lan-peer-discovered', { deviceId: p.deviceId, name: p.name, ip: rinfo.address })
+      // Reply directly so they add us too
+      const reply = Buffer.from(JSON.stringify({ _type: 'PHDFLOW_HELLO', deviceId: _getDeviceId(), name: readAuthCfg()?.name || 'PhDFlow User' }))
+      sock.send(reply, LAN_UDP_PORT, rinfo.address)
+    } catch {}
+  })
+  sock.bind(LAN_UDP_PORT, () => {
+    try { sock.addMembership(LAN_MULTICAST) } catch {}
+    sock.setBroadcast(true)
+    _lanUdp = sock
+    _lanBroadcast()
+    const iv = setInterval(() => {
+      if (!_lanUdp) { clearInterval(iv); return }
+      _lanBroadcast()
+      const now = Date.now()
+      for (const [id, peer] of _lanPeers) {
+        if (now - peer.lastSeen > 25000) { _lanPeers.delete(id); mainWindow?.webContents?.send('lan-peer-lost', { deviceId: id }) }
+      }
+    }, 8000)
+  })
+}
+
+function _startLanHttp() {
+  if (_lanHttp) return
+  const server = http.createServer((req, res) => {
+    if (req.method === 'GET' && req.url === '/ping') {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ name: readAuthCfg()?.name || 'PhDFlow', deviceId: _getDeviceId() }))
+      return
+    }
+    if (req.method === 'POST' && req.url === '/receive') {
+      let body = ''
+      req.on('data', c => { if (body.length < 50_000_000) body += c })
+      req.on('end', () => {
+        try {
+          const bundle = JSON.parse(body)
+          if (bundle._type !== 'phdflow-bundle') { res.writeHead(400); res.end(); return }
+          _lanPendingBundle = bundle
+          mainWindow?.webContents?.send('lan-bundle-incoming', {
+            sentBy: bundle._exportedBy, title: bundle.title, summary: bundle.summary,
+          })
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ success: true }))
+        } catch { res.writeHead(400); res.end() }
+      })
+      return
+    }
+    res.writeHead(404); res.end()
+  })
+  server.on('error', () => { _lanHttp = null })
+  server.listen(LAN_HTTP_PORT, '0.0.0.0')
+  _lanHttp = server
+}
+
+ipcMain.handle('lan-start', () => {
+  try { _startLanUdp(); _startLanHttp(); return { success: true, ip: _localIp() } }
+  catch(e) { return { success: false, error: e.message } }
+})
+
+ipcMain.handle('lan-stop', () => {
+  if (_lanUdp)  { try { _lanUdp.close()  } catch {} ; _lanUdp  = null }
+  if (_lanHttp) { try { _lanHttp.close() } catch {} ; _lanHttp = null }
+  _lanPeers.clear()
+  return { success: true }
+})
+
+ipcMain.handle('lan-get-peers', () => Array.from(_lanPeers.values()))
+
+ipcMain.handle('lan-send-bundle', (_, { targetIp, bundleData }) => {
+  return new Promise(resolve => {
+    try {
+      const body = JSON.stringify(bundleData)
+      const req  = http.request({
+        hostname: targetIp, port: LAN_HTTP_PORT, path: '/receive', method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+        timeout: 12000,
+      }, res => {
+        let data = ''
+        res.on('data', c => data += c)
+        res.on('end', () => {
+          try { resolve({ success: res.statusCode === 200, response: JSON.parse(data) }) }
+          catch { resolve({ success: res.statusCode === 200 }) }
+        })
+      })
+      req.on('error',   e  => resolve({ success: false, error: e.message }))
+      req.on('timeout', () => { req.destroy(); resolve({ success: false, error: 'Connection timed out' }) })
+      req.write(body); req.end()
+    } catch(e) { resolve({ success: false, error: e.message }) }
+  })
+})
+
+ipcMain.handle('lan-accept-bundle', async () => {
+  if (!_lanPendingBundle) return { success: false, error: 'No pending bundle' }
+  const bundle = _lanPendingBundle; _lanPendingBundle = null
+  try {
+    const current = readStore()
+    _mergeBundle(current, bundle.data, 'merge')
+    writeStore(current)
+    return { success: true }
+  } catch(e) { return { success: false, error: e.message } }
+})
+
+ipcMain.handle('lan-reject-bundle', () => { _lanPendingBundle = null; return { success: true } })
+
+// Resume sync folder on startup
+app.whenReady().then(() => {
+  const cfg = _readSyncCfg()
+  if (cfg.enabled && cfg.folder && fs.existsSync(cfg.folder)) _startFolderWatch(cfg.folder)
+})
+
+// Clean up on quit
+app.on('before-quit', () => {
+  if (_lanUdp)      { try { _lanUdp.close()      } catch {} }
+  if (_lanHttp)     { try { _lanHttp.close()      } catch {} }
+  if (_syncWatcher) { try { _syncWatcher.close()  } catch {} }
 })
 
 // ─── IPC: Quit App ─────────────────────────────────────────────────────────────

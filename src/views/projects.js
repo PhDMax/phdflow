@@ -144,11 +144,18 @@ function renderProjectCards(filter) {
 
       <!-- Header -->
       <div class="flex items-start justify-between gap-2 mb-2">
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 min-w-0">
           <div class="w-3 h-3 rounded-full flex-shrink-0 mt-0.5" style="background:${p.color||'#6366f1'}"></div>
-          <h3 class="font-bold text-slate-900 text-sm leading-snug">${esc(p.name)}</h3>
+          <h3 class="font-bold text-slate-900 text-sm leading-snug truncate">${esc(p.name)}</h3>
         </div>
-        ${statusBadge(p.status)}
+        <div class="flex items-center gap-1.5 flex-shrink-0">
+          ${statusBadge(p.status)}
+          <button title="Share this project"
+            onclick="event.stopPropagation();openProjectShareModal('${p.id}')"
+            class="w-6 h-6 flex items-center justify-center rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors text-xs">
+            ↗
+          </button>
+        </div>
       </div>
 
       ${p.description ? `<p class="text-slate-500 text-xs mb-2.5 line-clamp-1 ml-5">${esc(p.description)}</p>` : ''}
@@ -600,6 +607,125 @@ function duplicateProject(id) {
   closeModal()
   renderProjectCards(_pFilter)
   showToast(`"${copy.name}" created ✓`)
+}
+
+// ── Share Modal ───────────────────────────────────────────────────────────────
+async function openProjectShareModal(projectId) {
+  const p = state.projects.find(x => x.id === projectId)
+  if (!p) return
+
+  const notesCount      = (state.notes       || []).filter(x => x.projectId === projectId || (x.projectIds||[]).includes(projectId)).length
+  const todosCount      = (state.todos        || []).filter(x => x.projectId === projectId).length
+  const papersCount     = (state.papers       || []).filter(x => (x.projectIds||[]).includes(projectId)).length
+  const grantsCount     = (state.grants       || []).filter(x => x.linkedProjectId === projectId).length
+  const whiteboardCount = (state.whiteboards  || []).filter(x => x.projectId === projectId).length
+
+  const row = (id, label, count) => count > 0 ? `
+  <label class="flex items-center gap-2 text-xs cursor-pointer select-none text-slate-600">
+    <input type="checkbox" class="share-include accent-indigo-600" data-key="${id}" checked/>
+    <span>${label} <span class="text-slate-400">(${count})</span></span>
+  </label>` : ''
+
+  openModal(`
+  <h3 class="text-base font-bold text-slate-900 mb-1">📦 Share Project</h3>
+  <p class="text-xs text-slate-400 mb-4">"${esc(p.name)}"</p>
+
+  <div class="mb-4">
+    <div class="text-xs font-semibold text-slate-600 mb-2">Include with the project:</div>
+    <div class="space-y-2 pl-1">
+      ${row('notes', '📄 Notes', notesCount)}
+      ${row('todos', '✅ Tasks', todosCount)}
+      ${row('papers', '📚 Papers', papersCount)}
+      ${row('grants', '💰 Grants', grantsCount)}
+      ${row('whiteboards', '🖊 Whiteboards', whiteboardCount)}
+      ${(!notesCount && !todosCount && !papersCount && !grantsCount && !whiteboardCount)
+        ? '<p class="text-xs text-slate-400 italic">No linked data found — only the project itself will be bundled.</p>' : ''}
+    </div>
+  </div>
+
+  <div class="text-xs font-semibold text-slate-600 mb-2">Export as:</div>
+  <div class="flex flex-col gap-2">
+    <button onclick="shareProjectToFile('${projectId}')" class="btn-primary text-xs py-2.5 px-4 text-left flex items-center gap-2">
+      <span class="text-base">💾</span>
+      <div>
+        <div class="font-semibold">Save to file (.phdflow)</div>
+        <div class="font-normal text-indigo-200">Share via email, USB, or cloud storage</div>
+      </div>
+    </button>
+    <button onclick="shareProjectToSyncFolder('${projectId}')" class="btn-secondary text-xs py-2.5 px-4 text-left flex items-center gap-2">
+      <span class="text-base">☁</span>
+      <div>
+        <div class="font-semibold">Write to sync folder</div>
+        <div class="font-normal text-slate-400">Collaborators with folder access get it automatically</div>
+      </div>
+    </button>
+    <button onclick="shareProjectToLan('${projectId}')" class="btn-secondary text-xs py-2.5 px-4 text-left flex items-center gap-2">
+      <span class="text-base">📡</span>
+      <div>
+        <div class="font-semibold">Send over local network</div>
+        <div class="font-normal text-slate-400">Push directly to a colleague on the same Wi-Fi</div>
+      </div>
+    </button>
+  </div>
+  <div id="proj-share-status" class="mt-3 text-xs text-slate-400"></div>`)
+}
+
+function _getShareIncludes() {
+  const includes = {}
+  document.querySelectorAll('.share-include').forEach(cb => { includes[cb.dataset.key] = cb.checked })
+  return includes
+}
+
+async function shareProjectToFile(projectId) {
+  const p = state.projects.find(x => x.id === projectId)
+  const dest = await api.openBundleSaveDialog(`phdflow-${(p?.name||'project').replace(/\s+/g,'-').toLowerCase()}-${new Date().toISOString().slice(0,10)}`)
+  if (!dest) return
+  const el = document.getElementById('proj-share-status')
+  if (el) el.innerHTML = `<span class="text-slate-400">Building bundle…</span>`
+  const r = await api.bundleExportProject({ projectId, include: _getShareIncludes(), dest })
+  if (!el) return
+  el.innerHTML = r.success
+    ? `<span class="text-emerald-600 font-semibold">✓ Bundle saved — ${Object.entries(r.summary).filter(([,v])=>v>0).map(([k,v])=>`${v} ${k}`).join(', ')}</span>`
+    : `<span class="text-rose-500">✕ ${esc(r.error)}</span>`
+}
+
+async function shareProjectToSyncFolder(projectId) {
+  const cfg = await api.syncGetConfig()
+  const el  = document.getElementById('proj-share-status')
+  if (!cfg?.enabled || !cfg?.folder) {
+    if (el) el.innerHTML = `<span class="text-amber-600">Sync folder not set up — go to Settings → Share & Sync → Folder Sync</span>`
+    return
+  }
+  const p    = state.projects.find(x => x.id === projectId)
+  const dest = [cfg.folder, `phdflow-project-${projectId.slice(0,8)}.phdflow`].join('\\').replace(/\\\\/g,'\\')
+  if (el) el.innerHTML = `<span class="text-slate-400">Building bundle…</span>`
+  const r = await api.bundleExportProject({ projectId, include: _getShareIncludes(), dest })
+  if (el) el.innerHTML = r.success
+    ? `<span class="text-emerald-600 font-semibold">✓ Written to sync folder — collaborators will see it shortly</span>`
+    : `<span class="text-rose-500">✕ ${esc(r.error)}</span>`
+}
+
+async function shareProjectToLan(projectId) {
+  const peers = await api.lanGetPeers()
+  const el    = document.getElementById('proj-share-status')
+  if (!peers.length) {
+    if (el) el.innerHTML = `<span class="text-amber-600">No peers online — go to Settings → Share & Sync → Local Network and start discovery first</span>`
+    return
+  }
+  const peer    = peers[0]
+  const p       = state.projects.find(x => x.id === projectId)
+  const dataDir = await api.getDataDir()
+  if (!dataDir) { if (el) el.innerHTML = `<span class="text-rose-500">✕ Could not get data directory</span>`; return }
+  const dest = `${dataDir}\\lan-project-${projectId.slice(0,8)}.phdflow`
+  if (el) el.innerHTML = `<span class="text-slate-400">Sending to ${esc(peer.name)}…</span>`
+  const exportResult = await api.bundleExportProject({ projectId, include: _getShareIncludes(), dest })
+  if (!exportResult.success) { if (el) el.innerHTML = `<span class="text-rose-500">✕ ${esc(exportResult.error)}</span>`; return }
+  const readResult = await api.bundleRead(dest)
+  if (!readResult.success) { if (el) el.innerHTML = `<span class="text-rose-500">✕ ${esc(readResult.error)}</span>`; return }
+  const r = await api.lanSendBundle({ targetIp: peer.ip, bundleData: readResult.bundle })
+  if (el) el.innerHTML = r.success
+    ? `<span class="text-emerald-600 font-semibold">✓ Project sent to ${esc(peer.name)}</span>`
+    : `<span class="text-rose-500">✕ ${esc(r.error)}</span>`
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────────

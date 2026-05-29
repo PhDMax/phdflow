@@ -6,6 +6,12 @@ let _notesTypeFilter = 'all'
 let _notesSaveTimer  = null
 let _notesReadMode   = false
 
+// ── Wiki-link autocomplete state ──────────────────────────────────────────────
+let _wikiAcActive  = false
+let _wikiAcIndex   = 0
+let _wikiAcMatches = []
+let _wikiAcStart   = -1
+
 const NOTE_TYPES = {
   note:       { icon: '📄', label: 'Note',           cls: 'background:#f1f5f9;color:#475569'   },
   experiment: { icon: '🧪', label: 'Experiment Log', cls: 'background:#eff6ff;color:#1d4ed8'   },
@@ -41,6 +47,7 @@ const _NOTES_TB = [
   { id:'SEP' },
   { id:'table',     before:'| Col 1 | Col 2 | Col 3 |\n| --- | --- | --- |\n| | | |\n', after:'', label:'⊞', title:'Table' },
   { id:'link',      before:'[',       after:'](url)',label:'🔗',   title:'Link'                 },
+  { id:'wikilink',  before:'[[',      after:']]',   label:'↗',    title:'Link to another note ([[title]])'  },
   { id:'date',      before:() => `**${new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}**  \n`, after:'', label:'📅', title:"Today's date" },
 ]
 
@@ -185,9 +192,31 @@ function _notesEditorPanel(note) {
 
   if (_notesReadMode) {
     // ── Reading mode ──────────────────────────────────────────────────────────
-    const previewHtml = note.content
-      ? marked.parse(note.content)
+    const resolved    = _resolveWikiLinks(note.content || '')
+    const previewHtml = resolved
+      ? marked.parse(resolved)
       : '<p style="color:#d1d5db;font-style:italic">Nothing here yet…</p>'
+
+    const backlinks = _getBacklinks(note.id)
+    const backlinksHtml = backlinks.length ? `
+    <div style="margin-top:3rem;padding-top:1.5rem;border-top:1px solid #f3f4f6">
+      <div style="font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#9ca3af;margin-bottom:.875rem">
+        ↩ Referenced by (${backlinks.length})
+      </div>
+      <div style="display:flex;flex-direction:column;gap:.5rem">
+        ${backlinks.map(n => {
+          const bt = NOTE_TYPES[n.type] || NOTE_TYPES.note
+          return `<button onclick="openNote('${n.id}')"
+            style="display:flex;align-items:center;gap:.625rem;padding:.625rem .875rem;
+              border:1px solid #ede9fe;background:#faf5ff;border-radius:.75rem;
+              font-size:.8rem;color:#7c3aed;cursor:pointer;text-align:left;font-family:inherit">
+            <span>${bt.icon}</span>
+            <span style="font-weight:500">${esc(n.title||'Untitled')}</span>
+            <span style="font-size:.7rem;color:#c4b5fd;margin-left:auto">${bt.label}</span>
+          </button>`
+        }).join('')}
+      </div>
+    </div>` : ''
 
     return `
     <!-- Reading top bar -->
@@ -226,6 +255,7 @@ function _notesEditorPanel(note) {
         </div>` : ''}
         <div style="border-top:1px solid #f3f4f6;margin-bottom:2rem"></div>
         <div class="prose">${previewHtml}</div>
+        ${backlinksHtml}
       </div>
     </div>`
   }
@@ -300,7 +330,7 @@ function _notesEditorPanel(note) {
         style="display:block;width:100%;min-height:65vh;font-size:15px;line-height:1.85;
           color:#374151;background:transparent;border:none;outline:none;resize:none;
           font-family:inherit;overflow:hidden;box-sizing:border-box;padding:0;"
-        oninput="scheduleNoteSave();_notesGrow(this)"
+        oninput="scheduleNoteSave();_notesGrow(this);_wikiCheck(this)"
         onkeydown="notesKeydown(event)">${esc(note.content||'')}</textarea>
 
     </div>
@@ -362,6 +392,7 @@ async function newNote(type = 'note') {
 }
 
 async function openNote(id) {
+  _wikiAcHide()
   await autoSaveNote()
   _notesActiveId = id
   _notesReadMode = false
@@ -469,6 +500,13 @@ function _noteInsertAt(before, after) {
 }
 
 function notesKeydown(e) {
+  // Wiki-link autocomplete navigation takes priority
+  if (_wikiAcActive) {
+    if (e.key === 'ArrowDown')  { e.preventDefault(); _wikiAcIndex = Math.min(_wikiAcIndex + 1, _wikiAcMatches.length - 1); _wikiAcHighlight(); return }
+    if (e.key === 'ArrowUp')    { e.preventDefault(); _wikiAcIndex = Math.max(_wikiAcIndex - 1, 0); _wikiAcHighlight(); return }
+    if (e.key === 'Enter')      { e.preventDefault(); _wikiAcSelect(_wikiAcIndex); return }
+    if (e.key === 'Escape')     { e.preventDefault(); _wikiAcHide(); return }
+  }
   if (e.ctrlKey || e.metaKey) {
     switch (e.key.toLowerCase()) {
       case 'b': e.preventDefault(); _noteInsertAt('**','**'); return
@@ -483,10 +521,152 @@ function notesKeydown(e) {
 // ── Toolbar click delegation ──────────────────────────────────────────────────
 
 document.addEventListener('click', e => {
+  // Close wiki autocomplete on outside click
+  if (_wikiAcActive && !e.target.closest('#wiki-ac') && !e.target.closest('#note-editor')) {
+    _wikiAcHide()
+  }
+
   const btn = e.target.closest('[data-tb]')
   if (!btn) return
   const action = _NOTES_TB.find(a => a.id === btn.dataset.tb)
   if (!action) return
   const bef = typeof action.before === 'function' ? action.before() : action.before
   _noteInsertAt(bef, action.after || '')
+
+  // After inserting [[, immediately trigger autocomplete
+  if (action.id === 'wikilink') {
+    const ta = document.getElementById('note-editor')
+    if (ta) setTimeout(() => _wikiCheck(ta), 0)
+  }
 })
+
+// ══ Wiki-link System ══════════════════════════════════════════════════════════
+
+// ── Autocomplete ──────────────────────────────────────────────────────────────
+
+function _wikiCheck(ta) {
+  const cur    = ta.selectionStart
+  const before = ta.value.substring(0, cur)
+  const openAt = before.lastIndexOf('[[')
+
+  if (openAt === -1 || before.substring(openAt + 2).includes(']]')) {
+    _wikiAcHide(); return
+  }
+
+  const partial = before.substring(openAt + 2)
+  _wikiAcStart  = openAt
+
+  const q = partial.toLowerCase()
+  _wikiAcMatches = state.notes
+    .filter(n => n.id !== _notesActiveId && (n.title || 'Untitled').toLowerCase().includes(q))
+    .slice(0, 7)
+
+  if (!_wikiAcMatches.length) { _wikiAcHide(); return }
+
+  _wikiAcActive = true
+  _wikiAcIndex  = 0
+  _wikiAcShow(ta, partial)
+}
+
+function _wikiAcShow(ta, partial) {
+  let el = document.getElementById('wiki-ac')
+  if (!el) {
+    el = document.createElement('div')
+    el.id = 'wiki-ac'
+    document.body.appendChild(el)
+  }
+
+  // Position: top-left corner of the editor scroll area
+  const area = document.getElementById('notes-scroll-area')
+  const rect  = area ? area.getBoundingClientRect() : ta.getBoundingClientRect()
+  const top   = Math.min(rect.top + 12, window.innerHeight - 260)
+  const left  = Math.min(rect.left + 12, window.innerWidth  - 320)
+
+  el.style.cssText = `position:fixed;top:${top}px;left:${left}px;z-index:9999;
+    background:#fff;border:1px solid #e5e7eb;border-radius:.75rem;
+    box-shadow:0 8px 32px rgba(0,0,0,.14);min-width:220px;max-width:320px;overflow:hidden`
+
+  const header = `<div style="padding:.4rem .875rem;font-size:.68rem;color:#9ca3af;
+    border-bottom:1px solid #f3f4f6;display:flex;align-items:center;gap:.375rem">
+    <span>↗</span>
+    <span>${partial ? `Link to "<strong>${esc(partial)}</strong>"` : 'Link to a note…'}</span>
+    <span style="margin-left:auto;color:#d1d5db">↑↓ Enter</span>
+  </div>`
+
+  el.innerHTML = header + _wikiAcMatches.map((n, i) => {
+    const t = NOTE_TYPES[n.type] || NOTE_TYPES.note
+    return `<button id="wiki-ac-${i}" onclick="_wikiAcSelect(${i})"
+      onmouseenter="_wikiAcIndex=${i};_wikiAcHighlight()"
+      style="display:block;width:100%;text-align:left;padding:.5rem .875rem;border:none;
+        font-size:.8rem;cursor:pointer;font-family:inherit;transition:background .08s;
+        background:${i===0?'#f5f3ff':'#fff'};color:${i===0?'#7c3aed':'#374151'}">
+      ${t.icon} <span style="font-weight:500">${esc(n.title||'Untitled')}</span>
+      <span style="font-size:.7rem;color:#c4b5fd;margin-left:.375rem">${t.label}</span>
+    </button>`
+  }).join('')
+}
+
+function _wikiAcHighlight() {
+  _wikiAcMatches.forEach((_, i) => {
+    const el = document.getElementById(`wiki-ac-${i}`)
+    if (!el) return
+    const active = i === _wikiAcIndex
+    el.style.background = active ? '#f5f3ff' : '#fff'
+    el.style.color       = active ? '#7c3aed' : '#374151'
+  })
+}
+
+function _wikiAcHide() {
+  _wikiAcActive = false
+  const el = document.getElementById('wiki-ac')
+  if (el) el.remove()
+}
+
+function _wikiAcSelect(idx) {
+  const match = _wikiAcMatches[idx]
+  if (!match) return
+  const ta = document.getElementById('note-editor')
+  if (!ta) return
+
+  const cur    = ta.selectionStart
+  const before = ta.value.substring(0, _wikiAcStart)
+  const after  = ta.value.substring(cur)
+  const link   = `[[${match.title || 'Untitled'}]]`
+
+  ta.value = before + link + after
+  const newPos = before.length + link.length
+  ta.selectionStart = newPos
+  ta.selectionEnd   = newPos
+  ta.focus()
+
+  _wikiAcHide()
+  _notesGrow(ta)
+  scheduleNoteSave()
+}
+
+// ── Read-mode rendering ───────────────────────────────────────────────────────
+
+function _resolveWikiLinks(content) {
+  return content.replace(/\[\[([^\]\n]+)\]\]/g, (_, title) => {
+    const trimmed = title.trim()
+    const note    = state.notes.find(n => (n.title || 'Untitled') === trimmed)
+    if (note) {
+      return `<a href="#" onclick="event.preventDefault();openNote('${note.id}')"
+        style="color:#7c3aed;background:#f5f3ff;padding:.1rem .4rem;border-radius:.375rem;
+          text-decoration:none;font-weight:500;border:1px solid #ede9fe;
+          cursor:pointer;font-size:.95em" title="Open note: ${trimmed}">${trimmed}</a>`
+    }
+    return `<span style="color:#9ca3af;background:#f9fafb;padding:.1rem .4rem;
+      border-radius:.375rem;border:1px solid #f1f5f9;text-decoration:line-through"
+      title="Note not found: ${trimmed}">${trimmed}</span>`
+  })
+}
+
+// ── Backlinks ─────────────────────────────────────────────────────────────────
+
+function _getBacklinks(noteId) {
+  const title = (state.notes.find(n => n.id === noteId)?.title || '').trim()
+  if (!title) return []
+  const pattern = `[[${title}]]`
+  return state.notes.filter(n => n.id !== noteId && (n.content || '').includes(pattern))
+}
