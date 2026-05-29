@@ -25,7 +25,13 @@ function loadToken() {
   if (process.env.GITHUB_TOKEN) return process.env.GITHUB_TOKEN.trim()
   const envPath = resolve(ROOT, '.env')
   if (existsSync(envPath)) {
-    for (const line of readFileSync(envPath, 'utf-8').split('\n')) {
+    // Strip BOM (UTF-16 LE or UTF-8) that Notepad adds on Windows
+    let raw = readFileSync(envPath)
+    let text
+    if (raw[0] === 0xFF && raw[1] === 0xFE) text = raw.slice(2).toString('utf16le')
+    else if (raw[0] === 0xEF && raw[1] === 0xBB && raw[2] === 0xBF) text = raw.slice(3).toString('utf8')
+    else text = raw.toString('utf8')
+    for (const line of text.split(/\r?\n/)) {
       const m = line.match(/^GITHUB_TOKEN\s*=\s*(.+)/)
       if (m) return m[1].trim()
     }
