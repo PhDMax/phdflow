@@ -395,7 +395,13 @@ function _lastContactedStr(c) {
 function render_contacts() {
   const vc = document.getElementById('view-content')
   vc.innerHTML = `
-  ${pageHeader('👥 Contacts', `<button onclick="openContactModal()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors">+ Add Contact</button>`)}
+  ${pageHeader('👥 Contacts', `
+    <div class="flex gap-2">
+      <button onclick="openLinkedInImport()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5">
+        <span class="font-bold">in</span> Import LinkedIn
+      </button>
+      <button onclick="openContactModal()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors">+ Add Contact</button>
+    </div>`)}
   <div class="bg-white border-b border-slate-200 px-6 py-3 flex-shrink-0">
     <input id="contacts-search" type="text" placeholder="Search by name, institution, field…"
       oninput="renderContacts()"
@@ -657,4 +663,154 @@ async function deleteContact(id) {
     state.contacts = snap
     save('contacts'); renderContacts(); showToast('Contact restored ✓')
   })
+}
+
+// ── LinkedIn CSV import ────────────────────────────────────────────────────────
+function openLinkedInImport() {
+  openModal(`
+  <h3 class="text-base font-bold mb-1">Import LinkedIn Connections</h3>
+  <p class="text-xs text-slate-500 mb-4">LinkedIn lets you export your connections as a CSV — no API key or login needed inside PhDFlow.</p>
+
+  <div class="bg-slate-50 rounded-xl p-4 mb-4">
+    <p class="text-xs font-semibold text-slate-700 mb-2">How to export from LinkedIn:</p>
+    <ol class="text-xs text-slate-600 space-y-1.5 list-decimal pl-4 leading-relaxed">
+      <li>Open <button onclick="window.api.openExternal('https://www.linkedin.com/mypreferences/d/categories/data')" class="text-blue-600 hover:underline">LinkedIn → Settings → Data privacy</button></li>
+      <li>Click <strong>Get a copy of your data</strong></li>
+      <li>Tick <strong>Connections</strong> only, then click <strong>Request archive</strong></li>
+      <li>LinkedIn emails you a download link — usually arrives within minutes</li>
+      <li>Unzip the archive and select <strong>Connections.csv</strong> below</li>
+    </ol>
+  </div>
+
+  <div class="mb-4">
+    <label class="block text-xs font-semibold text-slate-700 mb-2">Select Connections.csv</label>
+    <input type="file" id="li-csv-file" accept=".csv"
+      onchange="previewLinkedInCSV(this)"
+      class="block w-full text-sm text-slate-600
+        file:mr-3 file:py-1.5 file:px-4 file:rounded-lg file:border-0
+        file:bg-blue-600 file:text-white file:text-xs file:font-semibold
+        hover:file:bg-blue-700 cursor-pointer"/>
+  </div>
+
+  <div id="li-preview" class="hidden mb-3"></div>
+
+  <div class="flex gap-3" id="li-import-actions">
+    <button onclick="closeModal()" class="flex-1 btn-secondary">Cancel</button>
+  </div>`)
+}
+
+function _parseCSV(text) {
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
+  return lines.map(line => {
+    const fields = []
+    let field = '', inQuotes = false
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i]
+      if (ch === '"') {
+        if (inQuotes && line[i+1] === '"') { field += '"'; i++ }
+        else inQuotes = !inQuotes
+      } else if (ch === ',' && !inQuotes) {
+        fields.push(field.trim()); field = ''
+      } else {
+        field += ch
+      }
+    }
+    fields.push(field.trim())
+    return fields
+  }).filter(row => row.some(f => f))
+}
+
+function previewLinkedInCSV(input) {
+  const file = input.files?.[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = e => {
+    const rows = _parseCSV(e.target.result)
+    if (!rows.length) { showToast('Could not read CSV','error'); return }
+
+    const header = rows[0].map(h => h.toLowerCase().replace(/[\s_-]/g,''))
+    const col = key => header.findIndex(h => h.includes(key))
+    const idx = {
+      firstName:  col('firstname'),
+      lastName:   col('lastname'),
+      url:        header.findIndex(h => h === 'url' || h.includes('linkedin')),
+      email:      col('email'),
+      company:    header.findIndex(h => h.includes('company') || h.includes('organization')),
+      position:   header.findIndex(h => h.includes('position') || h.includes('title') || h.includes('role')),
+    }
+
+    if (idx.firstName === -1 && idx.lastName === -1) {
+      document.getElementById('li-preview').innerHTML = `
+        <div class="bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-700 mb-2">
+          ⚠ This doesn't look like a LinkedIn connections CSV. Expected columns: First Name, Last Name, URL…
+        </div>`
+      document.getElementById('li-preview').classList.remove('hidden')
+      return
+    }
+
+    const parsed = rows.slice(1).filter(r => r.length > 1).map(r => ({
+      name:        [idx.firstName>=0?r[idx.firstName]:'', idx.lastName>=0?r[idx.lastName]:''].filter(Boolean).join(' ').trim(),
+      linkedIn:    idx.url      >= 0 ? r[idx.url]      : '',
+      email:       idx.email    >= 0 ? r[idx.email]    : '',
+      institution: idx.company  >= 0 ? r[idx.company]  : '',
+      role:        idx.position >= 0 ? r[idx.position] : '',
+    })).filter(c => c.name)
+
+    const existingNames = new Set(state.contacts.map(c => c.name.toLowerCase()))
+    const newOnes = parsed.filter(c => !existingNames.has(c.name.toLowerCase()))
+    const dupes   = parsed.length - newOnes.length
+
+    window._liImportQueue = newOnes
+
+    document.getElementById('li-preview').classList.remove('hidden')
+    document.getElementById('li-preview').innerHTML = `
+      <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-3 text-xs space-y-1">
+        <div class="flex justify-between text-slate-600"><span>Total in file</span><strong>${parsed.length}</strong></div>
+        <div class="flex justify-between text-green-700"><span>New — will be imported</span><strong>${newOnes.length}</strong></div>
+        ${dupes ? `<div class="flex justify-between text-amber-600"><span>Already in Contacts (skipped)</span><strong>${dupes}</strong></div>` : ''}
+      </div>
+      ${newOnes.length ? `
+      <div class="max-h-44 overflow-y-auto space-y-1 mb-1">
+        ${newOnes.slice(0,25).map(c=>`
+        <div class="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-100 rounded-lg text-xs">
+          <div class="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center text-blue-700 font-bold text-[10px] flex-shrink-0">
+            ${c.name.split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase()}
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="font-medium text-slate-800 truncate">${esc(c.name)}</div>
+            ${c.institution||c.role ? `<div class="text-slate-400 truncate">${esc([c.role,c.institution].filter(Boolean).join(' · '))}</div>` : ''}
+          </div>
+          ${c.email    ? `<span class="text-green-600 flex-shrink-0 text-[10px]">📧</span>` : ''}
+          ${c.linkedIn ? `<span class="text-blue-600 font-bold flex-shrink-0 text-[10px]">in</span>` : ''}
+        </div>`).join('')}
+        ${newOnes.length > 25 ? `<p class="text-xs text-slate-400 text-center py-1">…and ${newOnes.length-25} more</p>` : ''}
+      </div>` :
+      `<p class="text-xs text-amber-600 text-center py-2">All contacts in this file are already in your list.</p>`}`
+
+    document.getElementById('li-import-actions').innerHTML = `
+      <button onclick="closeModal()" class="flex-1 btn-secondary">Cancel</button>
+      ${newOnes.length ? `<button onclick="confirmLinkedInImport()" class="flex-1 btn-primary">Import ${newOnes.length} contact${newOnes.length>1?'s':''}</button>` : ''}`
+  }
+  reader.readAsText(file)
+}
+
+function confirmLinkedInImport() {
+  const queue = window._liImportQueue || []
+  if (!queue.length) return
+  for (const c of queue) {
+    state.contacts.push({
+      id: uid(), name: c.name,
+      institution: c.institution||'', department:'', role: c.role||'',
+      relationship:'', email: c.email||'', phone:'',
+      linkedIn: c.linkedIn||'', googleScholar:'', website:'',
+      researchAreas:'', emailConfidence:0, emailSource:'linkedin-import',
+      hIndex:0, paperCount:0, orcid:null, s2Id:null, s2Url:null, oaUrl:null,
+      interactionLog:[], notes:'', addedAt: new Date().toISOString()
+    })
+  }
+  window._liImportQueue = []
+  save('contacts')
+  closeModal()
+  renderContacts()
+  showToast(`${queue.length} LinkedIn contact${queue.length>1?'s':''} imported ✓`)
 }
