@@ -7,6 +7,7 @@ let _newsLastRefresh = null     // ISO timestamp of last search
 let _newsLoading     = false
 let _newsInited      = false
 let _newsFilter      = { topicId: 'all', source: 'all', days: 30 }
+let _newsAutoTimer   = null     // setInterval handle for background refresh
 
 const _NEWS_COLORS = [
   { bg: 'bg-indigo-100', text: 'text-indigo-700', border: 'border-indigo-300' },
@@ -42,9 +43,11 @@ async function render_news() {
   }
 
   const filtered = _newsFeedFiltered()
-  const lastStr  = _newsLastRefresh
-    ? `Last refreshed ${_newsAgo(_newsLastRefresh)}`
-    : 'Never refreshed'
+  const arSetting = state.profile?.newsAutoRefresh || 'off'
+  const arLabel   = { off: '', launch: '· auto on launch', '6h': '· auto every 6h', '24h': '· auto daily' }[arSetting] || ''
+  const lastStr   = _newsLastRefresh
+    ? `Last refreshed ${_newsAgo(_newsLastRefresh)} ${arLabel}`
+    : `Never refreshed ${arLabel}`
 
   vc.innerHTML = `
   <div class="flex flex-col h-full overflow-hidden">
@@ -501,6 +504,81 @@ async function _newsSaveConfirm(paperId) {
   closeModal()
   render_news()
   showToast('Saved to Library ✓')
+}
+
+// ── Auto-refresh ──────────────────────────────────────────────────────────────
+
+async function newsInitAutoRefresh() {
+  const setting = state.profile?.newsAutoRefresh || 'off'
+  if (setting === 'off') return
+  if (!state.newsTopics?.length) return
+
+  // Ensure feed meta is loaded before we can check staleness
+  if (!_newsInited) {
+    _newsLastRefresh = (await api.storeGet('newsLastRefresh')) || null
+  }
+
+  const INTERVALS = { launch: 24 * 3600000, '6h': 6 * 3600000, '24h': 24 * 3600000 }
+  const intervalMs = INTERVALS[setting] || 24 * 3600000
+  const staleSince = _newsLastRefresh
+    ? Date.now() - new Date(_newsLastRefresh).getTime()
+    : Infinity
+
+  // Trigger an initial refresh 8 s after launch if stale
+  if (staleSince > intervalMs) {
+    setTimeout(() => _newsBackgroundRefresh(), 8000)
+  }
+
+  // Recurring refresh (not for 'launch' mode — that's one-shot)
+  if (setting === '6h' || setting === '24h') {
+    if (_newsAutoTimer) clearInterval(_newsAutoTimer)
+    _newsAutoTimer = setInterval(() => _newsBackgroundRefresh(), intervalMs)
+  }
+}
+
+async function _newsBackgroundRefresh() {
+  if (_newsLoading || !state.newsTopics?.length) return
+  _newsLoading = true
+
+  // Make sure local state is hydrated
+  if (!_newsInited) {
+    _newsFeed        = (await api.storeGet('newsFeed'))      || []
+    _newsLastRefresh = (await api.storeGet('newsLastRefresh')) || null
+    const saved      = (await api.storeGet('newsSavedIds'))  || []
+    _newsSavedIds    = new Set(saved)
+    _newsFeed.forEach(p => { _newsFeedMap[p.id] = p })
+    _newsInited = true
+  }
+
+  try {
+    const days   = _newsFilter.days || 30
+    const result = await api.searchPapers(state.newsTopics, days)
+
+    if (result.success) {
+      const existingIds = new Set(_newsFeed.map(p => p.id))
+      const fresh       = (result.papers || []).filter(p => !existingIds.has(p.id))
+
+      if (fresh.length > 0) {
+        _newsFeed = [...fresh, ..._newsFeed].slice(0, 500)
+        _newsFeed.forEach(p => { _newsFeedMap[p.id] = p })
+        _newsLastRefresh = new Date().toISOString()
+        await api.storeSet('newsFeed',        _newsFeed)
+        await api.storeSet('newsLastRefresh', _newsLastRefresh)
+
+        if (state.currentView === 'news') {
+          render_news()
+        } else {
+          // Badge on the sidebar nav item
+          window._newsNavBadge = (window._newsNavBadge || 0) + fresh.length
+          renderSidebar()
+          showToast(`📡 ${fresh.length} new paper${fresh.length > 1 ? 's' : ''} in your feed`)
+        }
+      }
+    }
+  } catch {}
+
+  _newsLoading = false
+  if (state.currentView === 'news') render_news()
 }
 
 // ── Click Delegation ──────────────────────────────────────────────────────────

@@ -42,6 +42,8 @@ const ALL_TOOLS = [
 const _ALWAYS_SHOWN = ['dashboard','settings','feedback','support']
 const _DEFAULT_TOOLS = ALL_TOOLS.map(t => t.id)  // all on by default
 
+window._newsNavBadge = 0  // unread new-paper count; set by news.js background refresh
+
 function _enabledTools() {
   const stored = state.sidebarTools
   if (!stored || !Array.isArray(stored) || stored.length === 0) return _DEFAULT_TOOLS
@@ -55,11 +57,17 @@ function renderSidebar() {
   const enabled = _enabledTools()
   const current = state.currentView
 
-  const btn = (id, label, icon) => `
-  <button id="nav-${id}" onclick="showView('${id}')"
-    class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left ${id === current ? 'active' : ''}">
-    ${icon} ${label}
-  </button>`
+  const btn = (id, label, icon) => {
+    const badge = id === 'news' && window._newsNavBadge > 0
+      ? `<span class="ml-auto bg-indigo-500 text-white text-[9px] font-bold rounded-full px-1 min-w-[16px] text-center leading-4">
+           ${window._newsNavBadge > 99 ? '99+' : window._newsNavBadge}
+         </span>`
+      : ''
+    return `<button id="nav-${id}" onclick="showView('${id}')"
+      class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left ${id === current ? 'active' : ''}">
+      ${icon} <span class="flex-1">${label}</span>${badge}
+    </button>`
+  }
 
   // Always-visible top item
   let html = btn('dashboard', 'Dashboard', '🏠') + '<div class="mb-1"></div>'
@@ -335,6 +343,7 @@ async function saveToolSelection(fromSettings) {
 // ── View Router ───────────────────────────────────────────────────────────────
 function showView(name) {
   state.currentView = name
+  if (name === 'news') window._newsNavBadge = 0  // clear badge on visit
   renderSidebar()
   const vc = document.getElementById('view-content')
   vc.className = 'flex-1 overflow-hidden bg-slate-50 flex flex-col'
@@ -824,6 +833,7 @@ async function loadAndShowApp() {
   scheduleEventReminders()
   startDarkSchedule()
   if (typeof _checkAutoBackup === 'function') _checkAutoBackup()
+  if (typeof newsInitAutoRefresh === 'function') newsInitAutoRefresh()
 }
 
 // Lock event from main process (window hidden via X, or tray "Lock & Minimise")

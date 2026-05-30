@@ -410,6 +410,30 @@ function renderAppTab(body) {
       <button onclick="appSaveTopics()" class="btn-primary text-xs py-1.5 px-3 ml-2">Save Topics</button>
     </div>
 
+    <!-- Feed auto-refresh -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-5">
+      <h3 class="text-sm font-bold text-slate-700 mb-1">📡 Feed Auto-Refresh</h3>
+      <p class="text-xs text-slate-400 mb-3">Automatically search for new papers in the background.</p>
+      <div class="space-y-1">
+        ${[
+          ['off',    'Off',            'Manual only — click Refresh whenever you want'],
+          ['launch', 'On launch',      'Refresh once when PhDFlow opens, if more than 24 h since last refresh'],
+          ['6h',     'Every 6 hours',  'Background refresh while the app is open'],
+          ['24h',    'Every 24 hours', 'Once a day while the app is open'],
+        ].map(([val, label, desc]) => `
+        <label class="flex items-start gap-2.5 p-2 rounded-xl cursor-pointer select-none hover:bg-slate-50 transition-colors">
+          <input type="radio" name="news-auto-refresh" value="${val}"
+            ${(state.profile?.newsAutoRefresh || 'off') === val ? 'checked' : ''}
+            onchange="appSaveNewsRefresh('${val}')"
+            class="accent-indigo-600 mt-0.5 flex-shrink-0"/>
+          <div>
+            <div class="text-sm font-medium text-slate-700">${label}</div>
+            <div class="text-xs text-slate-400">${desc}</div>
+          </div>
+        </label>`).join('')}
+      </div>
+    </div>
+
     <!-- Default citation style -->
     <div class="bg-white rounded-2xl border border-slate-200 p-5">
       <h3 class="text-sm font-bold text-slate-700 mb-3">📖 Default Citation Style</h3>
@@ -457,6 +481,15 @@ function renderAppTab(body) {
       </div>
     </div>
   </div>`
+}
+
+async function appSaveNewsRefresh(val) {
+  if (!state.profile) state.profile = {}
+  state.profile.newsAutoRefresh = val
+  await save('profile')
+  // Re-init scheduler with new setting
+  if (typeof newsInitAutoRefresh === 'function') newsInitAutoRefresh()
+  showToast(val === 'off' ? 'Auto-refresh disabled' : `Auto-refresh set to: ${val === 'launch' ? 'on launch' : val} ✓`)
 }
 
 function appAddTopic() {
