@@ -113,10 +113,12 @@ function _calEventChip(e, extra = '') {
       <span class="truncate">${esc(e.title)}</span>
     </div>`
   }
-  const conf = (_calTypeConf()[e.type] || _calTypeConf().personal)
+  const conf    = (_calTypeConf()[e.type] || _calTypeConf().personal)
+  const recurPfx = (e.recurrence && e.recurrence !== 'none') ? '🔁 ' : ''
   return `<div class="text-[10px] px-1.5 py-0.5 rounded truncate cursor-pointer ${conf.bg} ${conf.text} font-medium ${extra}"
     onclick="${sp}openEventDetail('${e.id}')"
-    title="${esc(e.title)}">${esc(e.title)}</div>`
+    title="${e.recurrence && e.recurrence !== 'none' ? '🔁 Repeats ' + e.recurrence + ' — ' : ''}${esc(e.title)}"
+    >${recurPfx}${esc(e.title)}</div>`
 }
 
 // ── Type & colour config ──────────────────────────────────────────────────────
@@ -164,7 +166,10 @@ function _eventsForDate(dateStr) {
     const orig   = new Date(e.date)
     const target = new Date(dateStr)
     if (target <= orig) return false
+    // Respect end date
+    if (e.recurrenceEnd && dateStr > e.recurrenceEnd) return false
     if (e.recurrence === 'daily')    return true
+    if (e.recurrence === 'weekdays') return target.getDay() >= 1 && target.getDay() <= 5
     if (e.recurrence === 'weekly')   return orig.getDay() === target.getDay()
     if (e.recurrence === 'biweekly') {
       const diff = Math.round((target - orig) / 86400000)
@@ -721,11 +726,16 @@ function openEventModal(id, prefillDate) {
     <div class="grid grid-cols-2 gap-3">
       <div>
         <label class="label">Recurrence</label>
-        <select id="ev-recurrence" class="input">
-          ${['none','daily','weekly','biweekly','monthly','yearly'].map(r =>
-            `<option value="${r}" ${e?.recurrence===r?'selected':''}>${r.charAt(0).toUpperCase()+r.slice(1)}</option>`
+        <select id="ev-recurrence" class="input"
+          onchange="document.getElementById('ev-recur-end-row').style.display=this.value&&this.value!=='none'?'':'none'">
+          ${[['none','Does not repeat'],['daily','Daily'],['weekdays','Every weekday'],['weekly','Weekly'],['biweekly','Every 2 weeks'],['monthly','Monthly'],['yearly','Yearly']].map(([v,l]) =>
+            `<option value="${v}" ${(e?.recurrence||'none')===v?'selected':''}>${l}</option>`
           ).join('')}
         </select>
+      </div>
+      <div id="ev-recur-end-row" style="display:${e?.recurrence&&e.recurrence!=='none'?'':'none'}">
+        <label class="label">Ends on <span class="font-normal text-slate-400">(optional)</span></label>
+        <input id="ev-recurrence-end" type="date" value="${e?.recurrenceEnd||''}" class="input"/>
       </div>
       <div>
         <label class="label">Reminder</label>
@@ -760,10 +770,11 @@ function saveEvent(id) {
     endTime:     document.getElementById('ev-end').value,
     location:    document.getElementById('ev-location').value.trim(),
     description: document.getElementById('ev-desc').value.trim(),
-    recurrence:  document.getElementById('ev-recurrence').value,
-    reminder:    document.getElementById('ev-reminder').value || '',
-    createdAt:   existing?.createdAt || new Date().toISOString(),
-    grantId:     existing?.grantId   || null,
+    recurrence:    document.getElementById('ev-recurrence').value,
+    recurrenceEnd: document.getElementById('ev-recurrence-end')?.value || null,
+    reminder:      document.getElementById('ev-reminder').value || '',
+    createdAt:     existing?.createdAt || new Date().toISOString(),
+    grantId:       existing?.grantId   || null,
   }
   if (id) { const i = state.events.findIndex(e=>e.id===id); if (i > -1) state.events[i] = data }
   else state.events.push(data)
@@ -815,7 +826,7 @@ function openEventDetail(id) {
       ${priorityBadge(e.priority)}</div>
     ${e.recurrence && e.recurrence !== 'none' ? `<div class="flex gap-2">
       <span class="text-slate-400 w-20 flex-shrink-0">Repeats</span>
-      <span class="text-slate-600 capitalize">${e.recurrence}</span></div>` : ''}
+      <span class="text-slate-600">🔁 ${({daily:'Daily',weekdays:'Every weekday',weekly:'Weekly',biweekly:'Every 2 weeks',monthly:'Monthly',yearly:'Yearly'})[e.recurrence]||e.recurrence}${e.recurrenceEnd?' · ends '+fmtDate(e.recurrenceEnd):''}</span></div>` : ''}
     ${e.reminder ? `<div class="flex gap-2">
       <span class="text-slate-400 w-20 flex-shrink-0">Reminder</span>
       <span class="text-slate-600">⏰ ${{

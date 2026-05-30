@@ -475,18 +475,27 @@ function todoToggle(id) {
   if (t.status === 'done') {
     t.completedAt = new Date().toISOString()
     if (t.repeat && t.repeat !== 'none') {
+      const nextDate = _nextRecurDate(t.dueDate, t.repeat)
       const next = {
         ...t,
-        id:          uid(),
-        status:      'pending',
-        dueDate:     _nextRecurDate(t.dueDate, t.repeat),
-        todayFlag:   false,
-        completedAt: undefined,
-        createdAt:   new Date().toISOString(),
-        updatedAt:   new Date().toISOString(),
+        id:        uid(),
+        status:    'pending',
+        dueDate:   nextDate,
+        todayFlag: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       }
       delete next.completedAt
       state.todos.push(next)
+      // Prune done instances — keep at most 5 completed copies per recurring title
+      const doneInstances = state.todos
+        .filter(x => x.id !== t.id && x.title === t.title && x.repeat === t.repeat && x.status === 'done')
+        .sort((a, b) => (b.completedAt||'').localeCompare(a.completedAt||''))
+      if (doneInstances.length >= 5) {
+        const pruneIds = new Set(doneInstances.slice(4).map(x => x.id))
+        state.todos = state.todos.filter(x => !pruneIds.has(x.id))
+      }
+      showToast(`✓ Done · Next due ${fmtDate(nextDate)}`)
     }
   } else {
     delete t.completedAt
