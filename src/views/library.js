@@ -23,6 +23,9 @@ function render_library() {
           <div class="border-t border-slate-100 my-1"></div>
           <button onclick="importCitation();closeLibMenus()" class="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50">🔗 Import .bib <span class="text-xs text-slate-400">(BibTeX)</span></button>
           <button onclick="importCitation();closeLibMenus()" class="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50">🔗 Import .ris <span class="text-xs text-slate-400">(RIS format)</span></button>
+          <div class="border-t border-slate-100 my-1"></div>
+          <button onclick="libConnectZotero();closeLibMenus()" class="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50">⚡ Import from Zotero <span class="text-xs text-slate-400">(live)</span></button>
+          <button onclick="libWatchFileSetup();closeLibMenus()" class="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50">👁 Watch .bib/.ris file <span class="text-xs text-slate-400">(auto-sync)</span></button>
         </div>
       </div>
       <div class="relative">
@@ -76,6 +79,9 @@ function render_library() {
     <button onclick="libFetchMeta()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl transition-colors flex-shrink-0">Fetch →</button>
   </div>
 
+  <!-- Source status bar (populated by libInitSources) -->
+  <div id="lib-source-bar" class="hidden mx-5 mt-2 flex gap-2 flex-wrap flex-shrink-0"></div>
+
   <!-- Drop zone -->
   <div id="lib-drop-zone"
     class="drop-zone mx-5 mt-2 border-2 border-dashed border-slate-200 rounded-xl px-4 py-2 text-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/50 transition-colors flex-shrink-0"
@@ -94,6 +100,7 @@ function render_library() {
 
   setupLibraryDropZone()
   renderLibrary()
+  libInitSources()
   document.addEventListener('click', _closeLibMenusOutside, { once: false })
 }
 
@@ -719,4 +726,215 @@ async function _libConfirmFetch() {
   renderLibrary()
   showToast('Paper added ✓')
   window._libFetchMeta = null
+}
+
+// ══ Reference Manager Integration ════════════════════════════════════════════
+
+let _libSourcesInited = false
+
+async function libInitSources() {
+  if (_libSourcesInited) return
+  _libSourcesInited = true
+  api.onLibFileChanged(async ({ content, ext }) => {
+    const parsed = ext === 'bib' ? parseBib(content) : parseRis(content)
+    const added  = _libMergeImported(parsed, 'watched file')
+    if (added > 0) { renderLibrary(); showToast(`📥 ${added} new paper${added>1?'s':''} from watched file`) }
+    await _libUpdateSourceBar()
+  })
+  await _libUpdateSourceBar()
+}
+
+async function _libUpdateSourceBar() {
+  const bar = document.getElementById('lib-source-bar')
+  if (!bar) return
+  const watch = await api.libWatchGet()
+  const chips = []
+  if (watch?.path) {
+    const name = watch.path.split(/[\\/]/).pop()
+    chips.push(`
+    <div class="flex items-center gap-1.5 text-xs bg-emerald-50 border border-emerald-200 text-emerald-700 px-2.5 py-1 rounded-full">
+      <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0"></span>
+      <span>Watching: <strong>${esc(name)}</strong></span>
+      <button onclick="libWatchRemove()" class="ml-1 text-emerald-400 hover:text-rose-500 transition-colors leading-none" title="Stop watching">✕</button>
+    </div>`)
+  }
+  if (chips.length) { bar.innerHTML = chips.join(''); bar.classList.remove('hidden') }
+  else bar.classList.add('hidden')
+}
+
+// ── Dedup helper used by all import paths ─────────────────────────────────────
+function _libMergeImported(papers, source) {
+  let added = 0
+  for (const p of papers) {
+    const dup = state.papers.some(x =>
+      (x.doi && p.doi && x.doi.toLowerCase() === p.doi.toLowerCase()) ||
+      (x.title && p.title && x.title.toLowerCase() === p.title.toLowerCase()))
+    if (!dup) { if (source) p.source = source; state.papers.push(p); added++ }
+  }
+  if (added) save('papers')
+  return added
+}
+
+// ── Zotero ────────────────────────────────────────────────────────────────────
+
+function _zoteroItemToPaper(item) {
+  const z       = item.data || item
+  const authors = (z.creators || [])
+    .filter(c => c.creatorType === 'author' || c.creatorType === 'editor')
+    .map(c => [c.firstName, c.lastName].filter(Boolean).join(' '))
+  const rawYear = z.date ? z.date.match(/\b(19|20)\d{2}\b/)?.[0] : null
+  return {
+    id:        uid(),
+    title:     z.title || 'Untitled',
+    authors,
+    year:      rawYear ? parseInt(rawYear) : null,
+    journal:   z.publicationTitle || z.bookTitle || z.proceedingsTitle || z.university || null,
+    doi:       z.DOI  || null,
+    url:       z.url  || null,
+    abstract:  (z.abstractNote || '').substring(0, 600) || null,
+    topics:    (z.tags || []).map(t => t.tag).filter(Boolean),
+    status:    'unread',
+    source:    'Zotero',
+    zoteroKey: item.key,
+    addedAt:   new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  }
+}
+
+async function libConnectZotero() {
+  const prog = document.getElementById('lib-import-progress')
+  const msg  = document.getElementById('lib-import-msg')
+  const show = t => { prog?.classList.remove('hidden'); if (msg) msg.textContent = t }
+  const hide = () => prog?.classList.add('hidden')
+
+  show('Connecting to Zotero…')
+  const ping = await api.zoteroPing()
+  if (!ping.running) {
+    hide()
+    openModal(`
+    <div class="text-center py-4">
+      <div class="text-4xl mb-3">⚡</div>
+      <h3 class="text-base font-bold text-slate-900 mb-2">Zotero not detected</h3>
+      <p class="text-sm text-slate-500 mb-4 leading-relaxed">
+        Make sure <strong>Zotero</strong> is open on your computer, then try again.<br/>
+        PhDFlow connects via the local API — no account or API key required.
+      </p>
+      <div class="bg-slate-50 rounded-xl p-3 text-xs text-slate-500 text-left space-y-1.5 mb-4">
+        <div>1. Download Zotero free at <button onclick="api.openExternal('https://www.zotero.org/')" class="text-indigo-500 hover:underline">zotero.org</button></div>
+        <div>2. Open Zotero and let it load your library</div>
+        <div>3. Click <strong>Import from Zotero</strong> again</div>
+      </div>
+      <button onclick="closeModal()" class="btn-primary text-sm px-6">Got it</button>
+    </div>`)
+    return
+  }
+
+  show(`Zotero ${ping.version} connected — fetching library…`)
+  const result = await api.zoteroFetchLibrary({})
+  hide()
+  if (!result.success) { showToast(`Zotero: ${result.error}`, 'error'); return }
+
+  const papers   = result.items.map(_zoteroItemToPaper)
+  const newCount = papers.filter(p =>
+    !state.papers.some(x =>
+      (x.doi && p.doi && x.doi.toLowerCase() === p.doi.toLowerCase()) ||
+      (x.title && p.title && x.title.toLowerCase() === p.title.toLowerCase()))
+  ).length
+  const skipCount = papers.length - newCount
+
+  window._zoteroImportPapers = papers
+
+  openModal(`
+  <div>
+    <div class="flex items-center gap-3 mb-4">
+      <div class="text-3xl">⚡</div>
+      <div>
+        <h3 class="text-base font-bold text-slate-900">Import from Zotero</h3>
+        <p class="text-xs text-slate-400">Zotero ${ping.version} · ${papers.length} items found</p>
+      </div>
+    </div>
+    <div class="grid grid-cols-3 gap-3 mb-4">
+      <div class="bg-slate-50 rounded-xl p-3 text-center">
+        <div class="text-2xl font-bold text-slate-900">${papers.length}</div>
+        <div class="text-xs text-slate-400 mt-0.5">In Zotero</div>
+      </div>
+      <div class="bg-emerald-50 rounded-xl p-3 text-center">
+        <div class="text-2xl font-bold text-emerald-700">${newCount}</div>
+        <div class="text-xs text-emerald-600 mt-0.5">New to PhDFlow</div>
+      </div>
+      <div class="bg-slate-50 rounded-xl p-3 text-center">
+        <div class="text-2xl font-bold text-slate-400">${skipCount}</div>
+        <div class="text-xs text-slate-400 mt-0.5">Already here</div>
+      </div>
+    </div>
+    ${newCount === 0
+      ? '<p class="text-sm text-slate-500 text-center py-2">All Zotero papers are already in your PhDFlow library.</p>'
+      : '<p class="text-xs text-slate-400 mb-4">Duplicates matched by DOI and title — existing papers are never overwritten.</p>'}
+    <div class="flex gap-3">
+      <button onclick="closeModal()" class="flex-1 btn-secondary">Cancel</button>
+      ${newCount > 0 ? `<button onclick="_libDoZoteroImport()" class="flex-1 btn-primary">Import ${newCount} paper${newCount>1?'s':''}</button>` : ''}
+    </div>
+  </div>`)
+}
+
+async function _libDoZoteroImport() {
+  const papers = window._zoteroImportPapers || []
+  closeModal()
+  const added = _libMergeImported(papers, 'Zotero')
+  renderLibrary()
+  showToast(`⚡ ${added} paper${added>1?'s':''} imported from Zotero ✓`)
+  window._zoteroImportPapers = null
+}
+
+// ── Watch file ────────────────────────────────────────────────────────────────
+
+async function libWatchFileSetup() {
+  const current = await api.libWatchGet()
+  const name    = current?.path ? current.path.split(/[\\/]/).pop() : null
+  openModal(`
+  <div>
+    <h3 class="text-base font-bold text-slate-900 mb-1">👁 Watch a citation file</h3>
+    <p class="text-xs text-slate-400 mb-4 leading-relaxed">
+      Point PhDFlow at a <code>.bib</code> or <code>.ris</code> file your reference manager keeps updated.
+      PhDFlow watches for changes and auto-imports new entries — works with any app that can export.
+    </p>
+    ${name ? `
+    <div class="flex items-center gap-2 mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-700">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0"></span>
+      <div class="flex-1">Currently watching: <strong>${esc(name)}</strong></div>
+      <button onclick="libWatchRemove();closeModal()" class="text-rose-400 hover:text-rose-600 font-medium">Stop</button>
+    </div>` : ''}
+    <div class="bg-slate-50 rounded-xl p-3 text-xs text-slate-600 space-y-1.5 mb-4">
+      <div class="font-semibold text-slate-700 mb-1">How to auto-export from your app:</div>
+      <div><strong>Mendeley:</strong> File → Export Library → BibTeX, save to a fixed path</div>
+      <div><strong>JabRef:</strong> File → Export → BibTeX — enable "Auto-save" in preferences</div>
+      <div><strong>Endnote:</strong> Edit → Output Styles → export to RIS to a fixed file</div>
+      <div><strong>Any app:</strong> Export as .bib/.ris once; re-export when you add papers</div>
+    </div>
+    <div class="flex gap-3">
+      <button onclick="closeModal()" class="flex-1 btn-secondary">Cancel</button>
+      <button onclick="_libPickWatchFile()" class="flex-1 btn-primary">Choose file…</button>
+    </div>
+  </div>`)
+}
+
+async function _libPickWatchFile() {
+  const filePath = await api.libOpenBibDialog()
+  if (!filePath) return
+  closeModal()
+  const read = await api.libReadFile(filePath)
+  if (read.success) {
+    const parsed = read.ext === 'bib' ? parseBib(read.content) : parseRis(read.content)
+    const added  = _libMergeImported(parsed, 'watched file')
+    if (added > 0) { renderLibrary(); showToast(`📥 ${added} paper${added>1?'s':''} imported`) }
+  }
+  await api.libWatchSet(filePath)
+  await _libUpdateSourceBar()
+  showToast(`👁 Watching ${filePath.split(/[\\/]/).pop()} — new papers auto-imported ✓`)
+}
+
+async function libWatchRemove() {
+  await api.libWatchRemove()
+  await _libUpdateSourceBar()
+  showToast('File watch removed')
 }

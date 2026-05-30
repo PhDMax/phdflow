@@ -1006,6 +1006,113 @@ ipcMain.handle('fetch-ics', async (_, url) => {
   } catch(e) { return { success: false, error: e.message } }
 })
 
+// ─── Reference Manager Integration ───────────────────────────────────────────
+
+const ZOTERO_BASE = 'http://localhost:23119'
+
+ipcMain.handle('zotero-ping', async () => {
+  try {
+    const r = await fetch(`${ZOTERO_BASE}/`, {
+      headers: { 'Zotero-Allowed-Request': '1' },
+      signal: AbortSignal.timeout(2500),
+    })
+    if (!r.ok) return { running: false }
+    const text = await r.text()
+    const version = text.match(/"zoteroVersion"\s*:\s*"([^"]+)"/)?.[1] || 'unknown'
+    return { running: true, version }
+  } catch { return { running: false } }
+})
+
+ipcMain.handle('zotero-fetch-library', async (_, { since } = {}) => {
+  try {
+    const supported = new Set(['journalArticle','book','bookSection','conferencePaper','preprint','thesis','report','manuscript'])
+    let allItems = [], start = 0, lastVersion = null
+
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const params = new URLSearchParams({
+        format: 'json', limit: '100', start: String(start),
+        ...(since ? { since: String(since) } : {}),
+      })
+      const r = await fetch(`${ZOTERO_BASE}/users/0/items?${params}`, {
+        headers: { 'Zotero-Allowed-Request': '1' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!r.ok) return { success: false, error: `Zotero API returned HTTP ${r.status}` }
+
+      const items = await r.json()
+      lastVersion = r.headers.get('Last-Modified-Version') || lastVersion
+      const total = parseInt(r.headers.get('Total-Results') || '0')
+
+      allItems.push(...items.filter(i => supported.has(i.data?.itemType)))
+      start += items.length
+      if (!items.length || start >= total) break
+    }
+    return { success: true, items: allItems, version: lastVersion }
+  } catch(e) { return { success: false, error: e.message } }
+})
+
+// ── Watched .bib / .ris file ──────────────────────────────────────────────────
+
+let _libWatchPath     = null
+let _libWatchDebounce = null
+
+function _libWatchConfigPath() { return path.join(getDataDir(), 'lib-watch.json') }
+function _readLibWatchCfg()    { try { return JSON.parse(fs.readFileSync(_libWatchConfigPath(), 'utf-8')) } catch { return {} } }
+function _saveLibWatchCfg(cfg) { fs.writeFileSync(_libWatchConfigPath(), JSON.stringify(cfg), 'utf-8') }
+
+function _startLibWatch(filePath) {
+  if (_libWatchPath) { try { fs.unwatchFile(_libWatchPath) } catch {} }
+  if (!filePath || !fs.existsSync(filePath)) return
+  _libWatchPath = filePath
+  fs.watchFile(filePath, { interval: 2000 }, () => {
+    if (_libWatchDebounce) clearTimeout(_libWatchDebounce)
+    _libWatchDebounce = setTimeout(() => {
+      try {
+        const content = fs.readFileSync(filePath, 'utf-8')
+        const ext     = path.extname(filePath).slice(1).toLowerCase()
+        mainWindow?.webContents?.send('lib-file-changed', { filePath, content, ext })
+      } catch {}
+    }, 1500)
+  })
+}
+
+ipcMain.handle('lib-watch-get',    ()          => ({ path: _libWatchPath, ..._readLibWatchCfg() }))
+
+ipcMain.handle('lib-watch-set',    (_, filePath) => {
+  _saveLibWatchCfg({ path: filePath, enabled: true })
+  _startLibWatch(filePath)
+  return { success: true }
+})
+
+ipcMain.handle('lib-watch-remove', () => {
+  if (_libWatchPath) { try { fs.unwatchFile(_libWatchPath) } catch {} ; _libWatchPath = null }
+  _saveLibWatchCfg({})
+  return { success: true }
+})
+
+ipcMain.handle('lib-read-file',    async (_, filePath) => {
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8')
+    const ext     = path.extname(filePath).slice(1).toLowerCase()
+    return { success: true, content, ext }
+  } catch(e) { return { success: false, error: e.message } }
+})
+
+ipcMain.handle('lib-open-bib-dialog', async () => {
+  const r = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'], title: 'Choose a .bib or .ris file to watch',
+    filters: [{ name: 'Citation files', extensions: ['bib','ris'] }],
+  })
+  return r.canceled ? null : r.filePaths[0]
+})
+
+// Resume watch on startup
+app.whenReady().then(() => {
+  const cfg = _readLibWatchCfg()
+  if (cfg.enabled && cfg.path && fs.existsSync(cfg.path)) _startLibWatch(cfg.path)
+})
+
 // ─── Share: Helpers ───────────────────────────────────────────────────────────
 
 const BUNDLE_VERSION = 1

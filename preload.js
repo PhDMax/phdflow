@@ -72,6 +72,16 @@ contextBridge.exposeInMainWorld('api', {
   onUpdateStatus:    (cb)                => ipcRenderer.on('update-status', (_, d) => cb(d)),
   quitApp:           ()                  => ipcRenderer.invoke('quit-app'),
 
+  // ── Reference manager integration ────────────────────────────────────────
+  zoteroPing:          ()         => ipcRenderer.invoke('zotero-ping'),
+  zoteroFetchLibrary:  (opts)     => ipcRenderer.invoke('zotero-fetch-library', opts),
+  libWatchGet:         ()         => ipcRenderer.invoke('lib-watch-get'),
+  libWatchSet:         (filePath) => ipcRenderer.invoke('lib-watch-set', filePath),
+  libWatchRemove:      ()         => ipcRenderer.invoke('lib-watch-remove'),
+  libReadFile:         (filePath) => ipcRenderer.invoke('lib-read-file', filePath),
+  libOpenBibDialog:    ()         => ipcRenderer.invoke('lib-open-bib-dialog'),
+  onLibFileChanged:    (cb)       => ipcRenderer.on('lib-file-changed', (_, d) => cb(d)),
+
   // ── Bundle sharing (Option A) ─────────────────────────────────────────────
   bundleExportProject: (opts)  => ipcRenderer.invoke('bundle-export-project', opts),
   bundleExportFull:    (opts)  => ipcRenderer.invoke('bundle-export-full', opts),
