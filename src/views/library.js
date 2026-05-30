@@ -42,7 +42,7 @@ function render_library() {
 
   <!-- Filter bar -->
   <div class="bg-white border-b border-slate-200 px-5 py-3 flex gap-2 flex-shrink-0 flex-wrap items-center">
-    <input id="lib-search" type="text" placeholder="Search title, author or journal..."
+    <input id="lib-search" type="text" placeholder="Search title, author, abstract, notes, keywords…"
       oninput="renderLibrary()"
       class="flex-1 min-w-48 px-3 py-1.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
     <select id="lib-project" onchange="renderLibrary()" class="input" style="width:auto;padding:.35rem .75rem;font-size:.8rem">
@@ -119,6 +119,19 @@ function _closeLibMenusOutside(e) {
       !e.target.closest('[onclick*="toggleLibMenu"]')) closeLibMenus()
 }
 
+// ── Search snippet helper ─────────────────────────────────────────────────────
+function _libSnippet(text, query) {
+  if (!text || !query) return null
+  const lo  = text.toLowerCase()
+  const idx = lo.indexOf(query.toLowerCase())
+  if (idx === -1) return null
+  const start   = Math.max(0, idx - 35)
+  const end     = Math.min(text.length, idx + query.length + 55)
+  const snippet = (start > 0 ? '…' : '') + esc(text.slice(start, end)) + (end < text.length ? '…' : '')
+  const re      = new RegExp('(' + query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi')
+  return snippet.replace(re, '<mark style="background:#fef08a;border-radius:.2rem;padding:0 .1rem">$1</mark>')
+}
+
 // ── Rendering ─────────────────────────────────────────────────────────────────
 function renderLibrary() {
   const q    = document.getElementById('lib-search')?.value.toLowerCase()  || ''
@@ -129,10 +142,25 @@ function renderLibrary() {
 
   let papers = [...state.papers]
 
-  if (q) papers = papers.filter(p =>
-    p.title?.toLowerCase().includes(q) ||
-    _authorStr(p).toLowerCase().includes(q) ||
-    p.journal?.toLowerCase().includes(q))
+  if (q) {
+    papers = papers.filter(p =>
+      p.title?.toLowerCase().includes(q) ||
+      _authorStr(p).toLowerCase().includes(q) ||
+      p.journal?.toLowerCase().includes(q) ||
+      p.abstract?.toLowerCase().includes(q) ||
+      p.notes?.toLowerCase().includes(q) ||
+      (p.topics||[]).some(t => t.toLowerCase().includes(q))
+    )
+    // Relevance: title/author matches float to top
+    papers.sort((a, b) => {
+      const score = x => {
+        if (x.title?.toLowerCase().includes(q))      return 3
+        if (_authorStr(x).toLowerCase().includes(q)) return 2
+        return 1
+      }
+      return score(b) - score(a)
+    })
+  }
 
   if (proj === 'none')      papers = papers.filter(p => !p.projectIds?.length)
   else if (proj !== 'all')  papers = papers.filter(p => p.projectIds?.includes(proj))
@@ -183,6 +211,24 @@ function renderLibrary() {
     const authors = _authorStr(p)
     const srcIcon = srcIcons[p.source] || '📄'
     const linkedProj = state.projects.find(pr => p.projectIds?.includes(pr.id))
+
+    // Build match snippet — only shown when search is active and match is outside title/author
+    let matchSnippet = null
+    if (q) {
+      const inTitle  = p.title?.toLowerCase().includes(q)
+      const inAuthor = _authorStr(p).toLowerCase().includes(q)
+      if (!inTitle && !inAuthor) {
+        if (p.abstract?.toLowerCase().includes(q)) {
+          matchSnippet = { label: 'Abstract', html: _libSnippet(p.abstract, q) }
+        } else if (p.notes?.toLowerCase().includes(q)) {
+          matchSnippet = { label: 'Notes', html: _libSnippet(p.notes, q) }
+        } else {
+          const kw = (p.topics||[]).find(t => t.toLowerCase().includes(q))
+          if (kw) matchSnippet = { label: 'Keyword', html: `<mark style="background:#fef08a;border-radius:.2rem;padding:0 .1rem">${esc(kw)}</mark>` }
+        }
+      }
+    }
+
     return `
     <div class="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 hover:shadow-sm hover:border-slate-300 transition-all cursor-pointer"
          onclick="openPaperDetail('${p.id}')">
@@ -196,6 +242,10 @@ function renderLibrary() {
           ${p.doi    ? `<button onclick="event.stopPropagation();window.api.openExternal('https://doi.org/${esc(p.doi)}')"
               class="text-indigo-400 hover:text-indigo-600 hover:underline ml-1">DOI ↗</button>` : ''}
         </div>
+        ${matchSnippet ? `
+        <div class="mt-1.5 text-xs text-slate-500 leading-relaxed">
+          <span class="text-slate-400 font-medium mr-1">${matchSnippet.label}:</span>${matchSnippet.html}
+        </div>` : ''}
         ${linkedProj ? `<div class="mt-1"><span class="text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600">${esc(linkedProj.name)}</span></div>` : ''}
       </div>
       <span class="text-xs px-2 py-0.5 rounded-full flex-shrink-0 mt-0.5 ${staColors[p.status] || 'bg-slate-100 text-slate-500'}">${p.status || 'unread'}</span>
