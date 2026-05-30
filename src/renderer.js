@@ -20,9 +20,66 @@ const state = {
   todoGroups: [],
   darkModeSchedule: null,
   paperCollections: [],
+  sidebarTools: null,
 }
 
 const VIEWS = ['dashboard','projects','library','grants','news','notes','whiteboard','utilities','discover','contacts','calendar','todos','feedback','settings','support']
+
+// ── Tool registry — single source of truth for sidebar & picker ───────────────
+const ALL_TOOLS = [
+  { id:'projects',   label:'Projects',        icon:'📋', section:'Research',  desc:'Manage research projects and work threads' },
+  { id:'library',    label:'Paper Library',   icon:'📚', section:'Research',  desc:'Store, annotate and cite your papers' },
+  { id:'grants',     label:'Grant Scan',      icon:'💰', section:'Research',  desc:'Discover and track funding opportunities' },
+  { id:'news',       label:'Literature Feed', icon:'📡', section:'Research',  desc:'Daily paper feed from arXiv & OpenAlex' },
+  { id:'notes',      label:'Notes',           icon:'📝', section:'Workspace', desc:'Linked markdown notes and lab logs' },
+  { id:'whiteboard', label:'Whiteboard',      icon:'🎨', section:'Workspace', desc:'Visual brainstorming canvas with smart pen' },
+  { id:'utilities',  label:'Utilities',       icon:'🔧', section:'Workspace', desc:'PDF tools, citations, unit converter, R assistant' },
+  { id:'discover',   label:'Discover',        icon:'🔍', section:'Network',   desc:'Find researchers by name or research area' },
+  { id:'contacts',   label:'Contacts',        icon:'👥', section:'Network',   desc:'Your academic network and collaborators' },
+  { id:'calendar',   label:'Calendar',        icon:'📅', section:'Planning',  desc:'Deadlines, milestones and iCal sync' },
+  { id:'todos',      label:'To-Do List',      icon:'✅', section:'Planning',  desc:'Tasks with time estimates and daily focus mode' },
+]
+const _ALWAYS_SHOWN = ['dashboard','settings','feedback','support']
+const _DEFAULT_TOOLS = ALL_TOOLS.map(t => t.id)  // all on by default
+
+function _enabledTools() {
+  const stored = state.sidebarTools
+  if (!stored || !Array.isArray(stored) || stored.length === 0) return _DEFAULT_TOOLS
+  return stored
+}
+
+// ── Dynamic sidebar renderer ──────────────────────────────────────────────────
+function renderSidebar() {
+  const nav     = document.getElementById('sidebar-nav')
+  if (!nav) return
+  const enabled = _enabledTools()
+  const current = state.currentView
+
+  const btn = (id, label, icon) => `
+  <button id="nav-${id}" onclick="showView('${id}')"
+    class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left ${id === current ? 'active' : ''}">
+    ${icon} ${label}
+  </button>`
+
+  // Always-visible top item
+  let html = btn('dashboard', 'Dashboard', '🏠') + '<div class="mb-1"></div>'
+
+  // Grouped sections
+  const sections = ['Research','Workspace','Network','Planning']
+  for (const section of sections) {
+    const tools = ALL_TOOLS.filter(t => t.section === section && enabled.includes(t.id))
+    if (!tools.length) continue
+    html += `<div class="nav-section mt-2">${section}</div>`
+    html += tools.map(t => btn(t.id, t.label, t.icon)).join('')
+  }
+
+  // Always-visible bottom items
+  html += `<div class="nav-section mt-2">Other</div>`
+  html += btn('feedback', 'Feedback', '💬')
+  html += btn('settings', 'Settings', '⚙️')
+
+  nav.innerHTML = html
+}
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
 function applyTheme(t) {
@@ -77,30 +134,35 @@ function applyFont(font) {
 
 // ── Onboarding + view init are called after login via loadAndShowApp() ─────────
 
-// ── Onboarding ────────────────────────────────────────────────────────────────
+// ── Onboarding — Step 1: Identity & Theme ────────────────────────────────────
 function showOnboarding() {
+  window._onboardTheme = 'light'
   document.getElementById('view-content').innerHTML = `
-  <div class="flex-1 flex items-center justify-center p-8 h-full">
-    <div class="w-full max-w-sm">
+  <div class="flex-1 flex items-center justify-center p-8 h-full overflow-y-auto">
+    <div class="w-full max-w-sm py-8">
       <div class="text-center mb-8">
         <div class="text-5xl mb-4">⚗️</div>
-        <h1 class="text-2xl font-bold text-slate-900">PhDFlow</h1>
-        <p class="text-slate-500 mt-2 text-sm">Your all-in-one research workspace.<br/>Open source. All data stays on your device.</p>
+        <h1 class="text-2xl font-bold text-slate-900">Welcome to PhDFlow</h1>
+        <p class="text-slate-500 mt-2 text-sm">Your all-in-one research workspace.<br/>Free forever · No account · All data stays on your device.</p>
       </div>
       <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
+        <div class="flex items-center gap-2 mb-2">
+          <div class="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">1</div>
+          <span class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Tell us about yourself</span>
+        </div>
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1.5">What's your name?</label>
           <input id="onboard-name" type="text" placeholder="e.g. Anya Sharma"
             class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            onkeydown="if(event.key==='Enter')completeOnboarding()"/>
+            onkeydown="if(event.key==='Enter')onboardNext()"/>
         </div>
         <div>
-          <label class="block text-sm font-medium text-slate-700 mb-1.5">Your research field <span class="text-slate-400 font-normal">(optional)</span></label>
-          <input id="onboard-field" type="text" placeholder="e.g. Computational Materials Science"
+          <label class="block text-sm font-medium text-slate-700 mb-1.5">Research field <span class="text-slate-400 font-normal">(optional)</span></label>
+          <input id="onboard-field" type="text" placeholder="e.g. Computational Neuroscience"
             class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
         </div>
         <div>
-          <label class="block text-sm font-medium text-slate-700 mb-2">Choose your theme</label>
+          <label class="block text-sm font-medium text-slate-700 mb-2">Theme</label>
           <div class="grid grid-cols-2 gap-2">
             <button id="onboard-theme-light" onclick="onboardPickTheme('light')"
               class="flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 border-indigo-500 bg-slate-50 transition-all">
@@ -120,15 +182,15 @@ function showOnboarding() {
             </button>
           </div>
         </div>
-        <button onclick="completeOnboarding()"
+        <button onclick="onboardNext()"
           class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors">
-          Get Started →
+          Choose your tools →
         </button>
         <p class="text-center text-xs text-slate-400">No account · No API key · Open source</p>
       </div>
     </div>
   </div>`
-  window._onboardTheme = 'light'
+  setTimeout(() => document.getElementById('onboard-name')?.focus(), 80)
 }
 
 function onboardPickTheme(t) {
@@ -140,10 +202,126 @@ function onboardPickTheme(t) {
     `flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all ${t==='dark' ? 'border-indigo-500 bg-slate-800' : 'border-transparent bg-slate-100'}`
 }
 
-async function completeOnboarding() {
-  const name  = document.getElementById('onboard-name').value.trim()
-  const field = document.getElementById('onboard-field').value.trim()
+function onboardNext() {
+  const name = document.getElementById('onboard-name')?.value.trim()
   if (!name) { showToast('Please enter your name', 'error'); return }
+  window._onboardName  = name
+  window._onboardField = document.getElementById('onboard-field')?.value.trim() || ''
+  showToolPicker()
+}
+
+// ── Onboarding — Step 2: Tool Picker ─────────────────────────────────────────
+function showToolPicker(fromSettings = false) {
+  const enabled = fromSettings ? _enabledTools() : _DEFAULT_TOOLS
+  const sections = ['Research','Workspace','Network','Planning']
+
+  const toolCard = (t) => {
+    const on = enabled.includes(t.id)
+    return `<label class="tool-picker-card flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all select-none
+      ${on ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 bg-white hover:border-slate-300'}"
+      onclick="toggleToolCard('${t.id}',this)">
+      <span class="text-xl leading-none mt-0.5 flex-shrink-0">${t.icon}</span>
+      <div class="min-w-0 flex-1">
+        <div class="text-xs font-semibold text-slate-800">${t.label}</div>
+        <div class="text-xs text-slate-400 mt-0.5 leading-snug">${t.desc}</div>
+      </div>
+      <input type="checkbox" class="tool-cb accent-indigo-600 mt-1 flex-shrink-0" data-id="${t.id}" ${on?'checked':''}
+        onclick="event.stopPropagation()"/>
+    </label>`
+  }
+
+  const body = sections.map(s => {
+    const tools = ALL_TOOLS.filter(t => t.section === s)
+    return `
+    <div>
+      <div class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">${s}</div>
+      <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        ${tools.map(toolCard).join('')}
+      </div>
+    </div>`
+  }).join('')
+
+  if (fromSettings) {
+    openModal(`
+    <h3 class="text-base font-bold text-slate-900 mb-1">🧩 Sidebar Tools</h3>
+    <p class="text-xs text-slate-400 mb-4">Choose which tools appear in your sidebar. You can change this any time.</p>
+    <div class="space-y-4">${body}</div>
+    <div class="flex gap-2 mt-5 justify-end">
+      <button onclick="closeModal()" class="btn-secondary text-xs py-2 px-4">Cancel</button>
+      <button onclick="saveToolSelection(true)" class="btn-primary text-xs py-2 px-4">Save</button>
+    </div>`, true)
+    return
+  }
+
+  document.getElementById('view-content').innerHTML = `
+  <div class="flex-1 flex items-center justify-center p-8 h-full overflow-y-auto">
+    <div class="w-full max-w-2xl py-8">
+      <div class="text-center mb-6">
+        <div class="text-4xl mb-3">🧩</div>
+        <h2 class="text-xl font-bold text-slate-900">Choose your tools</h2>
+        <p class="text-slate-500 text-sm mt-1">Pick what appears in your sidebar. You can add or remove tools any time in Settings.</p>
+      </div>
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-2">
+          <div class="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-xs font-bold">2</div>
+          <span class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Select your tools</span>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="onboardSelectAll(true)"  class="text-xs text-indigo-600 hover:underline">Select all</button>
+          <span class="text-slate-300 text-xs">·</span>
+          <button onclick="onboardSelectAll(false)" class="text-xs text-slate-400 hover:underline">Clear all</button>
+        </div>
+      </div>
+      <div class="space-y-4">${body}</div>
+      <div class="mt-6 flex gap-3">
+        <button onclick="showOnboarding()"
+          class="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors">
+          ← Back
+        </button>
+        <button onclick="saveToolSelection(false)"
+          class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors">
+          Enter PhDFlow →
+        </button>
+      </div>
+    </div>
+  </div>`
+}
+
+function toggleToolCard(id, label) {
+  const cb = label.querySelector('input[type=checkbox]')
+  if (!cb) return
+  cb.checked = !cb.checked
+  label.className = label.className
+    .replace(/border-indigo-500 bg-indigo-50|border-slate-200 bg-white hover:border-slate-300/g, '')
+    .trim()
+  label.className += cb.checked
+    ? ' border-indigo-500 bg-indigo-50'
+    : ' border-slate-200 bg-white hover:border-slate-300'
+}
+
+function onboardSelectAll(on) {
+  document.querySelectorAll('.tool-cb').forEach(cb => {
+    cb.checked = on
+    const card = cb.closest('.tool-picker-card')
+    if (!card) return
+    card.className = card.className
+      .replace(/border-indigo-500 bg-indigo-50|border-slate-200 bg-white hover:border-slate-300/g, '')
+      .trim()
+    card.className += on ? ' border-indigo-500 bg-indigo-50' : ' border-slate-200 bg-white hover:border-slate-300'
+  })
+}
+
+async function saveToolSelection(fromSettings) {
+  const checked = [...document.querySelectorAll('.tool-cb:checked')].map(cb => cb.dataset.id)
+  // Ensure at least 1 tool is selected
+  const selected = checked.length ? checked : _DEFAULT_TOOLS
+  state.sidebarTools = selected
+  await window.api.storeSet('sidebarTools', selected)
+  renderSidebar()
+  if (fromSettings) { closeModal(); showToast('Sidebar updated ✓'); return }
+  // Complete onboarding
+  const name  = window._onboardName  || 'Researcher'
+  const field = window._onboardField || ''
   state.profile = { name, field, avatar: name[0].toUpperCase() }
   await window.api.storeSet('profile', state.profile)
   const theme = window._onboardTheme || 'light'
@@ -157,7 +335,7 @@ async function completeOnboarding() {
 // ── View Router ───────────────────────────────────────────────────────────────
 function showView(name) {
   state.currentView = name
-  VIEWS.forEach(v => document.getElementById(`nav-${v}`)?.classList.toggle('active', v === name))
+  renderSidebar()
   const vc = document.getElementById('view-content')
   vc.className = 'flex-1 overflow-hidden bg-slate-50 flex flex-col'
 
@@ -631,14 +809,16 @@ async function lockApp() {
 
 async function loadAndShowApp() {
   const keys = ['profile','projects','papers','contacts','notes','whiteboards','events','todos',
-                 'grants','newsFeeds','newsTopics','newsRead','calGoals','calFeeds','todoGroups','darkModeSchedule','paperCollections']
-  const [, ...vals] = await Promise.all([
+                 'grants','newsFeeds','newsTopics','newsRead','calGoals','calFeeds','todoGroups',
+                 'darkModeSchedule','paperCollections','sidebarTools']
+  await Promise.all([
     window.api.storeGet('theme').then(t => applyTheme(t || 'light')),
     window.api.storeGet('accentColor').then(c => applyAccent(c || 'indigo')),
     window.api.storeGet('fontFamily').then(f => applyFont(f || 'system')),
     ...keys.map(async k => { const val = await window.api.storeGet(k); if (val !== null) state[k] = val })
   ])
   updateSidebarProfile()
+  renderSidebar()
   if (!state.profile) { showOnboarding(); return }
   showView('dashboard')
   scheduleEventReminders()

@@ -249,6 +249,21 @@ async function renderPersonalizeTab(body) {
       </div>
     </div>
 
+    <!-- Sidebar tools -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-5">
+      <div class="flex items-center justify-between mb-1">
+        <h3 class="text-sm font-bold text-slate-700">🧩 Sidebar Tools</h3>
+        <button onclick="showToolPicker(true)" class="btn-secondary text-xs py-1.5 px-3">Customise →</button>
+      </div>
+      <p class="text-xs text-slate-400 mb-3">Choose which tools appear in your sidebar. Dashboard and Settings are always visible.</p>
+      <div class="flex flex-wrap gap-1.5">
+        ${(typeof ALL_TOOLS !== 'undefined' ? ALL_TOOLS : []).map(t => {
+          const enabled = (state.sidebarTools || []).includes(t.id) || !state.sidebarTools
+          return `<span class="text-xs px-2.5 py-1 rounded-full border ${enabled ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-400 line-through'}">${t.icon} ${t.label}</span>`
+        }).join('')}
+      </div>
+    </div>
+
     <!-- Dashboard widgets -->
     <div class="bg-white rounded-2xl border border-slate-200 p-5">
       <h3 class="text-sm font-bold text-slate-700 mb-1">🏠 Dashboard Widgets</h3>

@@ -124,32 +124,8 @@
     </button>
   </div>
 
-  <!-- Nav -->
-  <nav class="flex-1 p-1.5">
-    <button id="nav-dashboard" onclick="showView('dashboard')" class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left mb-1">🏠 Dashboard</button>
-    <div class="nav-section">Research</div>
-    <button id="nav-projects"  onclick="showView('projects')"  class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left">📋 Projects</button>
-    <button id="nav-library"   onclick="showView('library')"   class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left">📚 Paper Library</button>
-    <button id="nav-grants"    onclick="showView('grants')"    class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left">🔍 Grant Scan</button>
-    <button id="nav-news"      onclick="showView('news')"      class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left">📡 Literature Feed</button>
-
-    <div class="nav-section mt-2">Workspace</div>
-    <button id="nav-notes"     onclick="showView('notes')"     class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left">📝 Notes</button>
-    <button id="nav-whiteboard" onclick="showView('whiteboard')" class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left">🎨 Whiteboard</button>
-    <button id="nav-utilities" onclick="showView('utilities')" class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left">🔧 Utilities</button>
-
-    <div class="nav-section mt-2">Network</div>
-    <button id="nav-discover"  onclick="showView('discover')"  class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left">🔍 Discover</button>
-    <button id="nav-contacts"  onclick="showView('contacts')"  class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left">👥 Contacts</button>
-
-    <div class="nav-section mt-2">Planning</div>
-    <button id="nav-calendar"  onclick="showView('calendar')"  class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left">📅 Calendar</button>
-    <button id="nav-todos"     onclick="showView('todos')"     class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left">✅ To-Do List</button>
-
-    <div class="nav-section mt-2">Other</div>
-    <button id="nav-feedback"  onclick="showView('feedback')"  class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left">💬 Feedback</button>
-    <button id="nav-settings"  onclick="showView('settings')"  class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left">⚙️ Settings</button>
-  </nav>
+  <!-- Nav — built dynamically by renderSidebar() in renderer.js -->
+  <nav id="sidebar-nav" class="flex-1 p-1.5"></nav>
 
   <!-- Support button -->
   <div class="px-2 pb-2">
