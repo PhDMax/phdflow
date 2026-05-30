@@ -750,6 +750,7 @@ function saveEvent(id) {
   const title = document.getElementById('ev-title').value.trim()
   const date  = document.getElementById('ev-date').value
   if (!title || !date) { showToast('Title and date are required','error'); return }
+  const existing = id ? state.events.find(e=>e.id===id) : null
   const data = {
     id:          id || uid(),
     title, date,
@@ -761,7 +762,8 @@ function saveEvent(id) {
     description: document.getElementById('ev-desc').value.trim(),
     recurrence:  document.getElementById('ev-recurrence').value,
     reminder:    document.getElementById('ev-reminder').value || '',
-    createdAt:   id ? (state.events.find(e=>e.id===id)?.createdAt || new Date().toISOString()) : new Date().toISOString()
+    createdAt:   existing?.createdAt || new Date().toISOString(),
+    grantId:     existing?.grantId   || null,
   }
   if (id) { const i = state.events.findIndex(e=>e.id===id); if (i > -1) state.events[i] = data }
   else state.events.push(data)
@@ -784,11 +786,19 @@ function openEventDetail(id) {
   const showCountdown = days >= 0 && ['deadline','exam','conference','milestone'].includes(e.type)
   const ctCls = days <= 3 ? 'bg-rose-50 text-rose-700' : days <= 7 ? 'bg-amber-50 text-amber-700' : 'bg-indigo-50 text-indigo-700'
 
+  const linkedGrant = e.grantId ? (state.grants||[]).find(g => g.id === e.grantId) : null
+
   openModal(`
   <div class="flex items-start justify-between gap-3 mb-3">
     <h3 class="font-bold text-slate-900 text-lg leading-snug">${esc(e.title)}</h3>
     <span class="text-xs px-2.5 py-1 rounded-full font-semibold flex-shrink-0 ${conf.bg} ${conf.text}">${conf.label}</span>
   </div>
+  ${linkedGrant ? `
+  <div class="flex items-center gap-2 mb-3 p-2.5 bg-indigo-50 border border-indigo-100 rounded-xl text-xs">
+    <span>💰</span>
+    <span class="flex-1 text-indigo-700 font-medium">${esc(linkedGrant.title)}</span>
+    <button onclick="closeModal();showView('grants')" class="text-indigo-500 hover:underline">View grant →</button>
+  </div>` : ''}
   ${showCountdown ? `
   <div class="text-center py-3 mb-3 rounded-xl ${ctCls}">
     <div class="text-3xl font-black">${days === 0 ? 'Today!' : days + (days===1?' day':' days')}</div>

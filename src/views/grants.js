@@ -703,9 +703,65 @@ function saveGrant(id) {
   }
   if (id) { const i=state.grants.findIndex(g=>g.id===id); if(i>-1) state.grants[i]=data }
   else state.grants.push(data)
-  save('grants'); closeModal()
+  save('grants')
+  const calMsg = _syncGrantCalendarEvent(data)
+  closeModal()
   renderGrantTab()
-  showToast(id ? 'Grant updated ✓' : 'Grant added ✓')
+  showToast(calMsg || (id ? 'Grant updated ✓' : 'Grant added ✓'))
+}
+
+// ── Grant ↔ Calendar sync ─────────────────────────────────────────────────────
+function _syncGrantCalendarEvent(grant) {
+  if (!state.events) state.events = []
+  const linked = state.events.find(e => e.grantId === grant.id)
+
+  // Finished grants — remove event if it exists
+  if (grant.status === 'awarded' || grant.status === 'rejected') {
+    if (linked) {
+      state.events = state.events.filter(e => e.grantId !== grant.id)
+      save('events')
+    }
+    return null
+  }
+
+  // No deadline — remove stale event
+  if (!grant.deadline) {
+    if (linked) {
+      state.events = state.events.filter(e => e.grantId !== grant.id)
+      save('events')
+    }
+    return null
+  }
+
+  const eventTitle = `${grant.title} — deadline`
+  const eventDesc  = `Grant deadline: ${grant.funder}${grant.amount ? ' · ' + grant.amount : ''}`
+
+  if (linked) {
+    // Keep in sync — update title/date/desc
+    linked.title       = eventTitle
+    linked.date        = grant.deadline
+    linked.description = eventDesc
+    save('events')
+    return null
+  }
+
+  // Create new deadline event
+  state.events.push({
+    id:          uid(),
+    title:       eventTitle,
+    date:        grant.deadline,
+    type:        'deadline',
+    priority:    'high',
+    startTime:   '', endTime: '', location: '',
+    description: eventDesc,
+    recurrence:  'none',
+    reminder:    '7days',
+    grantId:     grant.id,
+    createdAt:   new Date().toISOString(),
+  })
+  save('events')
+  if (typeof scheduleEventReminders === 'function') scheduleEventReminders()
+  return 'Grant saved ✓ · 📅 Deadline added to Calendar'
 }
 
 // ── Grant detail ──────────────────────────────────────────────────────────────
@@ -774,6 +830,23 @@ function openGrantDetail(id) {
     </div>
     <div id="grant-task-list">${renderGrantTasks(id)}</div>
   </div>
+
+  <!-- Calendar event link -->
+  ${(() => {
+    const ev = (state.events||[]).find(e => e.grantId === id)
+    if (!ev) return g.deadline && g.status !== 'awarded' && g.status !== 'rejected'
+      ? `<div class="mb-3 p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-2 text-xs text-slate-500">
+           <span>📅</span>
+           <span class="flex-1">No calendar event yet.</span>
+           <button onclick="_grantCreateEventNow('${id}')" class="text-indigo-600 hover:underline font-medium">Add to Calendar</button>
+         </div>`
+      : ''
+    return `<div class="mb-3 p-3 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center gap-2 text-xs">
+      <span>📅</span>
+      <span class="flex-1 text-indigo-700 font-medium">Deadline in Calendar: ${fmtDate(ev.date)}</span>
+      <button onclick="closeModal();showView('calendar')" class="text-indigo-500 hover:underline">View →</button>
+    </div>`
+  })()}
 
   <div class="flex gap-3 border-t border-slate-100 pt-4">
     <button onclick="openGrantModal('${id}')" class="flex-1 btn-secondary">✏️ Edit</button>
@@ -915,6 +988,14 @@ function createTaskForGrant(grantId) {
   openTodoModal(null)
 }
 
+function _grantCreateEventNow(grantId) {
+  const g = state.grants.find(x => x.id === grantId)
+  if (!g) return
+  _syncGrantCalendarEvent(g)
+  openGrantDetail(grantId)
+  showToast('📅 Deadline added to Calendar ✓')
+}
+
 // ── Duplicate ─────────────────────────────────────────────────────────────────
 function duplicateGrant(id) {
   const g = state.grants.find(x=>x.id===id)
@@ -934,12 +1015,20 @@ function duplicateGrant(id) {
 }
 
 async function deleteGrant(id) {
-  const snap  = [...state.grants]
+  const snap       = [...state.grants]
+  const snapEvents = [...state.events]
   const title = state.grants.find(g=>g.id===id)?.title || 'Grant'
   state.grants = state.grants.filter(g=>g.id!==id)
-  save('grants'); closeModal(); renderGrantTab()
+  // Remove linked calendar event
+  const hadEvent = state.events.some(e => e.grantId === id)
+  state.events   = state.events.filter(e => e.grantId !== id)
+  save('grants')
+  if (hadEvent) save('events')
+  closeModal(); renderGrantTab()
   showUndoToast(`"${title}" deleted`, () => {
     state.grants = snap
-    save('grants'); renderGrantTab(); showToast('Grant restored ✓')
+    state.events = snapEvents
+    save('grants'); save('events')
+    renderGrantTab(); showToast('Grant restored ✓')
   })
 }
