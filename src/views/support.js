@@ -11,7 +11,7 @@ function render_support() {
     <div class="max-w-xl mx-auto space-y-5">
 
       <!-- Hero card -->
-      <div class="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-6 text-center">
+      <div id="support-hero" class="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-6 text-center">
         <div class="text-4xl mb-3">☕</div>
         <h2 class="text-xl font-bold text-slate-900 mb-2">Keep PhDFlow going</h2>
         <p class="text-sm text-slate-600 leading-relaxed max-w-sm mx-auto">

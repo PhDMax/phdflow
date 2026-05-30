@@ -153,7 +153,7 @@ function render_notes() {
   </div>
 
   <!-- ── MAIN ────────────────────────────────────────────────────────────── -->
-  <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;background:#fff">
+  <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;background:${document.documentElement.dataset.theme==='dark'?'#1e293b':'#fff'}">
     ${active ? _notesEditorPanel(active) : `
     <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:3rem">
       <div style="font-size:3rem;margin-bottom:1.25rem;opacity:.25">📄</div>
@@ -178,14 +178,25 @@ function _notesEditorPanel(note) {
     ? new Date(note.updatedAt).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})
     : ''
 
+  // Theme-aware palette — all inline styles use these instead of hardcoded hex
+  const _dk   = document.documentElement.dataset.theme === 'dark'
+  const _bg   = _dk ? '#1e293b' : '#fff'
+  const _bgs  = _dk ? '#0f172a' : '#f9fafb'
+  const _bdr  = _dk ? '#334155' : '#f3f4f6'
+  const _bdrb = _dk ? '#334155' : '#e5e7eb'
+  const _tx   = _dk ? '#e2e8f0' : '#111827'
+  const _txm  = _dk ? '#94a3b8' : '#6b7280'
+  const _txf  = _dk ? '#475569' : '#d1d5db'
+  const _chip = _dk ? 'background:#1e293b;color:#94a3b8' : 'background:#f3f4f6;color:#6b7280'
+
   // Toolbar HTML
   const tbHtml = _NOTES_TB.map(a => {
     if (a.id === 'SEP') return `<div style="width:1px;height:1rem;background:#e5e7eb;margin:0 .25rem;flex-shrink:0"></div>`
     return `<button data-tb="${a.id}" title="${a.title}"
       style="padding:.3rem .5rem;border:none;background:none;border-radius:.375rem;font-size:.75rem;
-        color:#6b7280;cursor:pointer;flex-shrink:0;${a.s||''}"
-      onmouseover="this.style.background='#f3f4f6';this.style.color='#111827'"
-      onmouseout="this.style.background='none';this.style.color='#6b7280'">
+        color:${_txm};cursor:pointer;flex-shrink:0;${a.s||''}"
+      onmouseover="this.style.background='${_bdr}';this.style.color='${_tx}'"
+      onmouseout="this.style.background='none';this.style.color='${_txm}'">
       ${a.label}
     </button>`
   }).join('')
@@ -195,12 +206,12 @@ function _notesEditorPanel(note) {
     const resolved    = _resolveWikiLinks(note.content || '')
     const previewHtml = resolved
       ? marked.parse(resolved)
-      : '<p style="color:#d1d5db;font-style:italic">Nothing here yet…</p>'
+      : `<p style="color:${_txf};font-style:italic">Nothing here yet…</p>`
 
     const backlinks = _getBacklinks(note.id)
     const backlinksHtml = backlinks.length ? `
-    <div style="margin-top:3rem;padding-top:1.5rem;border-top:1px solid #f3f4f6">
-      <div style="font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#9ca3af;margin-bottom:.875rem">
+    <div style="margin-top:3rem;padding-top:1.5rem;border-top:1px solid ${_bdr}">
+      <div style="font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:${_txm};margin-bottom:.875rem">
         ↩ Referenced by (${backlinks.length})
       </div>
       <div style="display:flex;flex-direction:column;gap:.5rem">
@@ -208,8 +219,8 @@ function _notesEditorPanel(note) {
           const bt = NOTE_TYPES[n.type] || NOTE_TYPES.note
           return `<button onclick="openNote('${n.id}')"
             style="display:flex;align-items:center;gap:.625rem;padding:.625rem .875rem;
-              border:1px solid #ede9fe;background:#faf5ff;border-radius:.75rem;
-              font-size:.8rem;color:#7c3aed;cursor:pointer;text-align:left;font-family:inherit">
+              border:1px solid ${_dk?'#4c1d95':'#ede9fe'};background:${_dk?'#2e1065':'#faf5ff'};border-radius:.75rem;
+              font-size:.8rem;color:#a78bfa;cursor:pointer;text-align:left;font-family:inherit">
             <span>${bt.icon}</span>
             <span style="font-weight:500">${esc(n.title||'Untitled')}</span>
             <span style="font-size:.7rem;color:#c4b5fd;margin-left:auto">${bt.label}</span>
@@ -220,40 +231,40 @@ function _notesEditorPanel(note) {
 
     return `
     <!-- Reading top bar -->
-    <div style="border-bottom:1px solid #f3f4f6;padding:.5rem 1.25rem;display:flex;align-items:center;gap:.75rem;flex-shrink:0">
+    <div style="border-bottom:1px solid ${_bdr};padding:.5rem 1.25rem;display:flex;align-items:center;gap:.75rem;flex-shrink:0;background:${_bg}">
       <span style="${type.cls};padding:.2rem .6rem;border-radius:.375rem;font-size:.72rem;font-weight:600">${type.icon} ${type.label}</span>
-      <span style="font-size:.75rem;color:#d1d5db">${updatedStr}</span>
+      <span style="font-size:.75rem;color:${_txf}">${updatedStr}</span>
       <div style="margin-left:auto;display:flex;gap:.5rem">
         <button onclick="toggleNotePin('${note.id}')"
           title="${note.pinned ? 'Unpin note' : 'Pin to top'}"
-          style="padding:.375rem .875rem;border:1px solid ${note.pinned ? '#a5b4fc' : '#e5e7eb'};background:${note.pinned ? '#eef2ff' : '#fff'};border-radius:.5rem;font-size:.75rem;color:${note.pinned ? '#6366f1' : '#6b7280'};cursor:pointer">
+          style="padding:.375rem .875rem;border:1px solid ${note.pinned ? '#a5b4fc' : _bdrb};background:${note.pinned ? (_dk?'#1e1b4b':'#eef2ff') : _bg};border-radius:.5rem;font-size:.75rem;color:${note.pinned ? '#6366f1' : _txm};cursor:pointer">
           📌 ${note.pinned ? 'Pinned' : 'Pin'}
         </button>
         <button onclick="exportNote('${note.id}')"
-          style="padding:.375rem .875rem;border:1px solid #e5e7eb;background:#fff;border-radius:.5rem;font-size:.75rem;color:#6b7280;cursor:pointer">
+          style="padding:.375rem .875rem;border:1px solid ${_bdrb};background:${_bg};border-radius:.5rem;font-size:.75rem;color:${_txm};cursor:pointer">
           ↓ Export
         </button>
         <button onclick="deleteNote('${note.id}')"
-          style="padding:.375rem .875rem;border:1px solid #fecaca;background:#fff;border-radius:.5rem;font-size:.75rem;color:#ef4444;cursor:pointer">
+          style="padding:.375rem .875rem;border:1px solid #fecaca;background:${_bg};border-radius:.5rem;font-size:.75rem;color:#ef4444;cursor:pointer">
           Delete
         </button>
         <button onclick="notesToggleRead()"
-          style="padding:.375rem .875rem;background:#111827;color:#fff;border:none;border-radius:.5rem;font-size:.75rem;font-weight:600;cursor:pointer">
+          style="padding:.375rem .875rem;background:${_dk?'#e2e8f0':'#111827'};color:${_dk?'#111827':'#fff'};border:none;border-radius:.5rem;font-size:.75rem;font-weight:600;cursor:pointer">
           ✏️ Edit
         </button>
       </div>
     </div>
 
     <!-- Reading document -->
-    <div style="flex:1;overflow-y:auto">
+    <div style="flex:1;overflow-y:auto;background:${_bg}">
       <div style="max-width:720px;margin:0 auto;padding:3rem 4rem 6rem">
         <div style="font-size:3rem;margin-bottom:1.25rem;line-height:1">${type.icon}</div>
-        <h1 style="font-size:2.25rem;font-weight:700;color:#111827;line-height:1.15;margin:0 0 1rem;letter-spacing:-.02em">${esc(note.title||'Untitled')}</h1>
+        <h1 style="font-size:2.25rem;font-weight:700;color:${_tx};line-height:1.15;margin:0 0 1rem;letter-spacing:-.02em">${esc(note.title||'Untitled')}</h1>
         ${note.tags?.length ? `
         <div style="display:flex;flex-wrap:wrap;gap:.375rem;margin-bottom:1.5rem">
-          ${note.tags.map(t=>`<span style="font-size:.7rem;padding:.2rem .625rem;border-radius:1rem;background:#f3f4f6;color:#6b7280">#${esc(t)}</span>`).join('')}
+          ${note.tags.map(t=>`<span style="font-size:.7rem;padding:.2rem .625rem;border-radius:1rem;${_chip}">#${esc(t)}</span>`).join('')}
         </div>` : ''}
-        <div style="border-top:1px solid #f3f4f6;margin-bottom:2rem"></div>
+        <div style="border-top:1px solid ${_bdr};margin-bottom:2rem"></div>
         <div class="prose">${previewHtml}</div>
         ${backlinksHtml}
       </div>
@@ -263,76 +274,75 @@ function _notesEditorPanel(note) {
   // ── Edit mode ─────────────────────────────────────────────────────────────
   return `
   <!-- Top bar -->
-  <div style="border-bottom:1px solid #f3f4f6;padding:.4rem 1rem;display:flex;align-items:center;gap:.5rem;flex-shrink:0;min-height:38px">
+  <div style="border-bottom:1px solid ${_bdr};padding:.4rem 1rem;display:flex;align-items:center;gap:.5rem;flex-shrink:0;min-height:38px;background:${_bg}">
     <select onchange="updateNoteType('${note.id}',this.value)"
-      style="font-size:.75rem;background:none;border:none;color:#9ca3af;outline:none;cursor:pointer;padding:.2rem 0">
+      style="font-size:.75rem;background:${_bg};border:none;color:${_txm};outline:none;cursor:pointer;padding:.2rem 0">
       ${Object.entries(NOTE_TYPES).map(([k,v])=>`<option value="${k}" ${note.type===k?'selected':''}>${v.icon} ${v.label}</option>`).join('')}
     </select>
     <div style="margin-left:auto;display:flex;align-items:center;gap:.375rem">
-      <span id="notes-save-indicator" style="font-size:.7rem;color:#d1d5db;margin-right:.25rem">saved</span>
+      <span id="notes-save-indicator" style="font-size:.7rem;color:${_txf};margin-right:.25rem">saved</span>
       <button onclick="toggleNotePin('${note.id}')"
         title="${note.pinned ? 'Unpin' : 'Pin to top'}"
-        style="padding:.3rem .75rem;border:1px solid ${note.pinned ? '#a5b4fc' : '#e5e7eb'};background:${note.pinned ? '#eef2ff' : '#fff'};border-radius:.5rem;font-size:.72rem;color:${note.pinned ? '#6366f1' : '#6b7280'};cursor:pointer">
+        style="padding:.3rem .75rem;border:1px solid ${note.pinned ? '#a5b4fc' : _bdrb};background:${note.pinned ? (_dk?'#1e1b4b':'#eef2ff') : _bg};border-radius:.5rem;font-size:.72rem;color:${note.pinned ? '#6366f1' : _txm};cursor:pointer">
         📌${note.pinned ? ' Pinned' : ''}
       </button>
       <button onclick="exportNote('${note.id}')"
-        style="padding:.3rem .75rem;border:1px solid #e5e7eb;background:#fff;border-radius:.5rem;font-size:.72rem;color:#6b7280;cursor:pointer">
+        style="padding:.3rem .75rem;border:1px solid ${_bdrb};background:${_bg};border-radius:.5rem;font-size:.72rem;color:${_txm};cursor:pointer">
         ↓ .md
       </button>
       <button onclick="deleteNote('${note.id}')"
-        style="padding:.3rem .75rem;border:1px solid #fecaca;background:#fff;border-radius:.5rem;font-size:.72rem;color:#ef4444;cursor:pointer">
+        style="padding:.3rem .75rem;border:1px solid #fecaca;background:${_bg};border-radius:.5rem;font-size:.72rem;color:#ef4444;cursor:pointer">
         Delete
       </button>
-      <div style="width:1px;height:1rem;background:#e5e7eb;margin:0 .125rem"></div>
+      <div style="width:1px;height:1rem;background:${_bdrb};margin:0 .125rem"></div>
       <button onclick="notesToggleRead()"
-        style="padding:.3rem .75rem;border:1px solid #e5e7eb;background:#fff;border-radius:.5rem;font-size:.72rem;color:#6b7280;cursor:pointer">
+        style="padding:.3rem .75rem;border:1px solid ${_bdrb};background:${_bg};border-radius:.5rem;font-size:.72rem;color:${_txm};cursor:pointer">
         👁 Read
       </button>
     </div>
   </div>
 
   <!-- Formatting toolbar -->
-  <div style="border-bottom:1px solid #f3f4f6;padding:.2rem .75rem;display:flex;align-items:center;flex-shrink:0;overflow-x:auto;gap:.1rem;min-height:34px">
+  <div style="border-bottom:1px solid ${_bdr};padding:.2rem .75rem;display:flex;align-items:center;flex-shrink:0;overflow-x:auto;gap:.1rem;min-height:34px;background:${_bg}">
     ${tbHtml}
   </div>
 
   <!-- ══ THE PAGE ══════════════════════════════════════════════════════════ -->
-  <!-- This div scrolls. Everything inside is the "document". -->
-  <div style="flex:1;overflow-y:auto;background:#fff" id="notes-scroll-area">
+  <div style="flex:1;overflow-y:auto;background:${_bg}" id="notes-scroll-area">
     <div style="max-width:720px;margin:0 auto;padding:3.5rem 4rem 8rem;box-sizing:border-box">
 
       <!-- Page icon -->
       <div style="font-size:2.75rem;line-height:1;margin-bottom:1rem;user-select:none">${type.icon}</div>
 
-      <!-- Title — big, Notion-style -->
+      <!-- Title -->
       <input id="note-title" type="text" value="${esc(note.title||'')}"
         placeholder="Untitled"
-        style="display:block;width:100%;font-size:2.25rem;font-weight:700;color:#111827;
+        style="display:block;width:100%;font-size:2.25rem;font-weight:700;color:${_tx};
           background:transparent;border:none;outline:none;padding:0;margin:0 0 .875rem;
           line-height:1.15;letter-spacing:-.02em;font-family:inherit;box-sizing:border-box;"
         oninput="scheduleNoteSave()"/>
 
       <!-- Properties row: tags + date -->
       <div style="display:flex;align-items:center;gap:.75rem;padding-bottom:1.25rem;
-        border-bottom:1px solid #f3f4f6;margin-bottom:1.5rem;flex-wrap:wrap">
+        border-bottom:1px solid ${_bdr};margin-bottom:1.5rem;flex-wrap:wrap">
         ${(() => {
           const chips = []
           if (note.projectId) {
             const proj = (state.projects||[]).find(p => p.id === note.projectId)
-            if (proj) chips.push(`<button onclick="openProjectDetail('${note.projectId}')" style="font-size:.7rem;padding:.2rem .625rem;border-radius:1rem;background:#eef2ff;color:#4f46e5;border:1px solid #c7d2fe;cursor:pointer;flex-shrink:0;font-family:inherit">📋 ${esc(proj.name)}</button>`)
+            if (proj) chips.push(`<button onclick="openProjectDetail('${note.projectId}')" style="font-size:.7rem;padding:.2rem .625rem;border-radius:1rem;background:${_dk?'#1e1b4b':'#eef2ff'};color:#6366f1;border:1px solid ${_dk?'#3730a3':'#c7d2fe'};cursor:pointer;flex-shrink:0;font-family:inherit">📋 ${esc(proj.name)}</button>`)
           }
           if (note.grantId) {
             const grant = (state.grants||[]).find(g => g.id === note.grantId)
-            if (grant) chips.push(`<button onclick="closeModal&&closeModal();openGrantDetail&&openGrantDetail('${note.grantId}')" style="font-size:.7rem;padding:.2rem .625rem;border-radius:1rem;background:#faf5ff;color:#7c3aed;border:1px solid #e9d5ff;cursor:pointer;flex-shrink:0;font-family:inherit">💰 ${esc(grant.title)}</button>`)
+            if (grant) chips.push(`<button onclick="closeModal&&closeModal();openGrantDetail&&openGrantDetail('${note.grantId}')" style="font-size:.7rem;padding:.2rem .625rem;border-radius:1rem;background:${_dk?'#2e1065':'#faf5ff'};color:#a78bfa;border:1px solid ${_dk?'#4c1d95':'#e9d5ff'};cursor:pointer;flex-shrink:0;font-family:inherit">💰 ${esc(grant.title)}</button>`)
           }
           return chips.join('')
         })()}
         <input id="note-tags" type="text" value="${esc(tagsStr)}"
           placeholder="Add tags, comma separated…"
           style="flex:1;background:transparent;border:none;outline:none;font-size:.8rem;
-            color:#9ca3af;font-family:inherit;min-width:0;"
+            color:${_txm};font-family:inherit;min-width:0;"
           oninput="scheduleNoteSave()"/>
-        ${updatedStr ? `<span style="font-size:.75rem;color:#d1d5db;flex-shrink:0">${updatedStr}</span>` : ''}
+        ${updatedStr ? `<span style="font-size:.75rem;color:${_txf};flex-shrink:0">${updatedStr}</span>` : ''}
       </div>
 
       <!-- Content textarea — grows with content, fills page -->
@@ -340,7 +350,7 @@ function _notesEditorPanel(note) {
         placeholder="Start writing…"
         spellcheck="true"
         style="display:block;width:100%;min-height:65vh;font-size:15px;line-height:1.85;
-          color:#374151;background:transparent;border:none;outline:none;resize:none;
+          color:${_dk?'#cbd5e1':'#374151'};background:transparent;border:none;outline:none;resize:none;
           font-family:inherit;overflow:hidden;box-sizing:border-box;padding:0;"
         oninput="scheduleNoteSave();_notesGrow(this);_wikiCheck(this)"
         onkeydown="notesKeydown(event)">${esc(note.content||'')}</textarea>
