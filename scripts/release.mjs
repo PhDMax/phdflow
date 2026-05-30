@@ -22,7 +22,11 @@ function run(cmd, opts = {}) {
 }
 
 function loadToken() {
-  if (process.env.GITHUB_TOKEN) return process.env.GITHUB_TOKEN.trim()
+  if (process.env.GITHUB_TOKEN) {
+    const t = process.env.GITHUB_TOKEN.trim()
+    if (t.length < 10) throw new Error('GITHUB_TOKEN env var looks truncated (too short). Check your token.')
+    return t
+  }
   const envPath = resolve(ROOT, '.env')
   if (existsSync(envPath)) {
     // Strip BOM (UTF-16 LE or UTF-8) that Notepad adds on Windows
@@ -33,7 +37,11 @@ function loadToken() {
     else text = raw.toString('utf8')
     for (const line of text.split(/\r?\n/)) {
       const m = line.match(/^GITHUB_TOKEN\s*=\s*(.+)/)
-      if (m) return m[1].trim()
+      if (m) {
+        const t = m[1].trim()
+        if (t.length < 10) throw new Error(`.env GITHUB_TOKEN looks truncated ("${t}"). Paste the full ghp_... token.`)
+        return t
+      }
     }
   }
   throw new Error('No GITHUB_TOKEN found.\nCreate a .env file with:\n  GITHUB_TOKEN=ghp_...')

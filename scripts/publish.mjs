@@ -7,7 +7,10 @@ import { fileURLToPath }            from 'url'
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 const token = process.env.GITHUB_TOKEN?.trim()
-if (!token) { console.error('Set GITHUB_TOKEN env var first.\nExample: $env:GITHUB_TOKEN="ghp_xxx"; node scripts/publish.mjs'); process.exit(1) }
+if (!token || token.length < 10) {
+  console.error('GITHUB_TOKEN is missing or truncated.\nExample: $env:GITHUB_TOKEN="ghp_xxx"; node scripts/publish.mjs')
+  process.exit(1)
+}
 
 const pkg     = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf-8'))
 const version = pkg.version
@@ -47,15 +50,24 @@ ${changelog}
 ---
 ☕ If PhDFlow saves you time, [buy me a coffee](https://buymeacoffee.com/phdmax)`
 
-console.log('Creating GitHub release…')
-const res = await fetch(`https://api.github.com/repos/PhDMax/phdflow/releases`, {
-  method: 'POST',
-  headers: { ...headers, 'Content-Type': 'application/json' },
-  body: JSON.stringify({ tag_name: `v${version}`, target_commitish: 'master', name: `PhDFlow v${version}`, body: releaseBody, draft: false, prerelease: false }),
-})
-const release = await res.json()
-if (!release.upload_url) { console.error('Failed to create release:', JSON.stringify(release, null, 2)); process.exit(1) }
-console.log(`  ✓  Release created: ${release.html_url}`)
+// Try to find an existing release for this tag first
+let release
+console.log(`Checking for existing release v${version}…`)
+const existingRes = await fetch(`https://api.github.com/repos/PhDMax/phdflow/releases/tags/v${version}`, { headers })
+if (existingRes.ok) {
+  release = await existingRes.json()
+  console.log(`  ✓  Found existing release: ${release.html_url}`)
+} else {
+  console.log('Creating GitHub release…')
+  const res = await fetch(`https://api.github.com/repos/PhDMax/phdflow/releases`, {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tag_name: `v${version}`, target_commitish: 'master', name: `PhDFlow v${version}`, body: releaseBody, draft: false, prerelease: false }),
+  })
+  release = await res.json()
+  if (!release.upload_url) { console.error('Failed to create release:', JSON.stringify(release, null, 2)); process.exit(1) }
+  console.log(`  ✓  Release created: ${release.html_url}`)
+}
 
 const assets = [
   join(ROOT, 'dist', `PhDFlow-Setup-${version}.exe`),
