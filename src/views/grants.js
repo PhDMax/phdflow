@@ -93,32 +93,108 @@ const GRANT_RESOURCES = [
   { id:'gr20', name:'OpenAIRE Funding',                         scope:'EU',             region:'EU',            desc:'EU and global open-access funding opportunities, linked to Horizon Europe and national funders.', url:'https://explore.openaire.eu/search/find/funding' },
 ]
 
+// ── Field → grant keyword mapping ────────────────────────────────────────────
+const _FIELD_KEYWORDS = {
+  'Life Sciences':         ['biology','molecular','cell','biochem','evolution','ecology','genomics','protein','genetics','microbiology','zoology','botany'],
+  'Biomedical':            ['biomedical','medical','clinical','disease','therapy','pharmaceutical','drug','health','translational','immunology','pathology','oncology'],
+  'Chemistry':             ['chemistry','chemical','synthesis','organic','inorganic','materials','polymer','spectroscopy','catalysis'],
+  'Physics':               ['physics','quantum','condensed matter','optics','photon','particle','astrophys','cosmology','atomic'],
+  'Engineering':           ['engineering','mechanical','electrical','civil','aerospace','robotics','systems','manufacturing','structural'],
+  'Computer Science':      ['computer','computing','software','algorithm','artificial intelligence','machine learning','deep learning','neural network','data science','computational','programming','nlp','vision'],
+  'Mathematics':           ['mathematics','math','statistic','topology','algebra','geometry','analysis','probability','combinatorics'],
+  'Social Sciences':       ['social','sociology','anthropology','political','communication','media','education','economics','public policy'],
+  'Humanities':            ['history','philosophy','literature','linguistics','cultural','archaeology','art','heritage','ethics'],
+  'Psychology':            ['psychology','cognitive','behavioral','mental health','perception','neurocognitive','psychotherapy'],
+  'Neuroscience':          ['neuroscience','neurology','brain','neural','connectome','neuroimaging','synaptic','cortex','cognitive neuroscience'],
+  'Economics':             ['economics','finance','econometrics','macroeconomics','microeconomics','game theory','market'],
+  'Biology':               ['biology','zoology','botany','microbiology','evolution','ecology','developmental'],
+  'Environmental Sciences':['environment','climate','sustainability','conservation','earth science','ecology','atmospheric','geoscience'],
+  'Medicine':              ['medicine','clinical','surgery','cardiology','immunology','pathology','pharmaceutical','epidemiology'],
+  'Astronomy':             ['astronomy','astrophysics','cosmology','telescope','space','planet','stellar','gravitational'],
+}
+
+function _fieldScore(grantFields, profileField) {
+  if (!profileField) return 0
+  const pf = profileField.toLowerCase()
+  if (grantFields.includes('All')) return 1
+
+  let score = 0
+  for (const [field, keywords] of Object.entries(_FIELD_KEYWORDS)) {
+    if (!grantFields.includes(field) && !grantFields.includes('STEM')) continue
+    for (const kw of keywords) {
+      if (pf.includes(kw.toLowerCase())) { score += 2; break }
+    }
+    if (grantFields.includes(field)) score += 1
+  }
+  // Direct field name match
+  for (const gf of grantFields) {
+    if (pf.includes(gf.toLowerCase())) score += 3
+  }
+  return score
+}
+
+function _grantMatchReasons(g, profile) {
+  const stage  = profile?.careerStage
+  const field  = profile?.field || ''
+  const region = profile?.region || ''
+  const reasons = []
+
+  if (stage && g.stage.includes(stage))
+    reasons.push({ text: stage === 'phd' ? 'PhD ✓' : stage === 'postdoc' ? 'Postdoc ✓' : 'PI ✓', color: 'emerald' })
+
+  const fs = _fieldScore(g.fields, field)
+  if (fs > 0)
+    reasons.push({ text: g.fields[0] === 'All' ? 'All fields ✓' : `${g.fields[0]} ✓`, color: 'indigo' })
+
+  if (region && g.region.some(r => r === region || r === 'International' || r === 'EU'))
+    reasons.push({ text: `${g.region.includes(region) ? region : 'International'} ✓`, color: 'violet' })
+
+  return reasons
+}
+
+function _rankForProfile(grants, profile) {
+  const stage = profile?.careerStage
+  const field = profile?.field || ''
+  return [...grants]
+    .map(g => {
+      let score = 0
+      if (stage && g.stage.includes(stage))   score += 10
+      score += _fieldScore(g.fields, field) * 3
+      return { g, score }
+    })
+    .sort((a, b) => b.score - a.score)
+    .map(x => x.g)
+}
+
 // ── Active tab ────────────────────────────────────────────────────────────────
-let _grantTab = 'mine'
+let _grantTab = 'foryou'
 
 function render_grants() {
   const vc = document.getElementById('view-content')
   const myCount = state.grants.length
+  // First visit with no tracked grants → show For You
+  if (_grantTab === 'mine' && !myCount) _grantTab = 'foryou'
+
+  const tabs = [
+    { id:'foryou',    label:'✨ For You' },
+    { id:'mine',      label:`📊 My Grants${myCount ? ` <span class="ml-1 text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full">${myCount}</span>` : ''}` },
+    { id:'scan',      label:`🔍 Scan <span class="ml-1 text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full">${GRANT_DB.length}</span>` },
+    { id:'resources', label:'🌐 Databases' },
+  ]
+
   vc.innerHTML = `
-  ${pageHeader('🔍 Grant Scan', `
+  ${pageHeader('💰 Grant Scan', `
     <div class="flex gap-2">
       ${_grantTab==='mine' ? `<button onclick="openGrantModal()" class="btn-primary text-xs py-2">+ Add Grant</button>` : ''}
     </div>`)}
 
   <!-- Tabs -->
   <div class="bg-white border-b border-slate-200 px-5 flex gap-1 flex-shrink-0">
-    <button onclick="switchGrantTab('mine')" data-gtab="mine"
-      class="px-4 py-3 text-sm font-medium border-b-2 transition-colors ${_grantTab==='mine'?'border-indigo-600 text-indigo-700':'border-transparent text-slate-500 hover:text-slate-700'}">
-      📊 My Grants${myCount ? ` <span class="ml-1 text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full">${myCount}</span>` : ''}
-    </button>
-    <button onclick="switchGrantTab('scan')" data-gtab="scan"
-      class="px-4 py-3 text-sm font-medium border-b-2 transition-colors ${_grantTab==='scan'?'border-indigo-600 text-indigo-700':'border-transparent text-slate-500 hover:text-slate-700'}">
-      🔍 Scan <span class="ml-1 text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full">${GRANT_DB.length}</span>
-    </button>
-    <button onclick="switchGrantTab('resources')" data-gtab="resources"
-      class="px-4 py-3 text-sm font-medium border-b-2 transition-colors ${_grantTab==='resources'?'border-indigo-600 text-indigo-700':'border-transparent text-slate-500 hover:text-slate-700'}">
-      🌐 Databases
-    </button>
+    ${tabs.map(t => `
+    <button onclick="switchGrantTab('${t.id}')" data-gtab="${t.id}"
+      class="px-4 py-3 text-sm font-medium border-b-2 transition-colors ${_grantTab===t.id?'border-indigo-600 text-indigo-700':'border-transparent text-slate-500 hover:text-slate-700'}">
+      ${t.label}
+    </button>`).join('')}
   </div>
 
   <div class="flex-1 overflow-y-auto">
@@ -144,9 +220,186 @@ function switchGrantTab(tab) {
 function renderGrantTab() {
   const el = document.getElementById('grant-tab-content')
   if (!el) return
-  if      (_grantTab === 'mine')      el.innerHTML = buildMyGrantsHTML()
+  if      (_grantTab === 'foryou')    el.innerHTML = buildForYouHTML()
+  else if (_grantTab === 'mine')      el.innerHTML = buildMyGrantsHTML()
   else if (_grantTab === 'scan')      el.innerHTML = buildScanHTML()
   else                                el.innerHTML = buildResourcesHTML()
+}
+
+// ── FOR YOU ───────────────────────────────────────────────────────────────────
+function buildForYouHTML() {
+  const p = state.profile || {}
+  const stage  = p.careerStage
+  const field  = p.field || ''
+  const region = p.region || ''
+
+  const stageLabels = { phd:'PhD Student', masters:'Masters Student', postdoc:'Postdoc', pi:'PI / Group Leader' }
+
+  // Profile setup card — shown when career stage is missing
+  const setupCard = !stage ? `
+  <div class="bg-indigo-50 border border-indigo-200 rounded-2xl p-5 mb-6">
+    <div class="flex items-start gap-3">
+      <div class="text-2xl">🎯</div>
+      <div class="flex-1">
+        <h3 class="text-sm font-bold text-indigo-900 mb-1">Tell us where you are in your career</h3>
+        <p class="text-xs text-indigo-700 mb-3">PhDFlow uses your career stage and research field to surface the grants most likely to be relevant to you.</p>
+        <div class="flex flex-wrap gap-2">
+          ${['phd','masters','postdoc','pi'].map(s => `
+          <button onclick="grantSetStage('${s}')"
+            class="px-3 py-1.5 rounded-xl border-2 border-indigo-200 bg-white text-xs font-semibold text-indigo-700
+              hover:border-indigo-500 hover:bg-indigo-50 transition-all">
+            ${stageLabels[s]}
+          </button>`).join('')}
+        </div>
+      </div>
+    </div>
+  </div>` : ''
+
+  // Profile summary pill — shown when stage is set
+  const profilePill = stage ? `
+  <div class="flex items-center gap-2 mb-5 flex-wrap">
+    <div class="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs">
+      <span class="font-semibold text-slate-700">Showing grants for:</span>
+      <span class="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-medium">${stageLabels[stage]}</span>
+      ${field ? `<span class="bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-medium">${esc(field)}</span>` : ''}
+      ${region ? `<span class="bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full font-medium">${esc(region)}</span>` : ''}
+    </div>
+    <button onclick="grantEditProfile()" class="text-xs text-slate-400 hover:text-indigo-600 hover:underline transition-colors">Edit profile</button>
+  </div>` : ''
+
+  // Get ranked grants
+  let ranked = _rankForProfile(GRANT_DB, p)
+  if (stage) ranked = ranked.filter(g => g.stage.includes(stage))
+  // If field is set, only show grants with score > 0 first, then the rest
+  if (!ranked.length) ranked = GRANT_DB.filter(g => stage ? g.stage.includes(stage) : true)
+
+  const alreadyTracked = new Set(state.grants.map(g => g.sourceId).filter(Boolean))
+  const top = ranked.slice(0, 12)
+
+  const matchChip = (reason) => {
+    const colors = { emerald:'bg-emerald-100 text-emerald-700', indigo:'bg-indigo-100 text-indigo-700', violet:'bg-violet-100 text-violet-700' }
+    return `<span class="text-xs px-1.5 py-0.5 rounded-full font-medium ${colors[reason.color]||'bg-slate-100 text-slate-600'}">${reason.text}</span>`
+  }
+
+  const grantCard = (g) => {
+    const tracked = alreadyTracked.has(g.id)
+    const reasons = _grantMatchReasons(g, p)
+    const stageChips = g.stage.map(s => {
+      const sc = {phd:'bg-indigo-100 text-indigo-700',postdoc:'bg-purple-100 text-purple-700',pi:'bg-teal-100 text-teal-700',masters:'bg-slate-100 text-slate-600'}
+      return `<span class="text-xs px-2 py-0.5 rounded-full ${sc[s]||'bg-slate-100 text-slate-600'}">${s==='phd'?'PhD':s==='pi'?'PI':s==='masters'?'Masters':'Postdoc'}</span>`
+    }).join('')
+
+    return `
+    <div class="bg-white border ${reasons.length > 1 ? 'border-indigo-200' : 'border-slate-200'} rounded-2xl p-4 hover:shadow-md transition-shadow flex flex-col gap-3">
+      <div>
+        <div class="flex items-start justify-between gap-2">
+          <h3 class="font-bold text-slate-900 text-sm leading-snug">${esc(g.name)}</h3>
+          ${tracked ? `<span class="text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex-shrink-0">✓ Tracking</span>` : ''}
+        </div>
+        <p class="text-xs text-slate-500 mt-0.5">${esc(g.funder)}</p>
+      </div>
+      ${reasons.length ? `<div class="flex gap-1 flex-wrap">${reasons.map(matchChip).join('')}</div>` : ''}
+      <p class="text-xs text-slate-600 leading-relaxed">${esc(g.desc)}</p>
+      <div class="flex gap-1.5 flex-wrap">
+        ${stageChips}
+        ${g.region.slice(0,2).map(r=>`<span class="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">${r}</span>`).join('')}
+        ${g.fields[0]!=='All'?`<span class="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">${g.fields[0]}</span>`:''}
+      </div>
+      <div class="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-50">
+        <span class="font-medium">${g.amount}${g.duration?' · '+g.duration:''}</span>
+        <div class="flex gap-2">
+          <button onclick="window.api.openExternal('${esc(g.url)}')" class="text-indigo-500 hover:underline">Website ↗</button>
+          ${!tracked ? `<button onclick="trackDiscoveredGrant('${g.id}')" class="text-xs px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">+ Track</button>` : ''}
+        </div>
+      </div>
+    </div>`
+  }
+
+  const emptyMsg = !stage
+    ? `<div class="col-span-2 py-8 text-center text-slate-400 text-sm">Set your career stage above to see personalised recommendations.</div>`
+    : `<div class="col-span-2 py-8 text-center text-slate-400 text-sm">No grants in the database match your current filters. <button onclick="switchGrantTab('scan')" class="text-indigo-500 hover:underline">Browse all grants →</button></div>`
+
+  return `
+  <div class="p-5 max-w-4xl">
+    ${setupCard}
+    ${profilePill}
+    ${top.length ? `
+    <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
+      ${top.map(grantCard).join('')}
+    </div>
+    <div class="mt-4 text-center">
+      <button onclick="switchGrantTab('scan')" class="text-sm text-indigo-600 hover:underline">
+        Browse all ${GRANT_DB.length} grants in the database →
+      </button>
+    </div>` : emptyMsg}
+  </div>`
+}
+
+async function grantSetStage(stage) {
+  if (!state.profile) state.profile = {}
+  state.profile.careerStage = stage
+  await save('profile')
+  renderGrantTab()
+}
+
+function grantEditProfile() {
+  const p = state.profile || {}
+  const stageLabels = { phd:'PhD Student', masters:'Masters Student', postdoc:'Postdoc', pi:'PI / Group Leader' }
+  openModal(`
+  <h3 class="text-base font-bold text-slate-900 mb-4">🎯 Grant Profile</h3>
+  <div class="space-y-3">
+    <div>
+      <label class="label">Career stage</label>
+      <div class="flex flex-wrap gap-2 mt-1">
+        ${['phd','masters','postdoc','pi'].map(s => `
+        <button id="gs-stage-${s}" onclick="grantProfileStageSelect('${s}')"
+          class="px-3 py-1.5 rounded-xl border-2 text-xs font-semibold transition-all
+            ${p.careerStage===s?'border-indigo-500 bg-indigo-50 text-indigo-700':'border-slate-200 bg-white text-slate-600 hover:border-slate-300'}">
+          ${stageLabels[s]}
+        </button>`).join('')}
+      </div>
+    </div>
+    <div>
+      <label class="label">Research field</label>
+      <input id="gp-field" type="text" value="${esc(p.field||'')}" class="input"
+        placeholder="e.g. Computational Neuroscience"/>
+    </div>
+    <div>
+      <label class="label">Home region / country</label>
+      <select id="gp-region" class="input">
+        <option value="">— Not specified —</option>
+        ${['EU','USA','UK','Germany','France','Austria','Switzerland','Netherlands','Scandinavia','Canada','Australia','Japan','International'].map(r =>
+          `<option value="${r}" ${p.region===r?'selected':''}>${r}</option>`
+        ).join('')}
+      </select>
+    </div>
+    <div class="flex gap-3 pt-2">
+      <button onclick="closeModal()" class="flex-1 btn-secondary">Cancel</button>
+      <button onclick="saveGrantProfile()" class="flex-1 btn-primary">Save</button>
+    </div>
+  </div>`)
+  window._gpStage = p.careerStage || null
+}
+
+function grantProfileStageSelect(s) {
+  window._gpStage = s
+  ;['phd','masters','postdoc','pi'].forEach(st => {
+    const btn = document.getElementById(`gs-stage-${st}`)
+    if (!btn) return
+    btn.className = `px-3 py-1.5 rounded-xl border-2 text-xs font-semibold transition-all ${
+      st === s ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'}`
+  })
+}
+
+async function saveGrantProfile() {
+  if (!state.profile) state.profile = {}
+  state.profile.careerStage = window._gpStage || null
+  state.profile.field  = document.getElementById('gp-field')?.value.trim() || state.profile.field || ''
+  state.profile.region = document.getElementById('gp-region')?.value || null
+  await save('profile')
+  closeModal()
+  renderGrantTab()
+  showToast('Grant profile saved ✓')
 }
 
 // ── MY GRANTS ─────────────────────────────────────────────────────────────────
@@ -226,18 +479,30 @@ function buildMyGrantsHTML() {
 }
 
 // ── SCAN ──────────────────────────────────────────────────────────────────────
-let _dStage = 'all', _dRegion = 'all', _dField = 'all', _dSearch = ''
+let _dStage = '', _dRegion = 'all', _dField = 'all', _dSearch = ''
+let _dScanInited = false
+
+function _initScanFilters() {
+  if (_dScanInited) return
+  _dScanInited = true
+  const p = state.profile || {}
+  if (p.careerStage) _dStage  = p.careerStage
+  if (p.region)      _dRegion = p.region
+}
 
 function buildScanHTML() {
+  _initScanFilters()
   let grants = GRANT_DB
+  const p = state.profile || {}
 
-  if (_dStage  !== 'all') grants = grants.filter(g => g.stage.includes(_dStage))
+  if (_dStage  && _dStage !== 'all')  grants = grants.filter(g => g.stage.includes(_dStage))
   if (_dRegion !== 'all') grants = grants.filter(g => g.region.some(r => r === _dRegion || r === 'International'))
   if (_dField  !== 'all') grants = grants.filter(g => g.fields.includes('All') || g.fields.includes(_dField))
   if (_dSearch)           grants = grants.filter(g =>
     g.name.toLowerCase().includes(_dSearch) || g.funder.toLowerCase().includes(_dSearch) || g.desc.toLowerCase().includes(_dSearch))
 
   const alreadyTracked = new Set(state.grants.map(g => g.sourceId).filter(Boolean))
+  const profileActive  = !!p.careerStage
 
   return `
   <!-- Scan filters -->
@@ -246,7 +511,7 @@ function buildScanHTML() {
       oninput="_dSearch=this.value;document.getElementById('grant-tab-content').innerHTML=buildScanHTML()"
       class="flex-1 min-w-48 px-3 py-1.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
     <select onchange="_dStage=this.value;document.getElementById('grant-tab-content').innerHTML=buildScanHTML()" class="input" style="width:auto;padding:.3rem .7rem;font-size:.8rem">
-      <option value="all"     ${_dStage==='all'    ?'selected':''}>All career stages</option>
+      <option value=""        ${!_dStage||_dStage==='all'?'selected':''}>All stages</option>
       <option value="phd"     ${_dStage==='phd'    ?'selected':''}>PhD Student</option>
       <option value="masters" ${_dStage==='masters'?'selected':''}>Masters</option>
       <option value="postdoc" ${_dStage==='postdoc'?'selected':''}>Postdoc</option>
@@ -260,28 +525,34 @@ function buildScanHTML() {
       <option value="all" ${_dField==='all'?'selected':''}>All fields</option>
       ${FIELDS.filter(f=>f!=='All').map(f=>`<option value="${f}" ${_dField===f?'selected':''}>${f}</option>`).join('')}
     </select>
-    <span class="text-xs text-slate-400 whitespace-nowrap">${grants.length} of ${GRANT_DB.length} grants</span>
+    <div class="flex items-center gap-2">
+      <span class="text-xs text-slate-400 whitespace-nowrap">${grants.length} of ${GRANT_DB.length}</span>
+      ${(_dStage||_dRegion!=='all'||_dField!=='all'||_dSearch) ? `<button onclick="_dStage='';_dRegion='all';_dField='all';_dSearch='';_dScanInited=false;document.getElementById('grant-tab-content').innerHTML=buildScanHTML()" class="text-xs text-slate-400 hover:text-rose-500 transition-colors" title="Clear filters">✕ Clear</button>` : ''}
+    </div>
   </div>
+  ${profileActive && !_dSearch ? `<div class="px-5 pt-3 text-xs text-slate-400">Filters pre-applied from your <button onclick="grantEditProfile()" class="text-indigo-500 hover:underline">grant profile</button>.</div>` : ''}
 
   <!-- Grant cards -->
   <div class="p-5 grid grid-cols-1 gap-3 max-w-4xl lg:grid-cols-2">
     ${grants.length === 0
-      ? `<div class="col-span-2 py-16 text-center text-slate-400">No grants match your filters.<br/><button onclick="_dStage='all';_dRegion='all';_dField='all';_dSearch='';document.getElementById('grant-tab-content').innerHTML=buildScanHTML()" class="mt-2 text-indigo-500 hover:underline text-sm">Clear filters</button></div>`
+      ? `<div class="col-span-2 py-16 text-center text-slate-400">No grants match your filters.<br/><button onclick="_dStage='';_dRegion='all';_dField='all';_dSearch='';_dScanInited=false;document.getElementById('grant-tab-content').innerHTML=buildScanHTML()" class="mt-2 text-indigo-500 hover:underline text-sm">Clear filters</button></div>`
       : grants.map(g => {
         const tracked = alreadyTracked.has(g.id)
+        const reasons = profileActive ? _grantMatchReasons(g, p) : []
         const stageChips = g.stage.map(s => {
           const sc = {phd:'bg-indigo-100 text-indigo-700',postdoc:'bg-purple-100 text-purple-700',pi:'bg-teal-100 text-teal-700',masters:'bg-slate-100 text-slate-600'}
-          return `<span class="text-xs px-2 py-0.5 rounded-full ${sc[s]||'bg-slate-100 text-slate-600'}">${s==='phd'?'PhD':s==='pi'?'PI':s==='masters'?'Masters':s}</span>`
+          return `<span class="text-xs px-2 py-0.5 rounded-full ${sc[s]||'bg-slate-100 text-slate-600'}">${s==='phd'?'PhD':s==='pi'?'PI':s==='masters'?'Masters':'Postdoc'}</span>`
         }).join('')
         return `
         <div class="bg-white border border-slate-200 rounded-2xl p-4 hover:shadow-md transition-shadow flex flex-col gap-3">
           <div>
             <div class="flex items-start justify-between gap-2">
               <h3 class="font-bold text-slate-900 text-sm leading-snug">${esc(g.name)}</h3>
-              ${tracked ? `<span class="text-xs text-green-600 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full flex-shrink-0">✓ Tracking</span>` : ''}
+              ${tracked ? `<span class="text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex-shrink-0">✓ Tracking</span>` : ''}
             </div>
             <p class="text-xs text-slate-500 mt-0.5">${esc(g.funder)}</p>
           </div>
+          ${reasons.length ? `<div class="flex gap-1 flex-wrap">${reasons.map(r=>`<span class="text-xs px-1.5 py-0.5 rounded-full font-medium bg-${r.color}-100 text-${r.color}-700">${r.text}</span>`).join('')}</div>` : ''}
           <p class="text-xs text-slate-600 leading-relaxed">${esc(g.desc)}</p>
           <div class="flex gap-1.5 flex-wrap">
             ${stageChips}
@@ -289,7 +560,7 @@ function buildScanHTML() {
             ${g.fields[0]!=='All'?`<span class="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">${g.fields[0]}</span>`:''}
           </div>
           <div class="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-50">
-            <span>${g.amount}${g.duration?' · '+g.duration:''}</span>
+            <span class="font-medium">${g.amount}${g.duration?' · '+g.duration:''}</span>
             <div class="flex gap-2">
               <button onclick="window.api.openExternal('${esc(g.url)}')" class="text-indigo-500 hover:underline">Website ↗</button>
               ${!tracked ? `<button onclick="trackDiscoveredGrant('${g.id}')" class="text-xs px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">+ Track</button>` : ''}
@@ -315,7 +586,7 @@ function trackDiscoveredGrant(dbId) {
   })
   save('grants')
   showToast(`"${g.name}" added to My Grants ✓`)
-  document.getElementById('grant-tab-content').innerHTML = buildScanHTML()
+  renderGrantTab()
 }
 
 // ── RESOURCES ─────────────────────────────────────────────────────────────────
