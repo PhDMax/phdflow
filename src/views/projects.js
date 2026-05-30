@@ -320,6 +320,18 @@ function openProjectDetail(id) {
     <div id="proj-task-list">${renderProjectTasks(id)}</div>
   </div>
 
+  <!-- ── Linked Notes ────────────────────────────────────────────────── -->
+  <div class="mb-5">
+    <div class="flex items-center justify-between mb-2">
+      <span class="text-sm font-bold text-slate-800">📄 Notes</span>
+      <div class="flex gap-3">
+        <button onclick="createLinkedNote('${id}','project')" class="text-xs text-indigo-600 hover:underline font-medium">+ New</button>
+        <button onclick="linkExistingNote('${id}','project')" class="text-xs text-slate-400 hover:text-slate-600 font-medium">+ Link existing</button>
+      </div>
+    </div>
+    <div id="linked-notes-${id}">${renderLinkedNotes(id,'project')}</div>
+  </div>
+
   ${p.tags?.length ? `<div class="flex gap-1 flex-wrap mb-4">${p.tags.map(t=>`<span class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">${esc(t)}</span>`).join('')}</div>` : ''}
 
   <div class="flex gap-3 border-t border-slate-100 pt-4">

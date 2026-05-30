@@ -815,10 +815,22 @@ function openGrantDetail(id) {
     <div id="coapplicant-list">${renderCoApplicants(g)}</div>
   </div>
 
-  <!-- Notes -->
+  <!-- Linked Notes -->
   <div class="mb-4">
-    <label class="label">Notes</label>
-    <textarea rows="3" class="input resize-none" placeholder="Internal notes, links, contacts..."
+    <div class="flex items-center justify-between mb-2">
+      <span class="text-sm font-bold text-slate-800">📄 Notes</span>
+      <div class="flex gap-3">
+        <button onclick="createLinkedNote('${id}','grant')" class="text-xs text-indigo-600 hover:underline font-medium">+ New</button>
+        <button onclick="linkExistingNote('${id}','grant')" class="text-xs text-slate-400 hover:text-slate-600 font-medium">+ Link existing</button>
+      </div>
+    </div>
+    <div id="linked-notes-${id}">${renderLinkedNotes(id,'grant')}</div>
+  </div>
+
+  <!-- Internal notes (quick scratch pad) -->
+  <div class="mb-4">
+    <label class="label">Internal notes <span class="font-normal text-slate-400">(quick scratch pad)</span></label>
+    <textarea rows="2" class="input resize-none" placeholder="Quick notes, links, contacts…"
       onchange="updateGrantField('${id}','notes',this.value)">${esc(g.notes||'')}</textarea>
   </div>
 

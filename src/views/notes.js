@@ -314,7 +314,19 @@ function _notesEditorPanel(note) {
 
       <!-- Properties row: tags + date -->
       <div style="display:flex;align-items:center;gap:.75rem;padding-bottom:1.25rem;
-        border-bottom:1px solid #f3f4f6;margin-bottom:1.5rem">
+        border-bottom:1px solid #f3f4f6;margin-bottom:1.5rem;flex-wrap:wrap">
+        ${(() => {
+          const chips = []
+          if (note.projectId) {
+            const proj = (state.projects||[]).find(p => p.id === note.projectId)
+            if (proj) chips.push(`<button onclick="openProjectDetail('${note.projectId}')" style="font-size:.7rem;padding:.2rem .625rem;border-radius:1rem;background:#eef2ff;color:#4f46e5;border:1px solid #c7d2fe;cursor:pointer;flex-shrink:0;font-family:inherit">📋 ${esc(proj.name)}</button>`)
+          }
+          if (note.grantId) {
+            const grant = (state.grants||[]).find(g => g.id === note.grantId)
+            if (grant) chips.push(`<button onclick="closeModal&&closeModal();openGrantDetail&&openGrantDetail('${note.grantId}')" style="font-size:.7rem;padding:.2rem .625rem;border-radius:1rem;background:#faf5ff;color:#7c3aed;border:1px solid #e9d5ff;cursor:pointer;flex-shrink:0;font-family:inherit">💰 ${esc(grant.title)}</button>`)
+          }
+          return chips.join('')
+        })()}
         <input id="note-tags" type="text" value="${esc(tagsStr)}"
           placeholder="Add tags, comma separated…"
           style="flex:1;background:transparent;border:none;outline:none;font-size:.8rem;
@@ -669,4 +681,154 @@ function _getBacklinks(noteId) {
   if (!title) return []
   const pattern = `[[${title}]]`
   return state.notes.filter(n => n.id !== noteId && (n.content || '').includes(pattern))
+}
+
+// ══ Cross-module: Linked Notes ════════════════════════════════════════════════
+// Called from projects.js and grants.js — these functions are global.
+
+function renderLinkedNotes(entityId, entityType) {
+  const linked = state.notes.filter(n =>
+    entityType === 'project'
+      ? (n.projectId === entityId || (n.projectIds||[]).includes(entityId))
+      : n.grantId === entityId
+  )
+  if (!linked.length) return `<p class="text-xs text-slate-400 italic">No notes linked — create one or link an existing note.</p>`
+
+  return `<div class="space-y-1.5">` + linked.map(n => {
+    const type = NOTE_TYPES[n.type] || NOTE_TYPES.note
+    const date = n.updatedAt
+      ? new Date(n.updatedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short'})
+      : ''
+    const preview = (n.content||'').replace(/^#+\s*/gm,'').replace(/[*`_~>\[\]#]/g,'').trim().slice(0,60)
+    return `
+    <div class="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-50 border border-slate-100 hover:border-indigo-200 transition-colors">
+      <span class="text-base flex-shrink-0">${type.icon}</span>
+      <div class="flex-1 min-w-0">
+        <div class="text-sm font-medium text-slate-800 truncate">${esc(n.title||'Untitled')}</div>
+        ${preview ? `<div class="text-xs text-slate-400 truncate">${esc(preview)}</div>` : `<div class="text-xs text-slate-400">${type.label}${date?' · '+date:''}</div>`}
+      </div>
+      <button onclick="openLinkedNote('${n.id}')"
+        class="text-indigo-500 hover:text-indigo-700 text-xs font-medium flex-shrink-0 px-2 py-1 rounded-lg hover:bg-indigo-50 transition-colors">
+        Open →
+      </button>
+      <button onclick="unlinkNote('${n.id}','${entityId}','${entityType}')"
+        class="text-slate-300 hover:text-rose-400 text-xs flex-shrink-0 leading-none" title="Unlink note">✕</button>
+    </div>`
+  }).join('') + `</div>`
+}
+
+function openLinkedNote(noteId) {
+  closeModal()
+  _notesActiveId = noteId
+  _notesReadMode = false
+  showView('notes')
+}
+
+async function createLinkedNote(entityId, entityType) {
+  const typeMap = { grant: 'writing', project: 'note' }
+  const note = {
+    id:        'note-' + uid(),
+    title:     '',
+    content:   NOTE_TEMPLATES[typeMap[entityType]] || '',
+    type:      typeMap[entityType] || 'note',
+    tags:      [],
+    projectId: entityType === 'project' ? entityId : null,
+    grantId:   entityType === 'grant'   ? entityId : null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  }
+  state.notes.unshift(note)
+  await save('notes')
+  openLinkedNote(note.id)
+}
+
+function linkExistingNote(entityId, entityType) {
+  const alreadyLinked = new Set(
+    state.notes
+      .filter(n => entityType === 'project'
+        ? (n.projectId === entityId || (n.projectIds||[]).includes(entityId))
+        : n.grantId === entityId)
+      .map(n => n.id)
+  )
+  const available = state.notes.filter(n => !alreadyLinked.has(n.id))
+
+  if (!available.length) {
+    showToast('No other notes to link — create a new one first', 'info')
+    return
+  }
+
+  let searchVal = ''
+  const renderPicker = () => {
+    const q = searchVal.toLowerCase()
+    const filtered = available.filter(n =>
+      !q || (n.title||'Untitled').toLowerCase().includes(q) || (n.content||'').toLowerCase().includes(q)
+    )
+    const body = document.getElementById('link-note-list')
+    if (!body) return
+    body.innerHTML = filtered.length
+      ? filtered.map(n => {
+          const type = NOTE_TYPES[n.type] || NOTE_TYPES.note
+          return `
+          <button onclick="_doLinkNote('${n.id}','${entityId}','${entityType}')"
+            class="w-full text-left flex items-center gap-2.5 p-2.5 rounded-xl border border-slate-200
+              hover:border-indigo-300 hover:bg-indigo-50 transition-all">
+            <span class="text-base flex-shrink-0">${type.icon}</span>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-medium text-slate-800 truncate">${esc(n.title||'Untitled')}</div>
+              <div class="text-xs text-slate-400">${type.label}</div>
+            </div>
+          </button>`
+        }).join('')
+      : `<p class="text-xs text-slate-400 text-center py-4">No notes match</p>`
+  }
+
+  openModal(`
+  <h3 class="text-base font-bold text-slate-900 mb-3">Link an existing note</h3>
+  <input type="text" placeholder="Search notes…" class="input mb-3 text-sm"
+    oninput="window._linkNoteSearch=this.value;
+      (()=>{const q=this.value.toLowerCase();const items=document.querySelectorAll('.link-note-item');
+      items.forEach(el=>{el.style.display=(el.dataset.title||'').includes(q)?'':'none'})})()"/>
+  <div id="link-note-list" class="space-y-1.5 max-h-64 overflow-y-auto">
+    ${available.map(n => {
+      const type = NOTE_TYPES[n.type] || NOTE_TYPES.note
+      return `
+      <button data-title="${(n.title||'untitled').toLowerCase()}" class="link-note-item w-full text-left flex items-center gap-2.5 p-2.5 rounded-xl border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50 transition-all"
+        onclick="_doLinkNote('${n.id}','${entityId}','${entityType}')">
+        <span class="text-base flex-shrink-0">${type.icon}</span>
+        <div class="flex-1 min-w-0">
+          <div class="text-sm font-medium text-slate-800 truncate">${esc(n.title||'Untitled')}</div>
+          <div class="text-xs text-slate-400">${type.label}</div>
+        </div>
+      </button>`
+    }).join('')}
+  </div>
+  <button onclick="closeModal()" class="w-full btn-secondary text-xs mt-3">Cancel</button>`)
+}
+
+async function _doLinkNote(noteId, entityId, entityType) {
+  const note = state.notes.find(n => n.id === noteId)
+  if (!note) return
+  if (entityType === 'project') note.projectId = entityId
+  if (entityType === 'grant')   note.grantId   = entityId
+  note.updatedAt = new Date().toISOString()
+  await save('notes')
+  closeModal()
+  if (entityType === 'project') openProjectDetail(entityId)
+  if (entityType === 'grant')   openGrantDetail(entityId)
+  showToast('Note linked ✓')
+}
+
+async function unlinkNote(noteId, entityId, entityType) {
+  const note = state.notes.find(n => n.id === noteId)
+  if (!note) return
+  if (entityType === 'project') {
+    if (note.projectId === entityId) note.projectId = null
+    if (note.projectIds) note.projectIds = note.projectIds.filter(id => id !== entityId)
+  }
+  if (entityType === 'grant') note.grantId = null
+  note.updatedAt = new Date().toISOString()
+  await save('notes')
+  const container = document.getElementById(`linked-notes-${entityId}`)
+  if (container) container.innerHTML = renderLinkedNotes(entityId, entityType)
+  showToast('Note unlinked')
 }
