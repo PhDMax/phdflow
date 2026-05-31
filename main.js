@@ -1130,9 +1130,9 @@ ipcMain.handle('zotero-fetch-library', async () => {
       headers: { 'Content-Type': 'application/json', 'Zotero-Allowed-Request': '1' },
       body:    JSON.stringify({
         jsonrpc: '2.0',
-        method:  'item.exportLibrary',
-        // translator = 'BibTeX', exportNotes = false, asFile = false
-        params:  [false, 'BibTeX'],
+        method:  'item.export',
+        // params: [citationKeys ([] = all), translator]
+        params:  [[], 'BibTeX'],
         id:      1,
       }),
       signal: AbortSignal.timeout(30000),
