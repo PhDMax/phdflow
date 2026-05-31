@@ -184,6 +184,7 @@ app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(
 ipcMain.handle('store-get', (_, key) => readStore()[key] ?? null)
 ipcMain.handle('store-set', (_, key, value) => { const d = readStore(); d[key]=value; writeStore(d); return true })
 ipcMain.handle('open-external', (_, url) => shell.openExternal(url))
+ipcMain.handle('open-folder',   (_, p)   => shell.openPath(p))
 ipcMain.handle('get-app-version', () => app.getVersion())
 
 ipcMain.handle('open-pdf-dialog', async () => {

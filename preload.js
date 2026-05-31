@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('api', {
   storeGet:          (key)               => ipcRenderer.invoke('store-get', key),
   storeSet:          (key, value)        => ipcRenderer.invoke('store-set', key, value),
   openExternal:      (url)               => ipcRenderer.invoke('open-external', url),
+  openFolder:        (p)                 => ipcRenderer.invoke('open-folder',   p),
   getAppVersion:     ()                  => ipcRenderer.invoke('get-app-version'),
 
   // ── Dialogs ───────────────────────────────────────────────────────────────

@@ -1001,6 +1001,9 @@ async function libSetupEndnoteSync() {
 
   await _libUpdateSourceBar()
 
+  // Store the path safely — avoids injecting Windows backslashes into onclick strings
+  window._endnoteSyncDir = r.syncDir
+
   // Replace modal content with the full guide
   const content = document.getElementById('modal-content')
   if (!content) return
@@ -1035,7 +1038,7 @@ async function libSetupEndnoteSync() {
       <ol class="text-xs text-slate-600 space-y-1.5 ml-1">
         <li>1. Open Endnote with your library loaded</li>
         <li>2. Open the sync folder:
-          <button onclick="api.openExternal('${esc(r.syncDir)}')" class="text-indigo-600 hover:underline font-medium">Open folder ↗</button>
+          <button onclick="api.openFolder(window._endnoteSyncDir)" class="text-indigo-600 hover:underline font-medium">Open folder ↗</button>
         </li>
         <li>3. Double-click <strong>export-to-phdflow.ps1</strong>
           <span class="text-slate-400">(right-click → Run with PowerShell if needed)</span>
@@ -1056,7 +1059,9 @@ async function libSetupEndnoteSync() {
         <li>2. Output style: <strong>RefMan RIS</strong></li>
         <li>3. Export: <strong>All References in Library</strong></li>
         <li>4. File name: <strong>library.ris</strong></li>
-        <li>5. Save location: <button onclick="api.openExternal('${esc(r.syncDir)}')" class="text-indigo-600 hover:underline font-medium">open folder ↗</button></li>
+        <li>5. Save location:
+          <button onclick="api.openFolder(window._endnoteSyncDir)" class="text-indigo-600 hover:underline font-medium">open folder ↗</button>
+        </li>
       </ol>
     </div>
   </div>
