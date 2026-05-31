@@ -1122,25 +1122,37 @@ ipcMain.handle('zotero-bbt-check', async () => {
   } catch { return { installed: false } }
 })
 
-// Step 3 — export the full library via Better BibTeX JSON-RPC
-// Named params (object), no citationKeys = export whole library
+// Step 3 — export library via Better BibTeX pull-export URL
+// Format: /better-bibtex/library?/[libraryID]/[filename].bib
+// Step 3a: get library ID from user.groups, then fetch BibTeX
 ipcMain.handle('zotero-fetch-library', async () => {
   try {
-    const r = await fetch(`${ZOTERO_CONNECTOR}/better-bibtex/json-rpc`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json', 'Zotero-Allowed-Request': '1' },
-      body:    JSON.stringify({
-        jsonrpc: '2.0',
-        method:  'item.export',
-        params:  { translator: 'BibTeX', exportNotes: false },
-        id:      1,
-      }),
-      signal: AbortSignal.timeout(30000),
-    })
-    if (!r.ok) return { success: false, error: `Better BibTeX HTTP ${r.status}` }
-    const data = await r.json()
-    if (data.error) return { success: false, error: data.error.message || JSON.stringify(data.error) }
-    return { success: true, bibtex: data.result || '' }
+    // Get the personal library ID (always 1 in Zotero, but confirm via API)
+    let libraryID = 1
+    try {
+      const gr = await fetch(`${ZOTERO_CONNECTOR}/better-bibtex/json-rpc`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'Zotero-Allowed-Request': '1' },
+        body:    JSON.stringify({ jsonrpc: '2.0', method: 'user.groups', params: {}, id: 1 }),
+        signal:  AbortSignal.timeout(5000),
+      })
+      if (gr.ok) {
+        const gd = await gr.json()
+        const groups = gd.result || []
+        const personal = groups.find(g => g.name === 'My Library') || groups[0]
+        if (personal?.id) libraryID = personal.id
+      }
+    } catch {}
+
+    // Pull the BibTeX using the path-based URL format
+    const r = await fetch(
+      `${ZOTERO_CONNECTOR}/better-bibtex/library?/${libraryID}/library.bib`,
+      { headers: { 'Zotero-Allowed-Request': '1' }, signal: AbortSignal.timeout(30000) }
+    )
+    if (!r.ok) return { success: false, error: `Better BibTeX pull export HTTP ${r.status}` }
+    const bibtex = await r.text()
+    if (!bibtex?.includes('@')) return { success: false, error: 'Response does not look like BibTeX' }
+    return { success: true, bibtex }
   } catch(e) { return { success: false, error: e.message } }
 })
 
