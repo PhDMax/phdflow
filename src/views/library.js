@@ -332,7 +332,7 @@ async function importDroppedCitationFiles(files) {
 // ── BibTeX parser ─────────────────────────────────────────────────────────────
 function parseBib(text) {
   const papers = []
-  const entryRe = /@(\w+)\s*\{\s*[^,\s]*\s*,([\s\S]*?)(?=\n\s*@|\s*$)/gm
+  const entryRe = /@(\w+)\s*\{\s*[^,\s]*\s*,([\s\S]*?)(?=\n\s*@|\s*$)/g
   let m
   while ((m = entryRe.exec(text)) !== null) {
     const type = m[1].toLowerCase()
@@ -348,8 +348,8 @@ function parseBib(text) {
     papers.push({
       id: uid(), title: f.title,
       authors,
-      year:     parseInt(f.year)||null,
-      journal:  f.journal||f.booktitle||f.publisher||'',
+      year:     parseInt(f.year) || (f.date ? parseInt(f.date) : null) || null,
+      journal:  f.journal || f.journaltitle || f.booktitle || f.publisher || '',
       doi:      f.doi||'', url: f.url||f.link||'',
       abstract: f.abstract||'',
       topics:   f.keywords ? f.keywords.split(/[,;]/).map(k=>k.trim()).filter(Boolean) : [],
