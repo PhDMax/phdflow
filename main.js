@@ -1122,20 +1122,25 @@ ipcMain.handle('zotero-bbt-check', async () => {
   } catch { return { installed: false } }
 })
 
-// Step 3 — export the full library via Better BibTeX's HTTP export endpoint
-// (simpler and more reliable than JSON-RPC for whole-library exports)
+// Step 3 — export the full library via Better BibTeX JSON-RPC
+// Named params (object), no citationKeys = export whole library
 ipcMain.handle('zotero-fetch-library', async () => {
   try {
-    const r = await fetch(
-      `${ZOTERO_CONNECTOR}/better-bibtex/export/library?translator=bibtex&exportNotes=false`,
-      {
-        headers: { 'Zotero-Allowed-Request': '1' },
-        signal:  AbortSignal.timeout(30000),
-      }
-    )
-    if (!r.ok) return { success: false, error: `Better BibTeX export HTTP ${r.status}` }
-    const bibtex = await r.text()
-    return { success: true, bibtex }
+    const r = await fetch(`${ZOTERO_CONNECTOR}/better-bibtex/json-rpc`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'Zotero-Allowed-Request': '1' },
+      body:    JSON.stringify({
+        jsonrpc: '2.0',
+        method:  'item.export',
+        params:  { translator: 'BibTeX', exportNotes: false },
+        id:      1,
+      }),
+      signal: AbortSignal.timeout(30000),
+    })
+    if (!r.ok) return { success: false, error: `Better BibTeX HTTP ${r.status}` }
+    const data = await r.json()
+    if (data.error) return { success: false, error: data.error.message || JSON.stringify(data.error) }
+    return { success: true, bibtex: data.result || '' }
   } catch(e) { return { success: false, error: e.message } }
 })
 
