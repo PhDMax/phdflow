@@ -825,31 +825,7 @@ function _libMergeImported(papers, source) {
   return added
 }
 
-// ── Zotero ────────────────────────────────────────────────────────────────────
-
-function _zoteroItemToPaper(item) {
-  const z       = item.data || item
-  const authors = (z.creators || [])
-    .filter(c => c.creatorType === 'author' || c.creatorType === 'editor')
-    .map(c => [c.firstName, c.lastName].filter(Boolean).join(' '))
-  const rawYear = z.date ? z.date.match(/\b(19|20)\d{2}\b/)?.[0] : null
-  return {
-    id:        uid(),
-    title:     z.title || 'Untitled',
-    authors,
-    year:      rawYear ? parseInt(rawYear) : null,
-    journal:   z.publicationTitle || z.bookTitle || z.proceedingsTitle || z.university || null,
-    doi:       z.DOI  || null,
-    url:       z.url  || null,
-    abstract:  (z.abstractNote || '').substring(0, 600) || null,
-    topics:    (z.tags || []).map(t => t.tag).filter(Boolean),
-    status:    'unread',
-    source:    'Zotero',
-    zoteroKey: item.key,
-    addedAt:   new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  }
-}
+// ── Zotero (via Better BibTeX JSON-RPC) ──────────────────────────────────────
 
 async function libConnectZotero() {
   const prog = document.getElementById('lib-import-progress')
@@ -857,42 +833,97 @@ async function libConnectZotero() {
   const show = t => { prog?.classList.remove('hidden'); if (msg) msg.textContent = t }
   const hide = () => prog?.classList.add('hidden')
 
-  show('Connecting to Zotero…')
+  // Step 1: Is Zotero open?
+  show('Checking if Zotero is open…')
   const ping = await api.zoteroPing()
   if (!ping.running) {
     hide()
     openModal(`
-    <div class="text-center py-4">
+    <div class="text-center py-2">
       <div class="text-4xl mb-3">⚡</div>
-      <h3 class="text-base font-bold text-slate-900 mb-2">Zotero not detected</h3>
+      <h3 class="text-base font-bold text-slate-900 mb-2">Zotero is not running</h3>
       <p class="text-sm text-slate-500 mb-4 leading-relaxed">
-        Make sure <strong>Zotero</strong> is open on your computer, then try again.<br/>
-        PhDFlow connects via the local API — no account or API key required.
+        Open <strong>Zotero</strong> on your computer, then click Import again.
       </p>
       <div class="bg-slate-50 rounded-xl p-3 text-xs text-slate-500 text-left space-y-1.5 mb-4">
-        <div>1. Download Zotero free at <button onclick="api.openExternal('https://www.zotero.org/')" class="text-indigo-500 hover:underline">zotero.org</button></div>
+        <div>1. Download Zotero (free) at <button onclick="api.openExternal('https://www.zotero.org/')" class="text-indigo-500 hover:underline">zotero.org</button></div>
         <div>2. Open Zotero and let it load your library</div>
-        <div>3. Click <strong>Import from Zotero</strong> again</div>
+        <div>3. Come back here and click <strong>Import from Zotero</strong> again</div>
       </div>
       <button onclick="closeModal()" class="btn-primary text-sm px-6">Got it</button>
     </div>`)
     return
   }
 
-  show(`Zotero ${ping.version} connected — fetching library…`)
-  const result = await api.zoteroFetchLibrary({})
-  hide()
-  if (!result.success) { showToast(`Zotero: ${result.error}`, 'error'); return }
+  // Step 2: Is Better BibTeX installed?
+  show('Zotero is open — checking for Better BibTeX…')
+  const bbt = await api.zoteroBbtCheck()
+  if (!bbt.installed) {
+    hide()
+    openModal(`
+    <div class="py-2">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="text-3xl">⚡</div>
+        <div>
+          <h3 class="text-base font-bold text-slate-900">Zotero is open${ping.version ? ' (v' + ping.version + ')' : ''}</h3>
+          <p class="text-xs text-slate-400">One free plugin needed to export your library</p>
+        </div>
+      </div>
+      <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4 text-sm text-amber-800">
+        <p class="font-semibold mb-1">Better BibTeX is not installed</p>
+        <p class="text-xs leading-relaxed">PhDFlow uses the <strong>Better BibTeX for Zotero</strong> plugin to
+        read your library. It's free, open-source, and takes about 2 minutes to set up.</p>
+      </div>
+      <div class="bg-slate-50 rounded-xl p-3 text-xs text-slate-600 space-y-1.5 mb-4">
+        <div class="font-semibold text-slate-700 mb-1">Install Better BibTeX:</div>
+        <div>1. Download the <code>.xpi</code> file from
+          <button onclick="api.openExternal('https://github.com/retorquere/zotero-better-bibtex/releases/latest')" class="text-indigo-500 hover:underline">github.com/retorquere/zotero-better-bibtex</button></div>
+        <div>2. In Zotero: <strong>Tools → Add-ons → Install Add-on From File</strong></div>
+        <div>3. Select the downloaded <code>.xpi</code> file and restart Zotero</div>
+        <div>4. Come back here and click <strong>Import from Zotero</strong> again</div>
+      </div>
+      <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-3 text-xs text-indigo-700 mb-4">
+        💡 <strong>Alternative:</strong> Use <em>Import → Watch .bib/.ris file</em> to sync Zotero
+        exports without the plugin.
+      </div>
+      <div class="flex gap-3">
+        <button onclick="closeModal()" class="flex-1 btn-secondary">Cancel</button>
+        <button onclick="closeModal();libWatchFileSetup()" class="flex-1 btn-secondary">Use Watch File instead</button>
+        <button onclick="api.openExternal('https://github.com/retorquere/zotero-better-bibtex/releases/latest');closeModal()" class="flex-1 btn-primary">Get Better BibTeX ↗</button>
+      </div>
+    </div>`, true)
+    return
+  }
 
-  const papers   = result.items.map(_zoteroItemToPaper)
-  const newCount = papers.filter(p =>
+  // Step 3: Export library via Better BibTeX JSON-RPC
+  show('Exporting library via Better BibTeX…')
+  const result = await api.zoteroFetchLibrary()
+  hide()
+
+  if (!result.success) {
+    showToast(`Zotero export failed: ${result.error}`, 'error')
+    return
+  }
+
+  if (!result.bibtex?.trim()) {
+    showToast('Zotero library appears empty', 'info')
+    return
+  }
+
+  // Parse the BibTeX using the existing parser
+  const parsed = parseBib(result.bibtex)
+
+  // Mark source as Zotero
+  parsed.forEach(p => { p.source = 'Zotero' })
+
+  const newCount  = parsed.filter(p =>
     !state.papers.some(x =>
       (x.doi && p.doi && x.doi.toLowerCase() === p.doi.toLowerCase()) ||
       (x.title && p.title && x.title.toLowerCase() === p.title.toLowerCase()))
   ).length
-  const skipCount = papers.length - newCount
+  const skipCount = parsed.length - newCount
 
-  window._zoteroImportPapers = papers
+  window._zoteroImportPapers = parsed
 
   openModal(`
   <div>
@@ -900,12 +931,12 @@ async function libConnectZotero() {
       <div class="text-3xl">⚡</div>
       <div>
         <h3 class="text-base font-bold text-slate-900">Import from Zotero</h3>
-        <p class="text-xs text-slate-400">Zotero ${ping.version} · ${papers.length} items found</p>
+        <p class="text-xs text-slate-400">via Better BibTeX · ${parsed.length} items found</p>
       </div>
     </div>
     <div class="grid grid-cols-3 gap-3 mb-4">
       <div class="bg-slate-50 rounded-xl p-3 text-center">
-        <div class="text-2xl font-bold text-slate-900">${papers.length}</div>
+        <div class="text-2xl font-bold text-slate-900">${parsed.length}</div>
         <div class="text-xs text-slate-400 mt-0.5">In Zotero</div>
       </div>
       <div class="bg-emerald-50 rounded-xl p-3 text-center">
@@ -918,7 +949,7 @@ async function libConnectZotero() {
       </div>
     </div>
     ${newCount === 0
-      ? '<p class="text-sm text-slate-500 text-center py-2">All Zotero papers are already in your PhDFlow library.</p>'
+      ? '<p class="text-sm text-slate-500 text-center py-2">Your entire Zotero library is already in PhDFlow.</p>'
       : '<p class="text-xs text-slate-400 mb-4">Duplicates matched by DOI and title — existing papers are never overwritten.</p>'}
     <div class="flex gap-3">
       <button onclick="closeModal()" class="flex-1 btn-secondary">Cancel</button>

@@ -79,7 +79,8 @@ contextBridge.exposeInMainWorld('api', {
 
   // ── Reference manager integration ────────────────────────────────────────
   zoteroPing:          ()         => ipcRenderer.invoke('zotero-ping'),
-  zoteroFetchLibrary:  (opts)     => ipcRenderer.invoke('zotero-fetch-library', opts),
+  zoteroBbtCheck:      ()         => ipcRenderer.invoke('zotero-bbt-check'),
+  zoteroFetchLibrary:  ()         => ipcRenderer.invoke('zotero-fetch-library'),
   libWatchGet:         ()         => ipcRenderer.invoke('lib-watch-get'),
   libWatchSet:         (filePath) => ipcRenderer.invoke('lib-watch-set', filePath),
   libWatchRemove:      ()         => ipcRenderer.invoke('lib-watch-remove'),

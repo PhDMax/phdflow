@@ -1089,47 +1089,59 @@ ipcMain.handle('search-ukri', async (_, { keywords, rows = 20 }) => {
 
 // ─── Reference Manager Integration ───────────────────────────────────────────
 
-const ZOTERO_BASE = 'http://localhost:23119'
+const ZOTERO_CONNECTOR = 'http://localhost:23119'
 
+// Step 1 — check if Zotero is open via the connector ping endpoint
 ipcMain.handle('zotero-ping', async () => {
   try {
-    const r = await fetch(`${ZOTERO_BASE}/`, {
+    const r = await fetch(`${ZOTERO_CONNECTOR}/connector/ping`, {
       headers: { 'Zotero-Allowed-Request': '1' },
-      signal: AbortSignal.timeout(2500),
+      signal: AbortSignal.timeout(3000),
     })
     if (!r.ok) return { running: false }
     const text = await r.text()
-    const version = text.match(/"zoteroVersion"\s*:\s*"([^"]+)"/)?.[1] || 'unknown'
+    // Response is plain text or JSON — extract version if present
+    const version = text.match(/"version"\s*:\s*"([^"]+)"/)?.[1]
+      || text.match(/Zotero[^\d]*(\d+\.\d+[\.\d]*)/)?.[1]
+      || ''
     return { running: true, version }
   } catch { return { running: false } }
 })
 
-ipcMain.handle('zotero-fetch-library', async (_, { since } = {}) => {
+// Step 2 — check whether Better BibTeX plugin is installed
+ipcMain.handle('zotero-bbt-check', async () => {
   try {
-    const supported = new Set(['journalArticle','book','bookSection','conferencePaper','preprint','thesis','report','manuscript'])
-    let allItems = [], start = 0, lastVersion = null
+    const r = await fetch(`${ZOTERO_CONNECTOR}/better-bibtex/json-rpc`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'Zotero-Allowed-Request': '1' },
+      body:    JSON.stringify({ jsonrpc: '2.0', method: 'library', params: [], id: 1 }),
+      signal:  AbortSignal.timeout(4000),
+    })
+    // BBT is installed if the endpoint responds (even with an error method)
+    return { installed: r.status !== 404 }
+  } catch { return { installed: false } }
+})
 
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-      const params = new URLSearchParams({
-        format: 'json', limit: '100', start: String(start),
-        ...(since ? { since: String(since) } : {}),
-      })
-      const r = await fetch(`${ZOTERO_BASE}/users/0/items?${params}`, {
-        headers: { 'Zotero-Allowed-Request': '1' },
-        signal: AbortSignal.timeout(15000),
-      })
-      if (!r.ok) return { success: false, error: `Zotero API returned HTTP ${r.status}` }
-
-      const items = await r.json()
-      lastVersion = r.headers.get('Last-Modified-Version') || lastVersion
-      const total = parseInt(r.headers.get('Total-Results') || '0')
-
-      allItems.push(...items.filter(i => supported.has(i.data?.itemType)))
-      start += items.length
-      if (!items.length || start >= total) break
-    }
-    return { success: true, items: allItems, version: lastVersion }
+// Step 3 — export the full library as BibTeX via Better BibTeX JSON-RPC
+ipcMain.handle('zotero-fetch-library', async () => {
+  try {
+    const r = await fetch(`${ZOTERO_CONNECTOR}/better-bibtex/json-rpc`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'Zotero-Allowed-Request': '1' },
+      body:    JSON.stringify({
+        jsonrpc: '2.0',
+        method:  'item.exportLibrary',
+        // translator = 'BibTeX', exportNotes = false, asFile = false
+        params:  [false, 'BibTeX'],
+        id:      1,
+      }),
+      signal: AbortSignal.timeout(30000),
+    })
+    if (!r.ok) return { success: false, error: `Better BibTeX HTTP ${r.status}` }
+    const data = await r.json()
+    if (data.error) return { success: false, error: data.error.message || 'Better BibTeX error' }
+    // result is the BibTeX string
+    return { success: true, bibtex: data.result || '' }
   } catch(e) { return { success: false, error: e.message } }
 })
 
