@@ -22,6 +22,17 @@ let _wbBg          = 'dots'
 let _wbResizeObs   = null
 let _wbResizing    = null   // { handle:0-7, startPt:{x,y}, origShape:{...} }
 let _wbKeysAdded   = false
+let _wbSpaceHeld   = false
+
+// ── Viewport (zoom + pan) ─────────────────────────────────────────────────────
+let _wbZoom        = 1          // scale factor
+let _wbPanX        = 0          // canvas-space offset X
+let _wbPanY        = 0          // canvas-space offset Y
+let _wbPanning     = false      // space+drag pan in progress
+let _wbPanStart    = null       // { x, y, panX, panY }
+
+const WB_ZOOM_MIN  = 0.15
+const WB_ZOOM_MAX  = 8
 
 const WB_HR = 6   // handle hit radius px
 
@@ -183,6 +194,14 @@ function render_whiteboard() {
       <div class="ml-auto flex items-center gap-1 flex-shrink-0 pl-2">
         <button onclick="wbUndo()" title="Undo Ctrl+Z" class="w-8 h-8 flex items-center justify-center rounded text-slate-500 hover:bg-slate-100 transition-colors">↩</button>
         <button onclick="wbRedo()" title="Redo Ctrl+Y" class="w-8 h-8 flex items-center justify-center rounded text-slate-500 hover:bg-slate-100 transition-colors">↪</button>
+        <div class="w-px h-5 bg-slate-200 mx-0.5"></div>
+        <button onclick="wbZoomOut()" title="Zoom out  -" class="w-8 h-8 flex items-center justify-center rounded text-slate-500 hover:bg-slate-100 transition-colors text-base font-bold">−</button>
+        <button id="wb-zoom-label" onclick="wbZoomReset()" title="Reset zoom  0"
+          class="px-2 h-8 rounded text-xs text-slate-500 hover:bg-slate-100 transition-colors tabular-nums min-w-[44px] text-center">
+          ${Math.round(_wbZoom*100)}%
+        </button>
+        <button onclick="wbZoomIn()" title="Zoom in  +" class="w-8 h-8 flex items-center justify-center rounded text-slate-500 hover:bg-slate-100 transition-colors text-base font-bold">+</button>
+        <div class="w-px h-5 bg-slate-200 mx-0.5"></div>
         <button onclick="wbClear()" class="px-2.5 h-8 rounded text-xs text-red-400 hover:bg-red-50 transition-colors">Clear</button>
         <button onclick="wbExportPng()" class="px-2.5 h-8 rounded text-xs bg-slate-100 hover:bg-indigo-100 text-slate-600 hover:text-indigo-700 font-medium transition-colors">PNG</button>
       </div>
@@ -288,24 +307,57 @@ function _wbInitCanvas(retry) {
 function _wbBindKeys() {
   if (_wbKeysAdded) return
   _wbKeysAdded = true
+
   document.addEventListener('keydown', e => {
     if (!_wb) return
     const tag = document.activeElement?.tagName
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.contentEditable === 'true') return
+    const inInput = tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.contentEditable === 'true'
+
+    // Space pan — works even in inputs we don't own (only when canvas is in view)
+    if (e.key === ' ' && !inInput) {
+      e.preventDefault()
+      if (!_wbSpaceHeld) {
+        _wbSpaceHeld = true
+        if (_wbCanvas && !_wbDrawing) _wbCanvas.style.cursor = 'grab'
+      }
+      return
+    }
+
+    if (inInput) return
 
     if ((e.ctrlKey||e.metaKey) && e.key==='z') { e.preventDefault(); wbUndo(); return }
     if ((e.ctrlKey||e.metaKey) && (e.key==='y'||(e.shiftKey&&e.key==='z'))) { e.preventDefault(); wbRedo(); return }
+    if ((e.ctrlKey||e.metaKey) && e.key==='d') { e.preventDefault(); wbSelDuplicate(); return }
     if (e.key==='Delete'||e.key==='Backspace') { if (_wbSelId) { e.preventDefault(); _wbDeleteSelected() }; return }
     if (e.key==='Escape') { _wbSelId=null; _wbRender(); return }
+    if (e.key==='+' || e.key==='=') { e.preventDefault(); wbZoomIn(); return }
+    if (e.key==='-') { e.preventDefault(); wbZoomOut(); return }
+    if (e.key==='0') { e.preventDefault(); wbZoomReset(); return }
 
     const toolKeys = { v:'select',p:'pen',s:'smart',l:'line',a:'arrow',r:'rect',e:'circle',d:'diamond',g:'triangle',n:'sticky',t:'text',x:'erase' }
     if (toolKeys[e.key.toLowerCase()]) { wbSetTool(toolKeys[e.key.toLowerCase()]); return }
   })
+
+  document.addEventListener('keyup', e => {
+    if (e.key === ' ') {
+      _wbSpaceHeld = false
+      if (_wbCanvas && !_wbDrawing && !_wbPanning)
+        _wbCanvas.style.cursor = _wbTool === 'select' ? 'default' : 'crosshair'
+    }
+  })
 }
 
-// ── Pointer helpers ───────────────────────────────────────────────────────────
+// ── Pointer helpers — maps screen coords to canvas-world coords ───────────────
 
 function _wbPt(e) {
+  const rect = _wbCanvas.getBoundingClientRect()
+  const sx = e.clientX - rect.left
+  const sy = e.clientY - rect.top
+  return { x: (sx - _wbPanX) / _wbZoom, y: (sy - _wbPanY) / _wbZoom }
+}
+
+// Screen coords (no world transform) — used for pan drag tracking
+function _wbPtScreen(e) {
   const rect = _wbCanvas.getBoundingClientRect()
   return { x: e.clientX - rect.left, y: e.clientY - rect.top }
 }
@@ -317,14 +369,42 @@ function _wbBindCanvas() {
   _wbCanvas.onmousedown  = _wbDown
   _wbCanvas.onmousemove  = _wbMove
   _wbCanvas.onmouseup    = _wbUp
-  _wbCanvas.onmouseleave = e => { if (_wbDrawing || _wbDragStart || _wbResizing) _wbUp(e) }
+  _wbCanvas.onmouseleave = e => {
+    if (_wbPanning) { _wbPanning = false; _wbPanStart = null; _wbCanvas.style.cursor = _wbTool === 'select' ? 'default' : 'crosshair' }
+    if (_wbDrawing || _wbDragStart || _wbResizing) _wbUp(e)
+  }
   _wbCanvas.ondblclick   = _wbDblClick
+
+  // Scroll-wheel zoom
+  _wbCanvas.onwheel = e => {
+    e.preventDefault()
+    const rect  = _wbCanvas.getBoundingClientRect()
+    const sx    = e.clientX - rect.left   // screen pivot
+    const sy    = e.clientY - rect.top
+    const delta = e.deltaY > 0 ? 0.9 : 1 / 0.9
+    const newZ  = Math.min(WB_ZOOM_MAX, Math.max(WB_ZOOM_MIN, _wbZoom * delta))
+    // Keep the point under the cursor fixed in world space
+    _wbPanX = sx - (sx - _wbPanX) * (newZ / _wbZoom)
+    _wbPanY = sy - (sy - _wbPanY) * (newZ / _wbZoom)
+    _wbZoom = newZ
+    _wbRender()
+    _wbUpdateZoomLabel()
+  }
 }
 
 // ── Mouse Down ────────────────────────────────────────────────────────────────
 
 function _wbDown(e) {
   if (e.button !== 0) return
+
+  // Space+drag pan or middle-mouse pan
+  if (_wbSpaceHeld || e.button === 1) {
+    _wbPanning  = true
+    _wbPanStart = { x: e.clientX, y: e.clientY, panX: _wbPanX, panY: _wbPanY }
+    _wbCanvas.style.cursor = 'grabbing'
+    return
+  }
+
   const pt = _wbPt(e)
 
   if (_wbTool === 'text') { _wbPlaceText(pt.x, pt.y); return }
@@ -361,6 +441,14 @@ function _wbDown(e) {
 // ── Mouse Move ────────────────────────────────────────────────────────────────
 
 function _wbMove(e) {
+  // Pan
+  if (_wbPanning && _wbPanStart) {
+    _wbPanX = _wbPanStart.panX + (e.clientX - _wbPanStart.x)
+    _wbPanY = _wbPanStart.panY + (e.clientY - _wbPanStart.y)
+    _wbRender()
+    return
+  }
+
   const pt = _wbPt(e)
 
   // Resize
@@ -409,6 +497,12 @@ function _wbMove(e) {
 // ── Mouse Up ──────────────────────────────────────────────────────────────────
 
 function _wbUp(e) {
+  if (_wbPanning) {
+    _wbPanning  = false
+    _wbPanStart = null
+    _wbCanvas.style.cursor = _wbSpaceHeld ? 'grab' : (_wbTool === 'select' ? 'default' : 'crosshair')
+    return
+  }
   if (_wbResizing) {
     _wbResizing = null
     saveWb()
@@ -566,7 +660,15 @@ function _wbRender() {
   if (!_wbCtx || !_wbCanvas || !_wb) return
   const ctx = _wbCtx
   const dpr = window.devicePixelRatio || 1
-  ctx.clearRect(0, 0, _wbCanvas.width/dpr, _wbCanvas.height/dpr)
+  const w   = _wbCanvas.width / dpr
+  const h   = _wbCanvas.height / dpr
+
+  ctx.clearRect(0, 0, w, h)
+
+  // Apply viewport transform
+  ctx.save()
+  ctx.translate(_wbPanX, _wbPanY)
+  ctx.scale(_wbZoom, _wbZoom)
 
   for (const s of (_wb.shapes||[])) {
     _wbDrawShape(ctx, s)
@@ -574,6 +676,8 @@ function _wbRender() {
   }
 
   if (_wbDrawing && _wbPts.length >= 2) _wbDrawActiveStroke()
+
+  ctx.restore()
   _wbUpdateSelBar()
 }
 
@@ -1134,6 +1238,7 @@ function wbNewBoardConfirm() {
 function wbLoadBoard(id) {
   _wb = state.whiteboards.find(b=>b.id===id)||null
   _wbUndo=[]; _wbRedo=[]; _wbSelId=null
+  _wbZoom=1; _wbPanX=0; _wbPanY=0
   render_whiteboard()
 }
 function wbRenameBoard() {
@@ -1172,6 +1277,30 @@ function saveWb() {
 }
 
 // ── Toolbar Controls ──────────────────────────────────────────────────────────
+
+function _wbUpdateZoomLabel() {
+  const el = document.getElementById('wb-zoom-label')
+  if (el) el.textContent = Math.round(_wbZoom * 100) + '%'
+}
+
+function wbZoomIn()    { _wbSetZoomCentre(_wbZoom * (1/0.9)) }
+function wbZoomOut()   { _wbSetZoomCentre(_wbZoom * 0.9) }
+function wbZoomReset() {
+  _wbZoom = 1; _wbPanX = 0; _wbPanY = 0
+  _wbRender(); _wbUpdateZoomLabel()
+}
+
+function _wbSetZoomCentre(newZ) {
+  if (!_wbCanvas) return
+  newZ = Math.min(WB_ZOOM_MAX, Math.max(WB_ZOOM_MIN, newZ))
+  // Zoom towards canvas centre
+  const cx = _wbCanvas.offsetWidth / 2
+  const cy = _wbCanvas.offsetHeight / 2
+  _wbPanX = cx - (cx - _wbPanX) * (newZ / _wbZoom)
+  _wbPanY = cy - (cy - _wbPanY) * (newZ / _wbZoom)
+  _wbZoom = newZ
+  _wbRender(); _wbUpdateZoomLabel()
+}
 
 function wbSetTool(t) {
   _wbTool=t; _wbSelId=null
