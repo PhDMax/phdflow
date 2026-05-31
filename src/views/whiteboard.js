@@ -106,6 +106,15 @@ function render_whiteboard() {
       </button>
       ${_wb ? `
       <div class="ml-auto flex items-center gap-2 flex-shrink-0">
+        ${(() => {
+          const proj = _wb.projectId ? (state.projects||[]).find(p => p.id === _wb.projectId) : null
+          return proj
+            ? `<span class="text-xs bg-indigo-50 text-indigo-600 border border-indigo-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+                📋 ${esc(proj.name)}
+                <button onclick="wbUnlinkProject()" class="ml-0.5 hover:text-rose-500 leading-none" title="Unlink">✕</button>
+               </span>`
+            : `<button onclick="wbLinkProject()" class="text-xs text-slate-400 hover:text-indigo-600 transition-colors" title="Link to project">📋 Link</button>`
+        })()}
         <button onclick="wbRenameBoard()" class="text-xs text-slate-400 hover:text-slate-600">Rename</button>
         <button onclick="wbDeleteBoard()" class="text-xs text-red-400 hover:text-red-600">Delete</button>
       </div>` : ''}
@@ -1329,6 +1338,36 @@ function _wbUpdateToolbar() {
 }
 
 // ── Board Management ──────────────────────────────────────────────────────────
+
+function wbLinkProject() {
+  if (!_wb) return
+  if (!(state.projects||[]).length) { showToast('No projects to link to yet', 'info'); return }
+  openModal(`
+  <h3 class="text-base font-bold text-slate-900 mb-3">Link board to project</h3>
+  <div class="space-y-1.5 max-h-64 overflow-y-auto">
+    ${(state.projects||[]).filter(p=>p.status!=='archived').map(p=>`
+    <button onclick="_wbDoLinkProject('${p.id}')"
+      class="w-full text-left flex items-center gap-2.5 p-2.5 rounded-xl border border-slate-200
+        hover:border-indigo-300 hover:bg-indigo-50 transition-all text-sm">
+      <div class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:${p.color||'#6366f1'}"></div>
+      <span class="font-medium text-slate-800 truncate">${esc(p.name)}</span>
+    </button>`).join('')}
+  </div>
+  <button onclick="closeModal()" class="w-full btn-secondary text-xs mt-3">Cancel</button>`)
+}
+
+function _wbDoLinkProject(projectId) {
+  if (!_wb) return
+  _wb.projectId = projectId
+  saveWb(); closeModal(); render_whiteboard()
+  showToast('Board linked to project ✓')
+}
+
+function wbUnlinkProject() {
+  if (!_wb) return
+  delete _wb.projectId
+  saveWb(); render_whiteboard()
+}
 
 function wbNewBoard() {
   openModal(`<div>

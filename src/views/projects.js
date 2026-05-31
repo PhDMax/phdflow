@@ -320,6 +320,26 @@ function openProjectDetail(id) {
     <div id="proj-task-list">${renderProjectTasks(id)}</div>
   </div>
 
+  <!-- ── Linked Whiteboards ────────────────────────────────────────── -->
+  ${(() => {
+    const boards = (state.whiteboards||[]).filter(b => b.projectId === id)
+    if (!boards.length) return ''
+    return `<div class="mb-5">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-sm font-bold text-slate-800">🎨 Whiteboards</span>
+        <button onclick="closeModal();showView('whiteboard')" class="text-xs text-slate-400 hover:text-indigo-600 font-medium">Open →</button>
+      </div>
+      <div class="space-y-1.5">
+        ${boards.map(b=>`
+        <div class="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100 hover:border-slate-200 transition-colors">
+          <span class="text-sm font-medium text-slate-800">🎨 ${esc(b.name)}</span>
+          <button onclick="closeModal();wbLoadBoard('${b.id}');showView('whiteboard')"
+            class="text-indigo-500 hover:text-indigo-700 text-xs font-medium">Open →</button>
+        </div>`).join('')}
+      </div>
+    </div>`
+  })()}
+
   <!-- ── Linked Notes ────────────────────────────────────────────────── -->
   <div class="mb-5">
     <div class="flex items-center justify-between mb-2">
