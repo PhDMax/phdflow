@@ -46,6 +46,17 @@ const WB_TOOLS = [
   { id:'erase',   icon:'⌫',  title:'Eraser  X' },
 ]
 
+const WB_STICKY_COLORS = [
+  '#fef08a', // yellow
+  '#86efac', // green
+  '#93c5fd', // blue
+  '#fca5a5', // red/pink
+  '#c4b5fd', // purple
+  '#fdba74', // orange
+  '#f9a8d4', // pink
+  '#e2e8f0', // grey
+]
+
 const WB_BG = {
   white: 'background:#fff',
   dots:  'background:#f8fafc;background-image:radial-gradient(circle,#cbd5e1 1px,transparent 1px);background-size:24px 24px',
@@ -180,25 +191,34 @@ function render_whiteboard() {
     <!-- Selection property bar (visible when a shape is selected) -->
     <div id="wb-sel-bar" class="hidden bg-indigo-50 border-b border-indigo-100 px-3 py-1 flex items-center gap-3 flex-shrink-0 text-xs">
       <span class="text-indigo-600 font-semibold">Selected:</span>
-      <label class="flex items-center gap-1 text-slate-600">Stroke
-        <input type="color" id="wb-sel-stroke" oninput="wbSelSetStroke(this.value)"
-          style="width:20px;height:20px;border-radius:4px;border:1px solid #c7d2fe;padding:1px;
-            appearance:none;-webkit-appearance:none;cursor:pointer;margin-left:2px">
-      </label>
-      <label class="flex items-center gap-1 text-slate-600">
-        <input type="checkbox" id="wb-sel-fill-on" onchange="wbSelToggleFill(this.checked)"
-          class="accent-indigo-600"> Fill
-        <input type="color" id="wb-sel-fill-clr" oninput="wbSelSetFill(this.value)"
-          style="width:20px;height:20px;border-radius:4px;border:1px solid #c7d2fe;padding:1px;
-            appearance:none;-webkit-appearance:none;cursor:pointer;margin-left:2px">
-      </label>
-      <div class="w-px h-4 bg-indigo-200"></div>
-      <label class="flex items-center gap-1 text-slate-600">Width
-        ${[[1,'—'],[2,'━'],[5,'▬']].map(([w,icon])=>`
-        <button onclick="wbSelSetSW(${w})" id="wb-sel-sw-${w}"
-          class="px-1.5 py-0.5 rounded text-xs font-bold transition-colors
-            hover:bg-indigo-100 hover:text-indigo-700 text-slate-500">${icon}</button>`).join('')}
-      </label>
+      <!-- Sticky colour swatches (only for sticky type) -->
+      <div id="wb-sel-sticky-colors" class="hidden flex items-center gap-0.5">
+        ${WB_STICKY_COLORS.map(c=>`
+        <button onclick="wbSelSetFill('${c}')"
+          style="background:${c};width:18px;height:18px;border-radius:4px;border:1px solid rgba(0,0,0,.1);cursor:pointer;flex-shrink:0"
+          title="${c}"></button>`).join('')}
+      </div>
+      <!-- Stroke + fill for other shapes -->
+      <div id="wb-sel-shape-props" class="flex items-center gap-3">
+        <label class="flex items-center gap-1 text-slate-600">Stroke
+          <input type="color" id="wb-sel-stroke" oninput="wbSelSetStroke(this.value)"
+            style="width:20px;height:20px;border-radius:4px;border:1px solid #c7d2fe;padding:1px;
+              appearance:none;-webkit-appearance:none;cursor:pointer;margin-left:2px">
+        </label>
+        <label class="flex items-center gap-1 text-slate-600">
+          <input type="checkbox" id="wb-sel-fill-on" onchange="wbSelToggleFill(this.checked)"
+            class="accent-indigo-600"> Fill
+          <input type="color" id="wb-sel-fill-clr" oninput="wbSelSetFill(this.value)"
+            style="width:20px;height:20px;border-radius:4px;border:1px solid #c7d2fe;padding:1px;
+              appearance:none;-webkit-appearance:none;cursor:pointer;margin-left:2px">
+        </label>
+        <label class="flex items-center gap-1 text-slate-600">Width
+          ${[[1,'—'],[2,'━'],[5,'▬']].map(([w,icon])=>`
+          <button onclick="wbSelSetSW(${w})" id="wb-sel-sw-${w}"
+            class="px-1.5 py-0.5 rounded text-xs font-bold transition-colors
+              hover:bg-indigo-100 hover:text-indigo-700 text-slate-500">${icon}</button>`).join('')}
+        </label>
+      </div>
       <div class="w-px h-4 bg-indigo-200"></div>
       <button onclick="wbSelDuplicate()" class="text-indigo-600 hover:text-indigo-800 font-medium">⎘ Duplicate</button>
       <button onclick="_wbDeleteSelected()" class="text-rose-500 hover:text-rose-700 font-medium ml-1">✕ Delete</button>
@@ -491,8 +511,17 @@ function _wbDrawActiveStroke() {
 
   if (['pen','smart','erase'].includes(_wbTool)) {
     ctx.globalAlpha = _wbTool==='erase' ? 0.3 : 1
-    ctx.beginPath(); ctx.moveTo(p0.x, p0.y)
-    for (let i=1;i<_wbPts.length;i++) ctx.lineTo(_wbPts[i].x, _wbPts[i].y)
+    const pts = _wbPts
+    ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y)
+    if (pts.length < 3) {
+      for (let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x, pts[i].y)
+    } else {
+      for (let i=1;i<pts.length-1;i++) {
+        const mx=(pts[i].x+pts[i+1].x)/2, my=(pts[i].y+pts[i+1].y)/2
+        ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my)
+      }
+      ctx.lineTo(pts[pts.length-1].x, pts[pts.length-1].y)
+    }
     ctx.stroke()
   } else if (_wbTool==='line') {
     ctx.beginPath(); ctx.moveTo(p0.x,p0.y); ctx.lineTo(pN.x,pN.y); ctx.stroke()
@@ -557,10 +586,21 @@ function _wbDrawShape(ctx, s) {
 
   switch (s.type) {
     case 'freehand': {
-      if (!s.points?.length) break
+      const pts = s.points
+      if (!pts?.length) break
       ctx.beginPath()
-      ctx.moveTo(s.points[0].x, s.points[0].y)
-      for (let i=1;i<s.points.length;i++) ctx.lineTo(s.points[i].x, s.points[i].y)
+      ctx.moveTo(pts[0].x, pts[0].y)
+      if (pts.length < 3) {
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y)
+      } else {
+        // Midpoint Bezier smoothing — eliminates jagged polyline angles
+        for (let i = 1; i < pts.length - 1; i++) {
+          const mx = (pts[i].x + pts[i+1].x) / 2
+          const my = (pts[i].y + pts[i+1].y) / 2
+          ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my)
+        }
+        ctx.lineTo(pts[pts.length-1].x, pts[pts.length-1].y)
+      }
       ctx.stroke()
       break
     }
@@ -1156,24 +1196,29 @@ function _wbUpdateSelBar() {
   if (!sel) { bar.classList.add('hidden'); return }
   bar.classList.remove('hidden')
 
-  const strokeInp = document.getElementById('wb-sel-stroke')
-  if (strokeInp) strokeInp.value = sel.color || '#1e293b'
+  const isSticky = sel.type === 'sticky'
+  document.getElementById('wb-sel-sticky-colors')?.classList.toggle('hidden', !isSticky)
+  document.getElementById('wb-sel-shape-props')?.classList.toggle('hidden',   isSticky)
 
-  const fillOn = document.getElementById('wb-sel-fill-on')
-  if (fillOn) fillOn.checked = !!sel.fill
+  if (!isSticky) {
+    const strokeInp = document.getElementById('wb-sel-stroke')
+    if (strokeInp) strokeInp.value = sel.color || '#1e293b'
 
-  const fillClr = document.getElementById('wb-sel-fill-clr')
-  if (fillClr) fillClr.value = sel.fillColor || '#93c5fd'
+    const fillOn = document.getElementById('wb-sel-fill-on')
+    if (fillOn) fillOn.checked = !!sel.fill
 
-  // Highlight active stroke width
-  ;[1,2,5].forEach(w => {
-    const btn = document.getElementById(`wb-sel-sw-${w}`)
-    if (!btn) return
-    btn.className = `px-1.5 py-0.5 rounded text-xs font-bold transition-colors ${
-      (sel.sw||2) === w
-        ? 'bg-indigo-200 text-indigo-800'
-        : 'hover:bg-indigo-100 hover:text-indigo-700 text-slate-500'}`
-  })
+    const fillClr = document.getElementById('wb-sel-fill-clr')
+    if (fillClr) fillClr.value = sel.fillColor || '#93c5fd'
+
+    ;[1,2,5].forEach(w => {
+      const btn = document.getElementById(`wb-sel-sw-${w}`)
+      if (!btn) return
+      btn.className = `px-1.5 py-0.5 rounded text-xs font-bold transition-colors ${
+        (sel.sw||2) === w
+          ? 'bg-indigo-200 text-indigo-800'
+          : 'hover:bg-indigo-100 hover:text-indigo-700 text-slate-500'}`
+    })
+  }
 }
 
 function wbSelSetStroke(c) {
