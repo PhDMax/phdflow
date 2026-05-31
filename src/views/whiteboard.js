@@ -16,6 +16,8 @@ let _wbDrawing     = false
 let _wbPts         = []
 let _wbDragStart   = null
 let _wbSelId       = null
+let _wbSelIds      = []         // multi-select set
+let _wbSelRect     = null       // { x,y,w,h } drag-selection in progress (world coords)
 let _wbCanvas      = null
 let _wbCtx         = null
 let _wbBg          = 'dots'
@@ -410,8 +412,8 @@ function _wbDown(e) {
   if (_wbTool === 'text') { _wbPlaceText(pt.x, pt.y); return }
 
   if (_wbTool === 'select') {
-    // Check resize handles first
-    if (_wbSelId) {
+    // Check resize handles on single-selected resizable shape
+    if (_wbSelId && _wbSelIds.length <= 1) {
       const sel = (_wb.shapes||[]).find(s => s.id === _wbSelId)
       if (sel && WB_RESIZABLE.includes(sel.type)) {
         const handles = _wbGetHandles(sel)
@@ -424,11 +426,25 @@ function _wbDown(e) {
         }
       }
     }
-    // Hit test for move
     const hit = _wbHitTest(pt.x, pt.y)
-    _wbSelId = hit
-    if (hit) {
+    if (e.ctrlKey || e.metaKey) {
+      // Ctrl+click toggles shape in/out of multi-selection
+      if (hit) {
+        const idx = _wbSelIds.indexOf(hit)
+        if (idx === -1) _wbSelIds.push(hit)
+        else            _wbSelIds.splice(idx, 1)
+        _wbSelId = _wbSelIds[_wbSelIds.length - 1] || null
+      }
+    } else if (hit) {
+      // Click on shape — select it (keep multi-sel if clicking inside it)
+      if (!_wbSelIds.includes(hit)) { _wbSelIds = [hit] }
+      _wbSelId = hit
       _wbDragStart = { x: pt.x, y: pt.y, shapes: JSON.parse(JSON.stringify(_wb.shapes)) }
+    } else {
+      // Click on empty space — start drag-selection rect
+      _wbSelId  = null
+      _wbSelIds = []
+      _wbSelRect = { x: pt.x, y: pt.y, w: 0, h: 0 }
     }
     _wbRender()
     return
@@ -461,9 +477,20 @@ function _wbMove(e) {
     return
   }
 
-  // Move selected shape
+  // Grow drag-selection rect
+  if (_wbTool === 'select' && _wbSelRect && !_wbDragStart) {
+    _wbSelRect.w = pt.x - _wbSelRect.x
+    _wbSelRect.h = pt.y - _wbSelRect.y
+    _wbRender()
+    return
+  }
+
+  // Move selected shape(s)
   if (_wbTool === 'select' && _wbDragStart && _wbSelId) {
-    _wbMoveShape(_wbSelId, pt.x - _wbDragStart.x, pt.y - _wbDragStart.y, _wbDragStart.shapes)
+    const dx = pt.x - _wbDragStart.x
+    const dy = pt.y - _wbDragStart.y
+    const ids = _wbSelIds.length > 1 ? _wbSelIds : [_wbSelId]
+    for (const id of ids) _wbMoveShape(id, dx, dy, _wbDragStart.shapes)
     _wbRender()
     return
   }
@@ -508,6 +535,26 @@ function _wbUp(e) {
     saveWb()
     return
   }
+  // Finalise drag-selection rect
+  if (_wbSelRect) {
+    const rx = Math.min(_wbSelRect.x, _wbSelRect.x + _wbSelRect.w)
+    const ry = Math.min(_wbSelRect.y, _wbSelRect.y + _wbSelRect.h)
+    const rw = Math.abs(_wbSelRect.w)
+    const rh = Math.abs(_wbSelRect.h)
+    if (rw > 5 && rh > 5) {
+      _wbSelIds = (_wb.shapes||[])
+        .filter(s => {
+          const bb = _wbBBox(s)
+          return bb.x >= rx && bb.y >= ry && bb.x+bb.w <= rx+rw && bb.y+bb.h <= ry+rh
+        })
+        .map(s => s.id)
+      _wbSelId = _wbSelIds[_wbSelIds.length - 1] || null
+    }
+    _wbSelRect = null
+    _wbRender()
+    return
+  }
+
   if (_wbDragStart && _wbSelId) {
     _wbPushUndo()
     _wbDragStart = null
@@ -672,10 +719,22 @@ function _wbRender() {
 
   for (const s of (_wb.shapes||[])) {
     _wbDrawShape(ctx, s)
-    if (s.id === _wbSelId) _wbDrawSelection(ctx, s)
+    if (s.id === _wbSelId || _wbSelIds.includes(s.id)) _wbDrawSelection(ctx, s)
   }
 
   if (_wbDrawing && _wbPts.length >= 2) _wbDrawActiveStroke()
+
+  // Drag-selection rubber band
+  if (_wbSelRect) {
+    ctx.save()
+    ctx.strokeStyle = '#6366f1'; ctx.lineWidth = 1 / _wbZoom; ctx.setLineDash([5 / _wbZoom, 3 / _wbZoom])
+    ctx.fillStyle = 'rgba(99,102,241,0.06)'
+    const rx = Math.min(_wbSelRect.x, _wbSelRect.x + _wbSelRect.w)
+    const ry = Math.min(_wbSelRect.y, _wbSelRect.y + _wbSelRect.h)
+    ctx.fillRect(rx, ry, Math.abs(_wbSelRect.w), Math.abs(_wbSelRect.h))
+    ctx.strokeRect(rx, ry, Math.abs(_wbSelRect.w), Math.abs(_wbSelRect.h))
+    ctx.restore()
+  }
 
   ctx.restore()
   _wbUpdateSelBar()
@@ -947,10 +1006,11 @@ function _wbMoveShape(id, dx, dy, origShapes) {
 }
 
 function _wbDeleteSelected() {
-  if (!_wbSelId) return
+  const toDelete = _wbSelIds.length > 1 ? new Set(_wbSelIds) : (_wbSelId ? new Set([_wbSelId]) : null)
+  if (!toDelete) return
   _wbPushUndo()
-  _wb.shapes = _wb.shapes.filter(s=>s.id!==_wbSelId)
-  _wbSelId = null
+  _wb.shapes = _wb.shapes.filter(s => !toDelete.has(s.id))
+  _wbSelId = null; _wbSelIds = []
   saveWb(); _wbRender()
 }
 
@@ -1303,7 +1363,7 @@ function _wbSetZoomCentre(newZ) {
 }
 
 function wbSetTool(t) {
-  _wbTool=t; _wbSelId=null
+  _wbTool=t; _wbSelId=null; _wbSelIds=[]; _wbSelRect=null
   document.getElementById('wb-text-inp')?.remove()
   _wbUpdateToolbar(); _wbRender()
 }
