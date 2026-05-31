@@ -7,7 +7,7 @@ let _wbTool        = 'select'
 let _wbColor       = '#1e293b'
 let _wbSW          = 2
 let _wbFill        = false
-let _wbFillClr     = '#dbeafe'
+let _wbFillClr     = '#93c5fd'
 let _wbFontSize    = 14
 let _wbSmartOn     = true
 let _wbUndo        = []
@@ -40,6 +40,7 @@ const WB_TOOLS = [
   { id:'rect',    icon:'▭',  title:'Rectangle  R' },
   { id:'circle',  icon:'○',  title:'Ellipse  E' },
   { id:'diamond', icon:'◇',  title:'Diamond  D' },
+  { id:'triangle',icon:'△',  title:'Triangle  G' },
   { id:'sticky',  icon:'🗒', title:'Sticky Note  N' },
   { id:'text',    icon:'T',  title:'Text  T' },
   { id:'erase',   icon:'⌫',  title:'Eraser  X' },
@@ -100,12 +101,17 @@ function render_whiteboard() {
 
       <div class="w-px h-5 bg-slate-200 mx-1.5 flex-shrink-0"></div>
 
-      <!-- Stroke colors -->
+      <!-- Stroke colours (palette + custom picker) -->
       <div class="flex items-center gap-0.5 flex-shrink-0">
         ${WB_PALETTE.map(c => `
         <button data-wb-color="${c}" onclick="wbSetColor('${c}')" title="${c}"
           style="background:${c};outline:${_wbColor===c ? '2px solid #6366f1' : (c==='#ffffff'?'1px solid #e2e8f0':'none')};outline-offset:1px"
           class="w-5 h-5 rounded-full flex-shrink-0 transition-transform hover:scale-110"></button>`).join('')}
+        <input type="color" id="wb-stroke-clr-inp" value="${_wbColor}"
+          oninput="wbSetColor(this.value)"
+          title="Custom stroke colour"
+          style="width:20px;height:20px;border-radius:50%;border:1px solid #e2e8f0;
+            padding:1px;appearance:none;-webkit-appearance:none;margin-left:2px">
       </div>
 
       <div class="w-px h-5 bg-slate-200 mx-1.5 flex-shrink-0"></div>
@@ -122,20 +128,17 @@ function render_whiteboard() {
 
       <div class="w-px h-5 bg-slate-200 mx-1.5 flex-shrink-0"></div>
 
-      <!-- Fill toggle + fill color -->
-      <button id="wb-fill-btn" onclick="wbToggleFill()" title="Toggle fill"
+      <!-- Fill toggle + fill colour picker -->
+      <button id="wb-fill-btn" onclick="wbToggleFill()" title="Toggle fill (shapes only)"
         class="px-2 h-8 rounded text-xs font-medium transition-colors flex-shrink-0
           ${_wbFill ? 'bg-indigo-100 text-indigo-700' : 'text-slate-500 hover:bg-slate-100'}">
-        ${_wbFill ? 'Fill ✓' : 'Fill'}
+        ${_wbFill ? '◼ Fill' : '◻ Fill'}
       </button>
-      <div class="relative flex-shrink-0 ml-0.5" title="Fill color">
-        <button onclick="document.getElementById('wb-fill-clr-inp').click()"
-          style="background:${_wbFillClr};outline:2px solid #e2e8f0;outline-offset:1px"
-          class="w-6 h-6 rounded-md transition-transform hover:scale-110"></button>
-        <input type="color" id="wb-fill-clr-inp" value="${_wbFillClr}"
-          oninput="wbSetFillColor(this.value)"
-          class="absolute opacity-0 w-0 h-0 pointer-events-none">
-      </div>
+      <input type="color" id="wb-fill-clr-inp" value="${_wbFillClr}"
+        oninput="wbSetFillColor(this.value)"
+        title="Fill colour"
+        style="width:24px;height:24px;border-radius:6px;border:2px solid #e2e8f0;
+          padding:1px;appearance:none;-webkit-appearance:none;margin-left:2px;flex-shrink:0">
 
       <div class="w-px h-5 bg-slate-200 mx-1.5 flex-shrink-0"></div>
 
@@ -174,12 +177,39 @@ function render_whiteboard() {
       </div>
     </div>
 
+    <!-- Selection property bar (visible when a shape is selected) -->
+    <div id="wb-sel-bar" class="hidden bg-indigo-50 border-b border-indigo-100 px-3 py-1 flex items-center gap-3 flex-shrink-0 text-xs">
+      <span class="text-indigo-600 font-semibold">Selected:</span>
+      <label class="flex items-center gap-1 text-slate-600">Stroke
+        <input type="color" id="wb-sel-stroke" oninput="wbSelSetStroke(this.value)"
+          style="width:20px;height:20px;border-radius:4px;border:1px solid #c7d2fe;padding:1px;
+            appearance:none;-webkit-appearance:none;cursor:pointer;margin-left:2px">
+      </label>
+      <label class="flex items-center gap-1 text-slate-600">
+        <input type="checkbox" id="wb-sel-fill-on" onchange="wbSelToggleFill(this.checked)"
+          class="accent-indigo-600"> Fill
+        <input type="color" id="wb-sel-fill-clr" oninput="wbSelSetFill(this.value)"
+          style="width:20px;height:20px;border-radius:4px;border:1px solid #c7d2fe;padding:1px;
+            appearance:none;-webkit-appearance:none;cursor:pointer;margin-left:2px">
+      </label>
+      <div class="w-px h-4 bg-indigo-200"></div>
+      <label class="flex items-center gap-1 text-slate-600">Width
+        ${[[1,'—'],[2,'━'],[5,'▬']].map(([w,icon])=>`
+        <button onclick="wbSelSetSW(${w})" id="wb-sel-sw-${w}"
+          class="px-1.5 py-0.5 rounded text-xs font-bold transition-colors
+            hover:bg-indigo-100 hover:text-indigo-700 text-slate-500">${icon}</button>`).join('')}
+      </label>
+      <div class="w-px h-4 bg-indigo-200"></div>
+      <button onclick="wbSelDuplicate()" class="text-indigo-600 hover:text-indigo-800 font-medium">⎘ Duplicate</button>
+      <button onclick="_wbDeleteSelected()" class="text-rose-500 hover:text-rose-700 font-medium ml-1">✕ Delete</button>
+    </div>
+
     <!-- Canvas area -->
     <div id="wb-container" class="flex-1 relative overflow-hidden select-none" style="${WB_BG[_wbBg]||WB_BG.dots}">
       <canvas id="wb-canvas" class="absolute inset-0"
         style="cursor:${_wbTool==='text'?'text':_wbTool==='select'?'default':_wbTool==='erase'?'crosshair':'crosshair'}"></canvas>
       <div id="wb-hint" class="absolute bottom-3 left-1/2 -translate-x-1/2 text-xs text-slate-400 pointer-events-none select-none">
-        Double-click a shape to add text inside it
+        Double-click a shape to label it · G=triangle · Del=delete selected
       </div>
     </div>
     ` : `
@@ -248,7 +278,7 @@ function _wbBindKeys() {
     if (e.key==='Delete'||e.key==='Backspace') { if (_wbSelId) { e.preventDefault(); _wbDeleteSelected() }; return }
     if (e.key==='Escape') { _wbSelId=null; _wbRender(); return }
 
-    const toolKeys = { v:'select',p:'pen',s:'smart',l:'line',a:'arrow',r:'rect',e:'circle',d:'diamond',n:'sticky',t:'text',x:'erase' }
+    const toolKeys = { v:'select',p:'pen',s:'smart',l:'line',a:'arrow',r:'rect',e:'circle',d:'diamond',g:'triangle',n:'sticky',t:'text',x:'erase' }
     if (toolKeys[e.key.toLowerCase()]) { wbSetTool(toolKeys[e.key.toLowerCase()]); return }
   })
 }
@@ -409,6 +439,15 @@ function _wbUp(e) {
       if (w>8&&h>8) _wbAddShape({ type:'diamond', x, y, w, h, color:_wbColor, sw:_wbSW, fill:_wbFill, fillColor:_wbFillClr })
       break
     }
+    case 'triangle': {
+      const x=Math.min(p0.x,pN.x), y=Math.min(p0.y,pN.y), w=Math.abs(pN.x-p0.x), h=Math.abs(pN.y-p0.y)
+      if (w>8&&h>8) _wbAddShape({ type:'triangle',
+        x1:x+w/2, y1:y,    // apex (top centre)
+        x2:x+w,   y2:y+h,  // bottom right
+        x3:x,     y3:y+h,  // bottom left
+        color:_wbColor, sw:_wbSW, fill:_wbFill, fillColor:_wbFillClr })
+      break
+    }
     case 'sticky': {
       const x=Math.min(p0.x,pN.x), y=Math.min(p0.y,pN.y)
       const w=Math.max(Math.abs(pN.x-p0.x),80), h=Math.max(Math.abs(pN.y-p0.y),60)
@@ -474,6 +513,12 @@ function _wbDrawActiveStroke() {
     ctx.moveTo(x+w/2,y); ctx.lineTo(x+w,y+h/2); ctx.lineTo(x+w/2,y+h); ctx.lineTo(x,y+h/2); ctx.closePath()
     if (_wbFill) { ctx.fillStyle=_wbFillClr; ctx.fill() }
     ctx.stroke()
+  } else if (_wbTool==='triangle') {
+    const x=Math.min(p0.x,pN.x), y=Math.min(p0.y,pN.y), w=Math.abs(pN.x-p0.x), h=Math.abs(pN.y-p0.y)
+    ctx.beginPath()
+    ctx.moveTo(x+w/2, y); ctx.lineTo(x+w, y+h); ctx.lineTo(x, y+h); ctx.closePath()
+    if (_wbFill) { ctx.fillStyle=_wbFillClr; ctx.fill() }
+    ctx.stroke()
   } else if (_wbTool==='sticky') {
     const x=Math.min(p0.x,pN.x), y=Math.min(p0.y,pN.y), w=Math.max(Math.abs(pN.x-p0.x),80), h=Math.max(Math.abs(pN.y-p0.y),60)
     ctx.globalAlpha = 0.85
@@ -500,6 +545,7 @@ function _wbRender() {
   }
 
   if (_wbDrawing && _wbPts.length >= 2) _wbDrawActiveStroke()
+  _wbUpdateSelBar()
 }
 
 function _wbDrawShape(ctx, s) {
@@ -1005,10 +1051,10 @@ function _wbUpdateToolbar() {
     fillBtn.textContent = _wbFill ? 'Fill ✓' : 'Fill'
     fillBtn.className = `px-2 h-8 rounded text-xs font-medium transition-colors flex-shrink-0 ${_wbFill?'bg-indigo-100 text-indigo-700':'text-slate-500 hover:bg-slate-100'}`
   }
-  const fillClrBtn = document.querySelector('[onclick*="wb-fill-clr-inp"]')
-  if (fillClrBtn) fillClrBtn.style.background = _wbFillClr
-  const fillClrInp = document.getElementById('wb-fill-clr-inp')
-  if (fillClrInp) fillClrInp.value = _wbFillClr
+  const fillClrInp   = document.getElementById('wb-fill-clr-inp')
+  if (fillClrInp)   fillClrInp.value = _wbFillClr
+  const strokeClrInp = document.getElementById('wb-stroke-clr-inp')
+  if (strokeClrInp) strokeClrInp.value = _wbColor
   const smartBtn = document.getElementById('wb-smart-btn')
   if (smartBtn) {
     smartBtn.textContent = '✦ Smart'
@@ -1099,6 +1145,78 @@ function wbSetFillColor(c)  { _wbFillClr=c; _wbUpdateToolbar() }
 function wbSetFontSize(sz)  { _wbFontSize=sz; _wbUpdateToolbar() }
 function wbSetBg(b)         { _wbBg=b; _wbUpdateToolbar() }
 function wbToggleSmart()    { _wbSmartOn=!_wbSmartOn; _wbUpdateToolbar() }
+
+// ── Selection Property Bar ────────────────────────────────────────────────────
+
+function _wbUpdateSelBar() {
+  const bar = document.getElementById('wb-sel-bar')
+  if (!bar) return
+  const sel = _wbSelId ? (_wb?.shapes||[]).find(s => s.id === _wbSelId) : null
+
+  if (!sel) { bar.classList.add('hidden'); return }
+  bar.classList.remove('hidden')
+
+  const strokeInp = document.getElementById('wb-sel-stroke')
+  if (strokeInp) strokeInp.value = sel.color || '#1e293b'
+
+  const fillOn = document.getElementById('wb-sel-fill-on')
+  if (fillOn) fillOn.checked = !!sel.fill
+
+  const fillClr = document.getElementById('wb-sel-fill-clr')
+  if (fillClr) fillClr.value = sel.fillColor || '#93c5fd'
+
+  // Highlight active stroke width
+  ;[1,2,5].forEach(w => {
+    const btn = document.getElementById(`wb-sel-sw-${w}`)
+    if (!btn) return
+    btn.className = `px-1.5 py-0.5 rounded text-xs font-bold transition-colors ${
+      (sel.sw||2) === w
+        ? 'bg-indigo-200 text-indigo-800'
+        : 'hover:bg-indigo-100 hover:text-indigo-700 text-slate-500'}`
+  })
+}
+
+function wbSelSetStroke(c) {
+  const sel = _wbSelId ? (_wb?.shapes||[]).find(s => s.id === _wbSelId) : null
+  if (!sel) return
+  sel.color = c; saveWb(); _wbRender()
+}
+
+function wbSelToggleFill(on) {
+  const sel = _wbSelId ? (_wb?.shapes||[]).find(s => s.id === _wbSelId) : null
+  if (!sel) return
+  sel.fill = on
+  if (on && !sel.fillColor) sel.fillColor = _wbFillClr
+  saveWb(); _wbRender()
+}
+
+function wbSelSetFill(c) {
+  const sel = _wbSelId ? (_wb?.shapes||[]).find(s => s.id === _wbSelId) : null
+  if (!sel) return
+  sel.fillColor = c; sel.fill = true; saveWb(); _wbRender()
+}
+
+function wbSelSetSW(w) {
+  const sel = _wbSelId ? (_wb?.shapes||[]).find(s => s.id === _wbSelId) : null
+  if (!sel) return
+  sel.sw = w; saveWb(); _wbRender()
+}
+
+function wbSelDuplicate() {
+  const sel = _wbSelId ? (_wb?.shapes||[]).find(s => s.id === _wbSelId) : null
+  if (!sel) return
+  _wbPushUndo()
+  const copy = JSON.parse(JSON.stringify(sel))
+  copy.id = 'ws-' + uid()
+  // Offset the copy so it's visible
+  const OFFSET = 20
+  ;['x','x1','x2','x3','cx'].forEach(k => { if (copy[k] != null) copy[k] += OFFSET })
+  ;['y','y1','y2','y3','cy'].forEach(k => { if (copy[k] != null) copy[k] += OFFSET })
+  _wb.shapes.push(copy)
+  _wbSelId = copy.id
+  saveWb(); _wbRender()
+  showToast('Shape duplicated ✓')
+}
 
 // ── Export ────────────────────────────────────────────────────────────────────
 
