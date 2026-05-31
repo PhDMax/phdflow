@@ -25,7 +25,8 @@ function render_library() {
           <button onclick="importCitation();closeLibMenus()" class="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50">🔗 Import .ris <span class="text-xs text-slate-400">(RIS format)</span></button>
           <div class="border-t border-slate-100 my-1"></div>
           <button onclick="libConnectZotero();closeLibMenus()" class="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50">⚡ Import from Zotero <span class="text-xs text-slate-400">(live)</span></button>
-          <button onclick="libWatchFileSetup();closeLibMenus()" class="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50">👁 Watch .bib/.ris file <span class="text-xs text-slate-400">(auto-sync)</span></button>
+          <button onclick="libSetupEndnoteSync();closeLibMenus()" class="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50">📗 Connect Endnote <span class="text-xs text-slate-400">(auto-sync)</span></button>
+          <button onclick="libWatchFileSetup();closeLibMenus()" class="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50">👁 Watch .bib/.ris file <span class="text-xs text-slate-400">(any app)</span></button>
         </div>
       </div>
       <div class="relative">
@@ -965,6 +966,110 @@ async function _libDoZoteroImport() {
   renderLibrary()
   showToast(`⚡ ${added} paper${added>1?'s':''} imported from Zotero ✓`)
   window._zoteroImportPapers = null
+}
+
+// ── Endnote sync setup ────────────────────────────────────────────────────────
+
+async function libSetupEndnoteSync() {
+  // Show the setup modal immediately — don't make the user wait
+  openModal(`
+  <div>
+    <div class="flex items-center gap-3 mb-4">
+      <div class="text-3xl">📗</div>
+      <div>
+        <h3 class="text-base font-bold text-slate-900">Connect Endnote</h3>
+        <p class="text-xs text-slate-400">Auto-sync your Endnote library with PhDFlow</p>
+      </div>
+    </div>
+
+    <div id="endnote-setup-status" class="mb-4">
+      <div class="flex items-center gap-2 text-sm text-slate-400">
+        <div class="w-3 h-3 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin"></div>
+        Setting up sync folder…
+      </div>
+    </div>
+  </div>`, false)
+
+  const r = await api.libSetupEndnote()
+
+  const statusEl = document.getElementById('endnote-setup-status')
+
+  if (!r.success) {
+    if (statusEl) statusEl.innerHTML = `<p class="text-sm text-rose-500">Setup failed: ${esc(r.error)}</p>`
+    return
+  }
+
+  await _libUpdateSourceBar()
+
+  // Replace modal content with the full guide
+  const content = document.getElementById('modal-content')
+  if (!content) return
+
+  content.innerHTML = `
+  <div class="flex items-center gap-3 mb-4">
+    <div class="text-3xl">📗</div>
+    <div>
+      <h3 class="text-base font-bold text-slate-900">Endnote sync ready</h3>
+      <p class="text-xs text-slate-400">Follow the steps below to start syncing</p>
+    </div>
+  </div>
+
+  <!-- Success badge -->
+  <div class="flex items-center gap-2 mb-5 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-700">
+    <span class="text-base">✓</span>
+    <div class="flex-1">
+      <div class="font-semibold">Sync folder created and watching</div>
+      <div class="text-emerald-600 font-mono mt-0.5 break-all">${esc(r.syncDir)}</div>
+    </div>
+  </div>
+
+  <!-- Two options -->
+  <div class="space-y-4 mb-5">
+
+    <!-- Option A: Auto-export script -->
+    <div class="bg-indigo-50 border border-indigo-100 rounded-2xl p-4">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="bg-indigo-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">Option A</span>
+        <span class="text-sm font-semibold text-slate-800">Auto-export script <span class="text-xs font-normal text-slate-500">(recommended)</span></span>
+      </div>
+      <ol class="text-xs text-slate-600 space-y-1.5 ml-1">
+        <li>1. Open Endnote with your library loaded</li>
+        <li>2. Open the sync folder:
+          <button onclick="api.openExternal('${esc(r.syncDir)}')" class="text-indigo-600 hover:underline font-medium">Open folder ↗</button>
+        </li>
+        <li>3. Double-click <strong>export-to-phdflow.ps1</strong>
+          <span class="text-slate-400">(right-click → Run with PowerShell if needed)</span>
+        </li>
+        <li>4. PhDFlow imports the new papers automatically</li>
+      </ol>
+      <p class="text-xs text-slate-400 mt-2">Run the script any time you add new papers to Endnote.</p>
+    </div>
+
+    <!-- Option B: Manual export -->
+    <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="bg-slate-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">Option B</span>
+        <span class="text-sm font-semibold text-slate-700">Manual export</span>
+      </div>
+      <ol class="text-xs text-slate-600 space-y-1.5 ml-1">
+        <li>1. In Endnote: <strong>File → Export…</strong></li>
+        <li>2. Output style: <strong>RefMan RIS</strong></li>
+        <li>3. Export: <strong>All References in Library</strong></li>
+        <li>4. File name: <strong>library.ris</strong></li>
+        <li>5. Save location: <button onclick="api.openExternal('${esc(r.syncDir)}')" class="text-indigo-600 hover:underline font-medium">open folder ↗</button></li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- How it works -->
+  <div class="bg-slate-50 rounded-xl p-3 text-xs text-slate-500 space-y-1 mb-4">
+    <div class="font-semibold text-slate-600">How PhDFlow syncs</div>
+    <div>📂 PhDFlow watches the sync folder for changes to <code>library.ris</code></div>
+    <div>⚡ When the file changes, new papers are imported automatically — no duplicates</div>
+    <div>🔁 Run the export script (or re-export from Endnote) whenever you add new references</div>
+  </div>
+
+  <button onclick="closeModal()" class="w-full btn-primary text-sm py-2.5">Got it — start syncing</button>`
 }
 
 // ── Watch file ────────────────────────────────────────────────────────────────

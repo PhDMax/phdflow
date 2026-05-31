@@ -81,6 +81,7 @@ contextBridge.exposeInMainWorld('api', {
   zoteroPing:          ()         => ipcRenderer.invoke('zotero-ping'),
   zoteroBbtCheck:      ()         => ipcRenderer.invoke('zotero-bbt-check'),
   zoteroFetchLibrary:  ()         => ipcRenderer.invoke('zotero-fetch-library'),
+  libSetupEndnote:     ()         => ipcRenderer.invoke('lib-setup-endnote'),
   libWatchGet:         ()         => ipcRenderer.invoke('lib-watch-get'),
   libWatchSet:         (filePath) => ipcRenderer.invoke('lib-watch-set', filePath),
   libWatchRemove:      ()         => ipcRenderer.invoke('lib-watch-remove'),

@@ -1203,6 +1203,129 @@ ipcMain.handle('lib-read-file',    async (_, filePath) => {
   } catch(e) { return { success: false, error: e.message } }
 })
 
+// ── Endnote sync folder + export script setup ─────────────────────────────────
+ipcMain.handle('lib-setup-endnote', async () => {
+  try {
+    const syncDir  = path.join(app.getPath('documents'), 'PhDFlow', 'Endnote Sync')
+    const risFile  = path.join(syncDir, 'library.ris')
+    const ps1File  = path.join(syncDir, 'export-to-phdflow.ps1')
+    const readFile = path.join(syncDir, 'README.txt')
+
+    fs.mkdirSync(syncDir, { recursive: true })
+
+    // PowerShell export script
+    const script = `# PhDFlow — Endnote Export Script
+# Double-click this file (or right-click → Run with PowerShell) to export your library.
+# PhDFlow watches this folder and imports new papers automatically.
+
+$ErrorActionPreference = "SilentlyContinue"
+$outputFile = Join-Path $PSScriptRoot "library.ris"
+
+Write-Host ""
+Write-Host "PhDFlow - Endnote Export" -ForegroundColor Cyan
+Write-Host "========================" -ForegroundColor Cyan
+Write-Host ""
+
+# ── Try COM automation (works if Endnote is already open) ─────────────────────
+$endnote = $null
+try {
+    $endnote = [System.Runtime.InteropServices.Marshal]::GetActiveObject("EndNote.Application")
+} catch {}
+
+if ($endnote) {
+    Write-Host "Endnote is running — exporting library..." -ForegroundColor Green
+    try {
+        $lib = $endnote.Libraries.Item(1)
+
+        # Locate the RIS export style (search common install paths across versions)
+        $styleCandidates = @(
+            "$env:APPDATA\\EndNote\\Styles\\RefMan (RIS) Export.ens",
+            "C:\\Program Files\\EndNote 21\\Styles\\RefMan (RIS) Export.ens",
+            "C:\\Program Files\\EndNote 20\\Styles\\RefMan (RIS) Export.ens",
+            "C:\\Program Files\\EndNote X9\\Styles\\RefMan (RIS) Export.ens",
+            "C:\\Program Files\\EndNote X8\\Styles\\RefMan (RIS) Export.ens",
+            "C:\\Program Files (x86)\\EndNote X9\\Styles\\RefMan (RIS) Export.ens"
+        )
+        $stylePath = $styleCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+        if (-not $stylePath) {
+            # Fall back: ask Endnote where its styles folder is
+            $endnoteDir = Split-Path (Get-Process EndNote -ErrorAction SilentlyContinue | Select-Object -First 1).Path
+            if ($endnoteDir) { $stylePath = Join-Path $endnoteDir "Styles\\RefMan (RIS) Export.ens" }
+        }
+
+        if ($stylePath -and (Test-Path $stylePath)) {
+            $lib.AllReferences.ExportToFile($outputFile, $stylePath)
+            $count = $lib.AllReferences.Count
+            Write-Host "SUCCESS — exported $count references to:" -ForegroundColor Green
+            Write-Host "  $outputFile" -ForegroundColor White
+            Write-Host ""
+            Write-Host "PhDFlow will import the new papers automatically." -ForegroundColor Cyan
+        } else {
+            Write-Host "Could not locate the RIS export style. Falling back to manual steps." -ForegroundColor Yellow
+            $endnote = $null
+        }
+    } catch {
+        Write-Host "Auto-export failed: $_" -ForegroundColor Yellow
+        $endnote = $null
+    }
+}
+
+if (-not $endnote) {
+    Write-Host "MANUAL EXPORT STEPS" -ForegroundColor Cyan
+    Write-Host "-------------------" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "1. Open Endnote and load your library"
+    Write-Host "2. Go to  File → Export..."
+    Write-Host "3. Output style:   RefMan RIS  (or 'RefMan RIS Export')"
+    Write-Host "4. Export what:    All References in Library"
+    Write-Host "5. File name:      library.ris"
+    Write-Host "6. Save location:  $PSScriptRoot"
+    Write-Host ""
+    Write-Host "Full path to save: $outputFile" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "PhDFlow will detect the file and import automatically." -ForegroundColor Cyan
+    Write-Host ""
+
+    # Open the export folder in Explorer so the user can see where to save
+    Start-Process explorer.exe $PSScriptRoot
+}
+
+Write-Host ""
+Read-Host "Press Enter to close"
+`
+
+    fs.writeFileSync(ps1File,  script,                            'utf-8')
+    fs.writeFileSync(readFile, [
+      'PhDFlow — Endnote Sync Folder',
+      '==============================',
+      '',
+      'How to sync your Endnote library with PhDFlow:',
+      '',
+      'OPTION A — Auto-export (recommended):',
+      '  1. Make sure Endnote is open with your library loaded',
+      '  2. Double-click  export-to-phdflow.ps1  (or right-click → Run with PowerShell)',
+      '  3. PhDFlow will import all new papers automatically',
+      '',
+      'OPTION B — Manual export:',
+      '  1. In Endnote: File → Export...',
+      '  2. Output style: RefMan RIS',
+      '  3. Save as: library.ris   in this folder',
+      '',
+      'Run the script any time you add new papers to Endnote.',
+      'PhDFlow deduplicates — existing papers are never duplicated.',
+      '',
+      `Sync folder: ${syncDir}`,
+    ].join('\r\n'),            'utf-8')
+
+    // Start watching for library.ris in this folder
+    _startLibWatch(risFile)
+    _saveLibWatchCfg({ path: risFile, enabled: true })
+
+    return { success: true, syncDir, ps1File, risFile }
+  } catch(e) { return { success: false, error: e.message } }
+})
+
 ipcMain.handle('lib-open-bib-dialog', async () => {
   const r = await dialog.showOpenDialog(mainWindow, {
     properties: ['openFile'], title: 'Choose a .bib or .ris file to watch',
