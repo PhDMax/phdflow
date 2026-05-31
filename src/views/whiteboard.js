@@ -76,7 +76,7 @@ const WB_BG = {
   grid:  'background:#f8fafc;background-image:linear-gradient(#e2e8f0 1px,transparent 1px),linear-gradient(90deg,#e2e8f0 1px,transparent 1px);background-size:24px 24px',
 }
 
-const WB_RESIZABLE = ['rect','ellipse','diamond','sticky','triangle']
+const WB_RESIZABLE = ['rect','ellipse','diamond','sticky','triangle','image']
 
 // ── Render ────────────────────────────────────────────────────────────────────
 
@@ -241,6 +241,8 @@ function render_whiteboard() {
         </label>
       </div>
       <div class="w-px h-4 bg-indigo-200"></div>
+      <button onclick="wbSelZOrder('front')" title="Bring to front" class="text-slate-500 hover:text-indigo-700 font-medium">↑ Front</button>
+      <button onclick="wbSelZOrder('back')"  title="Send to back"  class="text-slate-500 hover:text-indigo-700 font-medium">↓ Back</button>
       <button onclick="wbSelDuplicate()" class="text-indigo-600 hover:text-indigo-800 font-medium">⎘ Duplicate</button>
       <button onclick="_wbDeleteSelected()" class="text-rose-500 hover:text-rose-700 font-medium ml-1">✕ Delete</button>
     </div>
@@ -270,6 +272,17 @@ function render_whiteboard() {
       _wbBindKeys()
     })
   }
+}
+
+// Image shape renderer (cached so we don't reload the data URL on every frame)
+const _wbImgCache = {}
+
+function _wbGetImg(dataUrl) {
+  if (_wbImgCache[dataUrl]) return _wbImgCache[dataUrl]
+  const img = new Image()
+  img.src = dataUrl
+  _wbImgCache[dataUrl] = img
+  return img
 }
 
 // ── Canvas Initialisation ─────────────────────────────────────────────────────
@@ -376,6 +389,33 @@ function _wbBindCanvas() {
     if (_wbDrawing || _wbDragStart || _wbResizing) _wbUp(e)
   }
   _wbCanvas.ondblclick   = _wbDblClick
+
+  // Image drag-drop
+  const container = document.getElementById('wb-container')
+  if (container) {
+    container.ondragover = e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }
+    container.ondrop     = e => {
+      e.preventDefault()
+      const file = [...e.dataTransfer.files].find(f => f.type.startsWith('image/'))
+      if (file) {
+        const rect = _wbCanvas.getBoundingClientRect()
+        const sx = e.clientX - rect.left
+        const sy = e.clientY - rect.top
+        _wbInsertImageFile(file, sx, sy)
+      }
+    }
+  }
+
+  // Paste image from clipboard
+  document.addEventListener('paste', e => {
+    if (!_wb || state.currentView !== 'whiteboard') return
+    const item = [...(e.clipboardData?.items||[])].find(i => i.type.startsWith('image/'))
+    if (item) {
+      e.preventDefault()
+      const file = item.getAsFile()
+      if (file) _wbInsertImageFile(file, 80, 80)
+    }
+  })
 
   // Scroll-wheel zoom
   _wbCanvas.onwheel = e => {
@@ -812,6 +852,21 @@ function _wbDrawShape(ctx, s) {
       ctx.strokeStyle='rgba(0,0,0,0.08)'; ctx.lineWidth=1; ctx.stroke()
       break
     }
+    case 'image': {
+      const img = _wbGetImg(s.dataUrl)
+      if (img.complete && img.naturalWidth) {
+        ctx.drawImage(img, s.x, s.y, s.w, s.h)
+      } else {
+        img.onload = () => _wbRender()
+        // Placeholder while loading
+        ctx.fillStyle = '#f1f5f9'; ctx.fillRect(s.x, s.y, s.w, s.h)
+        ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 1; ctx.strokeRect(s.x, s.y, s.w, s.h)
+        ctx.fillStyle = '#94a3b8'; ctx.font = '12px system-ui'; ctx.textAlign='center'
+        ctx.fillText('Loading…', s.x + s.w/2, s.y + s.h/2)
+        ctx.textAlign = 'left'
+      }
+      break
+    }
     case 'text': {
       ctx.fillStyle = s.color||'#1e293b'
       ctx.font = `${s.fontSize||14}px Segoe UI, system-ui, sans-serif`
@@ -967,6 +1022,7 @@ function _wbBBox(s) {
     case 'triangle': return { x:Math.min(s.x1,s.x2,s.x3)-4, y:Math.min(s.y1,s.y2,s.y3)-4,
                               w:Math.max(s.x1,s.x2,s.x3)-Math.min(s.x1,s.x2,s.x3)+8,
                               h:Math.max(s.y1,s.y2,s.y3)-Math.min(s.y1,s.y2,s.y3)+8 }
+    case 'image':    return { x:s.x, y:s.y, w:s.w, h:s.h }
     case 'text':     return { x:s.x, y:s.y-(s.fontSize||14),
                               w:(s.text||'').split('\n').reduce((m,l)=>Math.max(m,l.length),0)*(s.fontSize||14)*0.55,
                               h:(s.text||'').split('\n').length*(s.fontSize||14)*1.4 }
@@ -1000,6 +1056,7 @@ function _wbMoveShape(id, dx, dy, origShapes) {
     case 'line':
     case 'arrow':    cur.x1=orig.x1+dx; cur.y1=orig.y1+dy; cur.x2=orig.x2+dx; cur.y2=orig.y2+dy; break
     case 'triangle': cur.x1=orig.x1+dx; cur.y1=orig.y1+dy; cur.x2=orig.x2+dx; cur.y2=orig.y2+dy; cur.x3=orig.x3+dx; cur.y3=orig.y3+dy; break
+    case 'image':
     case 'text':     cur.x=orig.x+dx; cur.y=orig.y+dy; break
     case 'freehand': cur.points=orig.points.map(p=>({x:p.x+dx, y:p.y+dy})); break
   }
@@ -1375,6 +1432,34 @@ function wbSetFontSize(sz)  { _wbFontSize=sz; _wbUpdateToolbar() }
 function wbSetBg(b)         { _wbBg=b; _wbUpdateToolbar() }
 function wbToggleSmart()    { _wbSmartOn=!_wbSmartOn; _wbUpdateToolbar() }
 
+// ── Image insertion ───────────────────────────────────────────────────────────
+
+function _wbInsertImageFile(file, screenX, screenY) {
+  const reader = new FileReader()
+  reader.onload = ev => {
+    const dataUrl = ev.target.result
+    const img = new Image()
+    img.onload = () => {
+      // Convert screen drop point to world coords
+      const wx = (screenX - _wbPanX) / _wbZoom
+      const wy = (screenY - _wbPanY) / _wbZoom
+      // Scale so longest side is 400px in world space max
+      const maxSide = 400
+      let w = img.naturalWidth, h = img.naturalHeight
+      if (w > maxSide || h > maxSide) {
+        const r = Math.min(maxSide / w, maxSide / h)
+        w = Math.round(w * r); h = Math.round(h * r)
+      }
+      _wbPushUndo()
+      _wbAddShape({ type:'image', dataUrl, x: wx - w/2, y: wy - h/2, w, h })
+      saveWb(); _wbRender()
+      showToast('Image added to board ✓')
+    }
+    img.src = dataUrl
+  }
+  reader.readAsDataURL(file)
+}
+
 // ── Selection Property Bar ────────────────────────────────────────────────────
 
 function _wbUpdateSelBar() {
@@ -1434,6 +1519,21 @@ function wbSelSetSW(w) {
   const sel = _wbSelId ? (_wb?.shapes||[]).find(s => s.id === _wbSelId) : null
   if (!sel) return
   sel.sw = w; saveWb(); _wbRender()
+}
+
+function wbSelZOrder(dir) {
+  const ids = _wbSelIds.length > 1 ? _wbSelIds : (_wbSelId ? [_wbSelId] : [])
+  if (!ids.length || !_wb) return
+  _wbPushUndo()
+  const shapes = _wb.shapes
+  if (dir === 'front') {
+    const moving = shapes.filter(s => ids.includes(s.id))
+    _wb.shapes   = [...shapes.filter(s => !ids.includes(s.id)), ...moving]
+  } else {
+    const moving = shapes.filter(s => ids.includes(s.id))
+    _wb.shapes   = [...moving, ...shapes.filter(s => !ids.includes(s.id))]
+  }
+  saveWb(); _wbRender()
 }
 
 function wbSelDuplicate() {
