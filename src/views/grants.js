@@ -166,6 +166,33 @@ function _rankForProfile(grants, profile) {
     .map(x => x.g)
 }
 
+// ── Smart keyword generator ───────────────────────────────────────────────────
+
+function _buildGrantKeywords(profile) {
+  const field = (profile?.field || '').trim()
+  const stage = profile?.careerStage || ''
+  const parts  = []
+
+  if (field) parts.push(field)
+
+  const stageTerms = {
+    phd:      'doctoral fellowship graduate student predoctoral',
+    masters:  'masters graduate student fellowship',
+    postdoc:  'postdoctoral fellowship early career',
+    pi:       'early career investigator research grant principal investigator',
+  }
+  if (stageTerms[stage]) parts.push(stageTerms[stage])
+
+  return parts.join(' ') || 'research fellowship grant'
+}
+
+// ── Live search state ─────────────────────────────────────────────────────────
+
+let _liveSearchQuery    = ''
+let _liveSearchResults  = { ggov: null, eu: null, ukri: null }  // null=not yet, []= done, 'loading'= in flight
+let _liveSourceEnabled  = { ggov: true, eu: true, ukri: true }
+let _liveSearchDone     = false
+
 // ── Active tab ────────────────────────────────────────────────────────────────
 let _grantTab = 'foryou'
 
@@ -178,7 +205,7 @@ function render_grants() {
   const tabs = [
     { id:'foryou',    label:'✨ For You' },
     { id:'mine',      label:`📊 My Grants${myCount ? ` <span class="ml-1 text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full">${myCount}</span>` : ''}` },
-    { id:'scan',      label:`🔍 Scan <span class="ml-1 text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full">${GRANT_DB.length}</span>` },
+    { id:'search',    label:'🔍 Search' },
     { id:'resources', label:'🌐 Databases' },
   ]
 
@@ -214,6 +241,11 @@ function switchGrantTab(tab) {
   })
   const btn = document.querySelector('[onclick="openGrantModal()"]')
   if (btn) btn.style.display = tab === 'mine' ? '' : 'none'
+  // Reset live search state when re-entering the search tab fresh
+  if (tab === 'search' && !_liveSearchDone) {
+    _liveSearchQuery   = _buildGrantKeywords(state.profile)
+    _liveSearchResults = { ggov: null, eu: null, ukri: null }
+  }
   renderGrantTab()
 }
 
@@ -222,7 +254,7 @@ function renderGrantTab() {
   if (!el) return
   if      (_grantTab === 'foryou')    el.innerHTML = buildForYouHTML()
   else if (_grantTab === 'mine')      el.innerHTML = buildMyGrantsHTML()
-  else if (_grantTab === 'scan')      el.innerHTML = buildScanHTML()
+  else if (_grantTab === 'search')    buildSearchHTML(el)
   else                                el.innerHTML = buildResourcesHTML()
 }
 
@@ -478,97 +510,265 @@ function buildMyGrantsHTML() {
   </div>`
 }
 
-// ── SCAN ──────────────────────────────────────────────────────────────────────
-let _dStage = '', _dRegion = 'all', _dField = 'all', _dSearch = ''
-let _dScanInited = false
+// ── SEARCH (unified: built-in + live APIs) ────────────────────────────────────
 
-function _initScanFilters() {
-  if (_dScanInited) return
-  _dScanInited = true
-  const p = state.profile || {}
-  if (p.careerStage) _dStage  = p.careerStage
-  if (p.region)      _dRegion = p.region
+const _SOURCE_META = {
+  builtin: { label: '🗃 Built-in',   color: 'slate',   flag: '' },
+  ggov:    { label: '🇺🇸 Grants.gov', color: 'blue',    flag: '🇺🇸' },
+  eu:      { label: '🇪🇺 EU Horizon', color: 'indigo',  flag: '🇪🇺' },
+  ukri:    { label: '🇬🇧 UKRI',       color: 'violet',  flag: '🇬🇧' },
 }
 
-function buildScanHTML() {
-  _initScanFilters()
-  let grants = GRANT_DB
-  const p = state.profile || {}
-
-  if (_dStage  && _dStage !== 'all')  grants = grants.filter(g => g.stage.includes(_dStage))
-  if (_dRegion !== 'all') grants = grants.filter(g => g.region.some(r => r === _dRegion || r === 'International'))
-  if (_dField  !== 'all') grants = grants.filter(g => g.fields.includes('All') || g.fields.includes(_dField))
-  if (_dSearch)           grants = grants.filter(g =>
-    g.name.toLowerCase().includes(_dSearch) || g.funder.toLowerCase().includes(_dSearch) || g.desc.toLowerCase().includes(_dSearch))
+function buildSearchHTML(el) {
+  if (!_liveSearchQuery) _liveSearchQuery = _buildGrantKeywords(state.profile)
 
   const alreadyTracked = new Set(state.grants.map(g => g.sourceId).filter(Boolean))
-  const profileActive  = !!p.careerStage
 
-  return `
-  <!-- Scan filters -->
-  <div class="bg-white border-b border-slate-100 px-5 py-3 flex gap-2 flex-wrap items-center">
-    <input type="text" placeholder="Search grants, funders, keywords..." value="${esc(_dSearch)}"
-      oninput="_dSearch=this.value;document.getElementById('grant-tab-content').innerHTML=buildScanHTML()"
-      class="flex-1 min-w-48 px-3 py-1.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
-    <select onchange="_dStage=this.value;document.getElementById('grant-tab-content').innerHTML=buildScanHTML()" class="input" style="width:auto;padding:.3rem .7rem;font-size:.8rem">
-      <option value=""        ${!_dStage||_dStage==='all'?'selected':''}>All stages</option>
-      <option value="phd"     ${_dStage==='phd'    ?'selected':''}>PhD Student</option>
-      <option value="masters" ${_dStage==='masters'?'selected':''}>Masters</option>
-      <option value="postdoc" ${_dStage==='postdoc'?'selected':''}>Postdoc</option>
-      <option value="pi"      ${_dStage==='pi'     ?'selected':''}>PI / Group Leader</option>
-    </select>
-    <select onchange="_dRegion=this.value;document.getElementById('grant-tab-content').innerHTML=buildScanHTML()" class="input" style="width:auto;padding:.3rem .7rem;font-size:.8rem">
-      <option value="all" ${_dRegion==='all'?'selected':''}>All regions</option>
-      ${REGIONS.map(r=>`<option value="${r}" ${_dRegion===r?'selected':''}>${r}</option>`).join('')}
-    </select>
-    <select onchange="_dField=this.value;document.getElementById('grant-tab-content').innerHTML=buildScanHTML()" class="input" style="width:auto;padding:.3rem .7rem;font-size:.8rem">
-      <option value="all" ${_dField==='all'?'selected':''}>All fields</option>
-      ${FIELDS.filter(f=>f!=='All').map(f=>`<option value="${f}" ${_dField===f?'selected':''}>${f}</option>`).join('')}
-    </select>
-    <div class="flex items-center gap-2">
-      <span class="text-xs text-slate-400 whitespace-nowrap">${grants.length} of ${GRANT_DB.length}</span>
-      ${(_dStage||_dRegion!=='all'||_dField!=='all'||_dSearch) ? `<button onclick="_dStage='';_dRegion='all';_dField='all';_dSearch='';_dScanInited=false;document.getElementById('grant-tab-content').innerHTML=buildScanHTML()" class="text-xs text-slate-400 hover:text-rose-500 transition-colors" title="Clear filters">✕ Clear</button>` : ''}
+  // ── Built-in results (instant, filtered from GRANT_DB) ────────────────────
+  const q = _liveSearchQuery.toLowerCase()
+  const builtinResults = GRANT_DB.filter(g =>
+    !q || g.name.toLowerCase().includes(q) || g.funder.toLowerCase().includes(q) ||
+    g.desc.toLowerCase().includes(q) ||
+    g.fields.some(f => q.includes(f.toLowerCase())) ||
+    g.stage.some(s => q.includes(s))
+  )
+
+  // ── Source section renderer ────────────────────────────────────────────────
+  const liveSection = (key, results) => {
+    const meta = _SOURCE_META[key]
+    if (!_liveSourceEnabled[key]) return ''
+    if (results === null) return `
+    <div class="mb-5">
+      <div class="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">${meta.label}</div>
+      <div class="text-xs text-slate-400 italic">Not searched yet — click Search to load</div>
+    </div>`
+    if (results === 'loading') return `
+    <div class="mb-5">
+      <div class="flex items-center gap-2 text-xs text-slate-500 mb-2">
+        <div class="w-3 h-3 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin"></div>
+        <span class="font-bold uppercase tracking-wide">${meta.label}</span>
+        <span class="text-slate-400">searching…</span>
+      </div>
+    </div>`
+    if (results.error) return `
+    <div class="mb-5">
+      <div class="text-xs font-bold text-slate-400 uppercase tracking-wide mb-1">${meta.label}</div>
+      <div class="text-xs text-rose-400">Could not reach this source: ${esc(results.error)}</div>
+    </div>`
+    if (!results.length) return `
+    <div class="mb-5">
+      <div class="text-xs font-bold text-slate-400 uppercase tracking-wide mb-1">${meta.label}</div>
+      <div class="text-xs text-slate-400 italic">No results found for this query.</div>
+    </div>`
+
+    return `
+    <div class="mb-5">
+      <div class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
+        ${meta.label} <span class="font-normal text-slate-400">(${results.length}${results.total > results.length ? ' of '+results.total : ''})</span>
+      </div>
+      <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        ${results.map(g => _liveGrantCard(g, alreadyTracked, key)).join('')}
+      </div>
+    </div>`
+  }
+
+  el.innerHTML = `
+  <!-- Search bar -->
+  <div class="bg-white border-b border-slate-100 px-5 py-3 flex gap-2 flex-wrap items-start">
+    <div class="flex-1 min-w-64">
+      <div class="flex gap-2">
+        <input id="grant-search-q" type="text" value="${esc(_liveSearchQuery)}"
+          placeholder="e.g. computational neuroscience doctoral fellowship"
+          class="flex-1 px-3 py-1.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          onkeydown="if(event.key==='Enter')runLiveGrantSearch()"/>
+        <button onclick="runLiveGrantSearch()"
+          class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-colors flex-shrink-0">
+          🔍 Search
+        </button>
+      </div>
+      <div class="mt-1.5 flex gap-3 flex-wrap">
+        ${Object.entries(_SOURCE_META).map(([key, m]) => `
+        <label class="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer select-none">
+          <input type="checkbox" ${_liveSourceEnabled[key]?'checked':''}
+            onchange="_liveSourceEnabled['${key}']=this.checked;renderGrantTab()"
+            class="accent-indigo-600"/>
+          ${m.label}
+        </label>`).join('')}
+      </div>
+    </div>
+    <div class="flex gap-2 flex-shrink-0 items-start pt-0.5">
+      <button onclick="grantOpenWebSearch()" title="Open a tailored search in your browser"
+        class="px-3 py-1.5 rounded-xl border border-slate-200 text-xs text-slate-500 hover:text-indigo-600 hover:border-indigo-300 transition-colors">
+        🌐 Web
+      </button>
+      <button onclick="grantEditProfile()" title="Edit your grant profile"
+        class="px-3 py-1.5 rounded-xl border border-slate-200 text-xs text-slate-500 hover:text-indigo-600 hover:border-indigo-300 transition-colors">
+        🎯 Profile
+      </button>
     </div>
   </div>
-  ${profileActive && !_dSearch ? `<div class="px-5 pt-3 text-xs text-slate-400">Filters pre-applied from your <button onclick="grantEditProfile()" class="text-indigo-500 hover:underline">grant profile</button>.</div>` : ''}
 
-  <!-- Grant cards -->
-  <div class="p-5 grid grid-cols-1 gap-3 max-w-4xl lg:grid-cols-2">
-    ${grants.length === 0
-      ? `<div class="col-span-2 py-16 text-center text-slate-400">No grants match your filters.<br/><button onclick="_dStage='';_dRegion='all';_dField='all';_dSearch='';_dScanInited=false;document.getElementById('grant-tab-content').innerHTML=buildScanHTML()" class="mt-2 text-indigo-500 hover:underline text-sm">Clear filters</button></div>`
-      : grants.map(g => {
-        const tracked = alreadyTracked.has(g.id)
-        const reasons = profileActive ? _grantMatchReasons(g, p) : []
-        const stageChips = g.stage.map(s => {
-          const sc = {phd:'bg-indigo-100 text-indigo-700',postdoc:'bg-purple-100 text-purple-700',pi:'bg-teal-100 text-teal-700',masters:'bg-slate-100 text-slate-600'}
-          return `<span class="text-xs px-2 py-0.5 rounded-full ${sc[s]||'bg-slate-100 text-slate-600'}">${s==='phd'?'PhD':s==='pi'?'PI':s==='masters'?'Masters':'Postdoc'}</span>`
-        }).join('')
-        return `
-        <div class="bg-white border border-slate-200 rounded-2xl p-4 hover:shadow-md transition-shadow flex flex-col gap-3">
-          <div>
-            <div class="flex items-start justify-between gap-2">
-              <h3 class="font-bold text-slate-900 text-sm leading-snug">${esc(g.name)}</h3>
-              ${tracked ? `<span class="text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex-shrink-0">✓ Tracking</span>` : ''}
-            </div>
-            <p class="text-xs text-slate-500 mt-0.5">${esc(g.funder)}</p>
-          </div>
-          ${reasons.length ? `<div class="flex gap-1 flex-wrap">${reasons.map(r=>`<span class="text-xs px-1.5 py-0.5 rounded-full font-medium bg-${r.color}-100 text-${r.color}-700">${r.text}</span>`).join('')}</div>` : ''}
-          <p class="text-xs text-slate-600 leading-relaxed">${esc(g.desc)}</p>
-          <div class="flex gap-1.5 flex-wrap">
-            ${stageChips}
-            ${g.region.slice(0,2).map(r=>`<span class="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">${r}</span>`).join('')}
-            ${g.fields[0]!=='All'?`<span class="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">${g.fields[0]}</span>`:''}
-          </div>
-          <div class="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-50">
-            <span class="font-medium">${g.amount}${g.duration?' · '+g.duration:''}</span>
-            <div class="flex gap-2">
-              <button onclick="window.api.openExternal('${esc(g.url)}')" class="text-indigo-500 hover:underline">Website ↗</button>
-              ${!tracked ? `<button onclick="trackDiscoveredGrant('${g.id}')" class="text-xs px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">+ Track</button>` : ''}
-            </div>
-          </div>
-        </div>`
-      }).join('')}
+  <!-- Results -->
+  <div class="p-5 max-w-5xl">
+
+    <!-- Built-in DB -->
+    ${_liveSourceEnabled.builtin ? `
+    <div class="mb-5">
+      <div class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">
+        🗃 Built-in <span class="font-normal text-slate-400">(${builtinResults.length} of ${GRANT_DB.length})</span>
+      </div>
+      ${builtinResults.length ? `
+      <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        ${builtinResults.map(g => _builtinGrantCard(g, alreadyTracked)).join('')}
+      </div>` : `<div class="text-xs text-slate-400 italic">No built-in grants match this query.</div>`}
+    </div>` : ''}
+
+    <!-- Live sources -->
+    ${liveSection('ggov',  _liveSearchResults.ggov)}
+    ${liveSection('eu',    _liveSearchResults.eu)}
+    ${liveSection('ukri',  _liveSearchResults.ukri)}
+
+    ${!_liveSearchDone && _liveSearchResults.ggov === null ? `
+    <div class="text-center py-6 text-slate-400 text-sm">
+      <p class="mb-3">Search live databases for real open opportunities.</p>
+      <button onclick="runLiveGrantSearch()" class="btn-primary text-sm px-5 py-2">🔍 Search now</button>
+    </div>` : ''}
   </div>`
+}
+
+function _builtinGrantCard(g, alreadyTracked) {
+  const tracked = alreadyTracked.has(g.id)
+  const reasons = _grantMatchReasons(g, state.profile || {})
+  const stageChips = g.stage.map(s => {
+    const sc = {phd:'bg-indigo-100 text-indigo-700',postdoc:'bg-purple-100 text-purple-700',pi:'bg-teal-100 text-teal-700',masters:'bg-slate-100 text-slate-600'}
+    return `<span class="text-xs px-2 py-0.5 rounded-full ${sc[s]||'bg-slate-100 text-slate-600'}">${s==='phd'?'PhD':s==='pi'?'PI':s==='masters'?'Masters':'Postdoc'}</span>`
+  }).join('')
+
+  return `
+  <div class="bg-white border border-slate-200 rounded-2xl p-4 hover:shadow-md transition-shadow flex flex-col gap-3">
+    <div>
+      <div class="flex items-start justify-between gap-2">
+        <h3 class="font-bold text-slate-900 text-sm leading-snug">${esc(g.name)}</h3>
+        ${tracked ? `<span class="text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex-shrink-0">✓ Tracking</span>` : ''}
+      </div>
+      <p class="text-xs text-slate-500 mt-0.5">${esc(g.funder)}</p>
+    </div>
+    ${reasons.length ? `<div class="flex gap-1 flex-wrap">${reasons.map(r=>`<span class="text-xs px-1.5 py-0.5 rounded-full font-medium bg-${r.color}-100 text-${r.color}-700">${r.text}</span>`).join('')}</div>` : ''}
+    <p class="text-xs text-slate-600 leading-relaxed">${esc(g.desc)}</p>
+    <div class="flex gap-1.5 flex-wrap">${stageChips}
+      ${g.region.slice(0,2).map(r=>`<span class="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">${r}</span>`).join('')}
+      ${g.fields[0]!=='All'?`<span class="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">${g.fields[0]}</span>`:''}
+    </div>
+    <div class="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-50">
+      <span class="font-medium">${g.amount}${g.duration?' · '+g.duration:''}</span>
+      <div class="flex gap-2">
+        <button onclick="api.openExternal('${esc(g.url)}')" class="text-indigo-500 hover:underline">Website ↗</button>
+        ${!tracked ? `<button onclick="trackDiscoveredGrant('${g.id}')" class="text-xs px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">+ Track</button>` : ''}
+      </div>
+    </div>
+  </div>`
+}
+
+function _liveGrantCard(g, alreadyTracked, sourceKey) {
+  const tracked    = alreadyTracked.has(g.id)
+  const sourceMeta = _SOURCE_META[sourceKey]
+  const deadlineStr = g.deadline ? fmtDate(g.deadline) : ''
+  const now = new Date().toISOString().split('T')[0]
+  const urgent = g.deadline && g.deadline < new Date(Date.now() + 30*864e5).toISOString().split('T')[0]
+
+  return `
+  <div class="bg-white border border-slate-200 rounded-2xl p-4 hover:shadow-md transition-shadow flex flex-col gap-2.5">
+    <div>
+      <div class="flex items-start justify-between gap-2 mb-0.5">
+        <h3 class="font-bold text-slate-900 text-sm leading-snug flex-1">${esc(g.name)}</h3>
+        ${tracked ? `<span class="text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex-shrink-0">✓ Tracking</span>` : ''}
+      </div>
+      <div class="flex items-center gap-2 text-xs text-slate-500">
+        <span>${esc(g.funder)}</span>
+        ${g.number ? `<span class="text-slate-300">·</span><span class="font-mono text-slate-400">${esc(g.number)}</span>` : ''}
+      </div>
+    </div>
+    ${g.desc ? `<p class="text-xs text-slate-600 leading-relaxed line-clamp-2">${esc(g.desc)}</p>` : ''}
+    <div class="flex items-center justify-between text-xs pt-1 border-t border-slate-50">
+      <div class="flex items-center gap-2 flex-wrap">
+        ${g.amount ? `<span class="font-medium text-slate-700">${esc(g.amount)}</span>` : ''}
+        ${deadlineStr ? `<span class="${urgent ? 'text-rose-500 font-semibold' : 'text-slate-400'}">🗓 ${deadlineStr}</span>` : ''}
+      </div>
+      <div class="flex gap-2 flex-shrink-0">
+        <button onclick="api.openExternal('${esc(g.url)}')" class="text-indigo-500 hover:underline">Open ↗</button>
+        ${!tracked ? `<button onclick="trackLiveGrant(${JSON.stringify(g).replace(/"/g,'&quot;')})" class="text-xs px-2.5 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">+ Track</button>` : ''}
+      </div>
+    </div>
+  </div>`
+}
+
+async function runLiveGrantSearch() {
+  const inp = document.getElementById('grant-search-q')
+  if (inp) _liveSearchQuery = inp.value.trim() || _buildGrantKeywords(state.profile)
+
+  _liveSearchResults = { ggov: 'loading', eu: 'loading', ukri: 'loading' }
+  _liveSearchDone    = false
+  renderGrantTab()
+
+  const kw = _liveSearchQuery
+
+  // Fire all three in parallel, update UI as each completes
+  const update = () => renderGrantTab()
+
+  if (_liveSourceEnabled.ggov) {
+    api.searchGrantsGov({ keywords: kw, rows: 20 }).then(r => {
+      _liveSearchResults.ggov = r.success ? r.results : { error: r.error }
+      update()
+    }).catch(e => { _liveSearchResults.ggov = { error: e.message }; update() })
+  } else { _liveSearchResults.ggov = null }
+
+  if (_liveSourceEnabled.eu) {
+    api.searchEuCordis({ keywords: kw, rows: 20 }).then(r => {
+      _liveSearchResults.eu = r.success ? r.results : { error: r.error }
+      update()
+    }).catch(e => { _liveSearchResults.eu = { error: e.message }; update() })
+  } else { _liveSearchResults.eu = null }
+
+  if (_liveSourceEnabled.ukri) {
+    api.searchUkri({ keywords: kw, rows: 20 }).then(r => {
+      _liveSearchResults.ukri = r.success ? r.results : { error: r.error }
+      update()
+    }).catch(e => { _liveSearchResults.ukri = { error: e.message }; update() })
+  } else { _liveSearchResults.ukri = null }
+
+  _liveSearchDone = true
+}
+
+function grantOpenWebSearch() {
+  const kw  = _liveSearchQuery || _buildGrantKeywords(state.profile)
+  const q   = encodeURIComponent(`research grant fellowship funding "${kw}"`)
+  api.openExternal(`https://www.google.com/search?q=${q}`)
+}
+
+function trackLiveGrant(g) {
+  if (!g?.id) return
+  const existing = state.grants.find(x => x.sourceId === g.id)
+  if (existing) { showToast('Already tracking this grant', 'info'); return }
+  state.grants.push({
+    id:          uid(),
+    sourceId:    g.id,
+    title:       g.name,
+    funder:      g.funder,
+    amount:      g.amount || '',
+    duration:    '',
+    deadline:    g.deadline || '',
+    status:      'researching',
+    eligibility: g.desc || '',
+    tags:        [g.source],
+    requirements: [], sections: [], coApplicants: [],
+    notes:       `Source: ${g.source}\nURL: ${g.url}`,
+    createdAt:   new Date().toISOString(),
+    updatedAt:   new Date().toISOString(),
+  })
+  save('grants')
+  _syncGrantCalendarEvent(state.grants[state.grants.length - 1])
+  renderGrantTab()
+  showToast(`"${g.name}" added to My Grants ✓`)
 }
 
 function trackDiscoveredGrant(dbId) {

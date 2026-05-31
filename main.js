@@ -1006,6 +1006,87 @@ ipcMain.handle('fetch-ics', async (_, url) => {
   } catch(e) { return { success: false, error: e.message } }
 })
 
+// ─── Live Grant Search ────────────────────────────────────────────────────────
+
+// Grants.gov — US federal open opportunities (no API key needed)
+ipcMain.handle('search-grants-gov', async (_, { keywords, rows = 25, start = 0 }) => {
+  try {
+    const r = await fetch('https://apply07.grants.gov/grantsws/rest/opportunities/search/', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'User-Agent': 'PhDFlow/0.10 (open-source)' },
+      body:    JSON.stringify({ keyword: keywords, oppStatuses: 'forecasted|posted', rows, start, sortBy: 'closeDate|asc' }),
+      signal:  AbortSignal.timeout(14000),
+    })
+    if (!r.ok) return { success: false, error: `Grants.gov HTTP ${r.status}` }
+    const data = await r.json()
+    if (data.errorcode !== 0 && data.errorcode != null) return { success: false, error: `Grants.gov error ${data.errorcode}` }
+    const results = (data.oppHits || []).map(h => ({
+      id:       `ggov-${h.id}`,
+      name:     h.title || h.oppTitle || 'Untitled',
+      funder:   h.agencyName || 'US Federal',
+      amount:   h.awardCeiling ? `Up to $${Number(h.awardCeiling).toLocaleString()}` : '',
+      deadline: h.closeDate ? h.closeDate.split('T')[0] : '',
+      url:      h.opportunityLink || `https://grants.gov/search-results-detail/${h.id}`,
+      desc:     (h.synopsis || '').slice(0, 300),
+      source:   'Grants.gov',
+      number:   h.number || '',
+    }))
+    return { success: true, results, total: data.totalCount || results.length }
+  } catch(e) { return { success: false, error: e.message } }
+})
+
+// EU CORDIS — Horizon Europe programme topics (no API key)
+ipcMain.handle('search-eu-cordis', async (_, { keywords, rows = 20 }) => {
+  try {
+    const q = encodeURIComponent(keywords)
+    const r = await fetch(
+      `https://cordis.europa.eu/api/topic?page=0&pageSize=${rows}&language=en&q=${q}&status=OPEN,FORTHCOMING`,
+      { headers: { 'User-Agent': 'PhDFlow/0.10', Accept: 'application/json' }, signal: AbortSignal.timeout(12000) }
+    )
+    if (!r.ok) return { success: false, error: `CORDIS HTTP ${r.status}` }
+    const data = await r.json()
+    const items = data.payload || data.results || []
+    const results = items.slice(0, rows).map(t => ({
+      id:       `eu-${t.id || t.identifier}`,
+      name:     t.title || t.identifier || 'Horizon Europe Call',
+      funder:   `European Commission${t.programmePeriod ? ' (' + t.programmePeriod + ')' : ''}`,
+      amount:   t.budgetOverviewEur ? `€${Number(t.budgetOverviewEur).toLocaleString()}` : '',
+      deadline: t.deadlineDate ? t.deadlineDate.split('T')[0] : '',
+      url:      t.identifier
+        ? `https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/${t.identifier}`
+        : 'https://ec.europa.eu/info/funding-tenders/opportunities/portal/',
+      desc:     (t.objective || t.description || '').replace(/<[^>]+>/g, ' ').trim().slice(0, 300),
+      source:   'EU Horizon',
+    }))
+    return { success: true, results, total: data.totalElements || results.length }
+  } catch(e) { return { success: false, error: e.message } }
+})
+
+// UKRI Gateway — UK Research & Innovation funded projects (no API key)
+ipcMain.handle('search-ukri', async (_, { keywords, rows = 20 }) => {
+  try {
+    const q = encodeURIComponent(keywords)
+    const r = await fetch(
+      `https://gtr.ukri.org/gtr/api/funds?q=${q}&p=1&fetchSize=${rows}&sf=START_DATE&so=DESC`,
+      { headers: { 'User-Agent': 'PhDFlow/0.10', Accept: 'application/vnd.rcuk.gtr.json-v7' }, signal: AbortSignal.timeout(12000) }
+    )
+    if (!r.ok) return { success: false, error: `UKRI HTTP ${r.status}` }
+    const data = await r.json()
+    const funds = data.fund || []
+    const results = funds.slice(0, rows).map(f => ({
+      id:       `ukri-${f.id}`,
+      name:     f.valuePounds ? `${f.category || 'Research Grant'} — UKRI` : (f.category || 'UKRI Funding'),
+      funder:   f.funder?.name || 'UKRI',
+      amount:   f.valuePounds ? `£${Number(f.valuePounds).toLocaleString()}` : '',
+      deadline: f.end ? f.end.split('T')[0] : '',
+      url:      `https://gtr.ukri.org/funds/FUND:${f.id}`,
+      desc:     (f.overview || f.abstractText || '').slice(0, 300),
+      source:   'UKRI',
+    }))
+    return { success: true, results, total: data.totalSize || results.length }
+  } catch(e) { return { success: false, error: e.message } }
+})
+
 // ─── Reference Manager Integration ───────────────────────────────────────────
 
 const ZOTERO_BASE = 'http://localhost:23119'

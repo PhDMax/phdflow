@@ -72,6 +72,11 @@ contextBridge.exposeInMainWorld('api', {
   onUpdateStatus:    (cb)                => ipcRenderer.on('update-status', (_, d) => cb(d)),
   quitApp:           ()                  => ipcRenderer.invoke('quit-app'),
 
+  // ── Live grant search ─────────────────────────────────────────────────────
+  searchGrantsGov:  (opts) => ipcRenderer.invoke('search-grants-gov', opts),
+  searchEuCordis:   (opts) => ipcRenderer.invoke('search-eu-cordis',  opts),
+  searchUkri:       (opts) => ipcRenderer.invoke('search-ukri',       opts),
+
   // ── Reference manager integration ────────────────────────────────────────
   zoteroPing:          ()         => ipcRenderer.invoke('zotero-ping'),
   zoteroFetchLibrary:  (opts)     => ipcRenderer.invoke('zotero-fetch-library', opts),
