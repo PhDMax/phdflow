@@ -220,31 +220,47 @@ function _buildResultCards(results) {
 
       </div>
 
-      <!-- Stats + links row -->
+      <!-- Stats -->
       <div class="flex flex-wrap items-center gap-2 mb-3">
         ${r.hIndex       ? `<span class="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full">h-index <strong>${r.hIndex}</strong></span>` : ''}
-        ${r.paperCount   ? `<span class="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full"><strong>${r.paperCount}</strong> papers</span>` : ''}
+        ${r.i10Index     ? `<span class="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full">i10 <strong>${r.i10Index}</strong></span>` : ''}
+        ${r.paperCount   ? `<span class="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full"><strong>${r.paperCount.toLocaleString()}</strong> papers</span>` : ''}
         ${r.citationCount? `<span class="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full">${r.citationCount.toLocaleString()} citations</span>` : ''}
         ${r.orcid        ? `<span class="text-xs bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-full">ORCID ✓</span>` : ''}
-        ${(r.topics||[]).slice(0,3).map(t=>`<span class="text-xs bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-full">${esc(t)}</span>`).join('')}
       </div>
+
+      <!-- Research topics -->
+      ${(r.topics||[]).length ? `
+      <div class="flex flex-wrap gap-1.5 mb-3">
+        ${(r.topics||[]).slice(0,6).map(t=>`<span class="text-xs bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-full">${esc(t)}</span>`).join('')}
+      </div>` : ''}
+
+      <!-- Recent papers (pre-loaded from S2) -->
+      ${(r.recentPapers||[]).length ? `
+      <div class="mb-3 border-t border-slate-50 pt-3">
+        <div class="text-xs font-semibold text-slate-500 mb-1.5">Top cited papers</div>
+        <div class="space-y-1">
+          ${(r.recentPapers||[]).slice(0,4).map(p=>`
+          <div class="text-xs flex items-start gap-1.5">
+            <span class="text-slate-300 flex-shrink-0 mt-0.5">▸</span>
+            <div class="min-w-0">
+              ${p.doi
+                ? `<button onclick="api.openExternal('https://doi.org/${esc(p.doi)}')" class="text-slate-700 hover:text-indigo-600 hover:underline text-left leading-snug line-clamp-1">${esc(p.title)}</button>`
+                : `<span class="text-slate-700 leading-snug line-clamp-1">${esc(p.title)}</span>`}
+              <span class="text-slate-400">${p.year||''}${p.citations?` · ${p.citations.toLocaleString()} citations`:''}</span>
+            </div>
+          </div>`).join('')}
+        </div>
+      </div>` : ''}
 
       <!-- Profile links -->
       <div class="flex flex-wrap gap-3 text-xs border-t border-slate-100 pt-3">
-        ${r.s2Url    ? `<button onclick="api.openExternal('${esc(r.s2Url)}')"    class="text-indigo-500 hover:underline">📚 Publications (S2)</button>` : ''}
+        ${r.s2Url    ? `<button onclick="api.openExternal('${esc(r.s2Url)}')"    class="text-indigo-500 hover:underline">📚 Semantic Scholar</button>` : ''}
         <button onclick="api.openExternal('${gSearch}')" class="text-indigo-500 hover:underline">🎓 Google Scholar</button>
         ${r.oaUrl    ? `<button onclick="api.openExternal('${esc(r.oaUrl)}')"    class="text-indigo-500 hover:underline">OpenAlex</button>` : ''}
         ${r.orcid    ? `<button onclick="api.openExternal('https://orcid.org/${esc(r.orcid)}')" class="text-indigo-500 hover:underline">ORCID</button>` : ''}
         ${r.homepage ? `<button onclick="api.openExternal('${esc(r.homepage)}')" class="text-indigo-500 hover:underline">🔗 Homepage</button>` : ''}
-        ${r.id && r.id.startsWith && !r.id.startsWith('oa-')
-          ? `<button onclick="discRecentPapers('${esc(r.id)}', ${i})" id="rpbtn-${i}"
-              class="ml-auto text-slate-500 hover:text-indigo-600 transition-colors">
-              ▾ Recent papers
-            </button>` : ''}
       </div>
-
-      <!-- Recent papers (lazy) -->
-      <div id="rp-${i}" class="hidden mt-3 pt-3 border-t border-slate-100 space-y-1.5"></div>
     </div>`
   }).join('')
 }
@@ -299,39 +315,7 @@ async function discUnfollow(id) {
   render_discover()
 }
 
-async function discRecentPapers(s2Id, cardIndex) {
-  const btn = document.getElementById(`rpbtn-${cardIndex}`)
-  const box = document.getElementById(`rp-${cardIndex}`)
-  if (!box) return
-  if (!box.classList.contains('hidden')) { box.classList.add('hidden'); return }
-  if (btn) btn.textContent = 'Loading…'
-  try {
-    const res = await fetch(
-      `https://api.semanticscholar.org/graph/v1/author/${s2Id}/papers?fields=title,year,publicationDate,url,externalIds&limit=5&offset=0`,
-      { headers: { 'User-Agent':'PhD-Command-Center/0.2' } }
-    )
-    if (!res.ok) throw new Error('API error')
-    const data  = await res.json()
-    const papers = (data.data || []).sort((a,b) => (b.year||0)-(a.year||0))
-    box.innerHTML = papers.length
-      ? papers.map(p => {
-          const doi = p.externalIds?.DOI
-          const url = p.url || (doi ? `https://doi.org/${doi}` : '')
-          return `<div class="flex items-start gap-2 text-xs py-1.5 border-b border-slate-50 last:border-0">
-            <span class="text-slate-400 flex-shrink-0 w-9">${p.year||'—'}</span>
-            ${url
-              ? `<button onclick="api.openExternal('${esc(url)}')" class="text-slate-700 hover:text-indigo-600 text-left hover:underline leading-snug">${esc(p.title)}</button>`
-              : `<span class="text-slate-700 leading-snug">${esc(p.title)}</span>`}
-          </div>`
-        }).join('')
-      : '<p class="text-xs text-slate-400">No papers found in database</p>'
-    box.classList.remove('hidden')
-    if (btn) btn.textContent = '▴ Recent papers'
-  } catch(e) {
-    if (btn) btn.textContent = '▾ Recent papers'
-    showToast('Could not load papers','error')
-  }
-}
+// discRecentPapers removed — papers now pre-loaded in main.js search-researchers handler
 
 async function discCheckPapers(followId, listIndex) {
   const r   = _discFollowData.find(x => x.id === followId)

@@ -295,55 +295,134 @@ ipcMain.handle('export-to-pdf', async (_, html, dest) => {
 
 // ─── IPC: Researcher Search ───────────────────────────────────────────────────
 
+// Normalise a name for fuzzy matching: lowercase, strip punctuation, sort words
+function _normName(n) {
+  return (n||'').toLowerCase().replace(/[^a-z\s]/g,'').trim().split(/\s+/).sort().join(' ')
+}
+
 ipcMain.handle('search-researchers', async (_, query) => {
   try {
+    const nameOnly = query.split(' ').slice(0, 3).join(' ')  // first 3 words = name
+    const sig = AbortSignal.timeout(12000)
+
+    // S2: include externalIds to get ORCID directly
+    const s2Fields = 'name,affiliations,homepage,paperCount,citationCount,hIndex,externalIds'
+    // OA: use `topics` (not deprecated x_concepts), request summary_stats, affiliations, ids
+    const oaSelect = 'id,display_name,works_count,cited_by_count,summary_stats,affiliations,last_known_institutions,ids,topics,works_api_url'
+
     const [s2Res, oaRes] = await Promise.allSettled([
-      fetch(`https://api.semanticscholar.org/graph/v1/author/search?query=${encodeURIComponent(query)}&fields=name,affiliations,homepage,paperCount,citationCount,hIndex&limit=10`,
-        { headers: { 'User-Agent': 'PhD-Command-Center/0.2 (open-source)' } }).then(r => r.json()),
-      fetch(`https://api.openalex.org/authors?search=${encodeURIComponent(query)}&per-page=10`,
-        { headers: { 'User-Agent': 'PhD-Command-Center/0.2 (mailto:phd-cc@example.com)' } }).then(r => r.json())
+      fetch(
+        `https://api.semanticscholar.org/graph/v1/author/search?query=${encodeURIComponent(nameOnly)}&fields=${s2Fields}&limit=8`,
+        { headers: { 'User-Agent': 'PhDFlow/0.10 (open-source)' }, signal: sig }
+      ).then(r => r.json()),
+      fetch(
+        `https://api.openalex.org/authors?search=${encodeURIComponent(nameOnly)}&select=${oaSelect}&per-page=8`,
+        { headers: { 'User-Agent': 'PhDFlow/0.10 (mailto:phd-cc@example.com)' }, signal: sig }
+      ).then(r => r.json()),
     ])
 
     const s2Authors = s2Res.status === 'fulfilled' ? (s2Res.value.data || []) : []
     const oaAuthors = oaRes.status === 'fulfilled' ? (oaRes.value.results || []) : []
 
-    const results = s2Authors.map(s2 => {
-      const affiliations = (s2.affiliations||[]).map(a => a.name)
-      const oa = oaAuthors.find(o => o.display_name?.toLowerCase() === s2.name?.toLowerCase())
-      const oaInstitutions = oa?.last_known_institutions?.map(i => i.display_name) || []
-      const allAffs = [...new Set([...affiliations,...oaInstitutions])]
-      const topics = oa?.x_concepts?.slice(0,4).map(c => c.display_name) || []
-      const orcid = oa?.ids?.orcid?.replace('https://orcid.org/','') || null
-      return {
-        id: s2.authorId, name: s2.name,
-        institution: allAffs[0]||null, affiliations: allAffs, topics,
-        homepage: s2.homepage||null,
-        hIndex: s2.hIndex || oa?.summary_stats?.h_index || 0,
-        paperCount: s2.paperCount || oa?.works_count || 0,
-        citationCount: s2.citationCount || oa?.cited_by_count || 0,
-        orcid, s2Url: `https://www.semanticscholar.org/author/${s2.authorId}`,
-        oaUrl: oa?.id ? `https://openalex.org/authors/${oa.id.split('/').pop()}` : null,
-        ...inferEmail(s2.name, allAffs)
-      }
-    })
+    const usedOaIds = new Set()
+    const merged = []
 
-    // add OpenAlex-only
-    for (const oa of oaAuthors) {
-      if (!results.some(r => r.name?.toLowerCase() === oa.display_name?.toLowerCase())) {
-        const insts = oa.last_known_institutions?.map(i => i.display_name) || []
-        results.push({
-          id: `oa-${oa.id?.split('/').pop()}`, name: oa.display_name,
-          institution: insts[0]||null, affiliations: insts,
-          topics: oa.x_concepts?.slice(0,4).map(c=>c.display_name)||[],
-          homepage: null, hIndex: oa.summary_stats?.h_index||0,
-          paperCount: oa.works_count||0, citationCount: oa.cited_by_count||0,
-          orcid: oa.ids?.orcid?.replace('https://orcid.org/','')||null,
-          s2Url: null, oaUrl: oa.id ? `https://openalex.org/authors/${oa.id.split('/').pop()}` : null,
-          ...inferEmail(oa.display_name, insts)
-        })
+    for (const s2 of s2Authors) {
+      const s2Orcid   = s2.externalIds?.ORCID?.replace('https://orcid.org/','') || null
+      const s2Affiliations = (s2.affiliations||[]).map(a => a.name)
+
+      // Match OA author: prefer exact ORCID match, then normalised name match
+      let oa = null
+      if (s2Orcid) {
+        oa = oaAuthors.find(o => o.ids?.orcid?.replace('https://orcid.org/','') === s2Orcid)
       }
+      if (!oa) {
+        const ns2 = _normName(s2.name)
+        oa = oaAuthors.find(o => _normName(o.display_name) === ns2)
+      }
+      if (oa) usedOaIds.add(oa.id)
+
+      const oaInsts = oa?.last_known_institutions?.map(i => i.display_name) || []
+      const allAffs = [...new Set([...s2Affiliations, ...oaInsts])]
+      const orcid   = s2Orcid || oa?.ids?.orcid?.replace('https://orcid.org/','') || null
+      // OA `topics` field (current) — NOT the deprecated `x_concepts`
+      const topics  = (oa?.topics || []).slice(0, 6).map(t => t.display_name).filter(Boolean)
+
+      merged.push({
+        id:           s2.authorId,
+        name:         s2.name,
+        institution:  allAffs[0] || null,
+        affiliations: allAffs,
+        topics,
+        homepage:     s2.homepage || null,
+        hIndex:       s2.hIndex || oa?.summary_stats?.h_index || 0,
+        i10Index:     oa?.summary_stats?.i10 || null,
+        paperCount:   s2.paperCount || oa?.works_count || 0,
+        citationCount:s2.citationCount || oa?.cited_by_count || 0,
+        orcid,
+        s2Url:        `https://www.semanticscholar.org/author/${s2.authorId}`,
+        oaUrl:        oa?.id ? `https://openalex.org/authors/${oa.id.split('/').pop()}` : null,
+        worksApiUrl:  oa?.works_api_url || null,
+        email: null, emailSource: 'none',
+      })
     }
-    return { success: true, results: results.slice(0,10) }
+
+    // OA-only authors (not matched to any S2 result)
+    for (const oa of oaAuthors) {
+      if (usedOaIds.has(oa.id)) continue
+      const insts  = oa.last_known_institutions?.map(i => i.display_name) || []
+      const orcid  = oa.ids?.orcid?.replace('https://orcid.org/','') || null
+      const topics = (oa.topics || []).slice(0, 6).map(t => t.display_name).filter(Boolean)
+      merged.push({
+        id:           `oa-${oa.id?.split('/').pop()}`,
+        name:         oa.display_name,
+        institution:  insts[0] || null,
+        affiliations: insts,
+        topics,
+        homepage:     null,
+        hIndex:       oa.summary_stats?.h_index || 0,
+        i10Index:     oa.summary_stats?.i10 || null,
+        paperCount:   oa.works_count || 0,
+        citationCount:oa.cited_by_count || 0,
+        orcid,
+        s2Url:        null,
+        oaUrl:        oa.id ? `https://openalex.org/authors/${oa.id.split('/').pop()}` : null,
+        worksApiUrl:  oa.works_api_url || null,
+        email: null, emailSource: 'none',
+      })
+    }
+
+    // Sort by h-index descending — most prominent person with this name floats up
+    merged.sort((a, b) => (b.hIndex || 0) - (a.hIndex || 0))
+
+    const top = merged.slice(0, 8)
+
+    // Fetch top 5 recent papers for S2-based results (parallel, non-blocking)
+    await Promise.allSettled(
+      top
+        .filter(r => !String(r.id).startsWith('oa-'))
+        .slice(0, 5)
+        .map(async author => {
+          try {
+            const r = await fetch(
+              `https://api.semanticscholar.org/graph/v1/author/${author.id}/papers` +
+              `?fields=title,year,citationCount,externalIds,venue&limit=5&sort=citationCount`,
+              { headers: { 'User-Agent': 'PhDFlow/0.10' }, signal: AbortSignal.timeout(6000) }
+            )
+            if (!r.ok) return
+            const data = await r.json()
+            author.recentPapers = (data.data || []).slice(0, 5).map(p => ({
+              title:     p.title || '',
+              year:      p.year || null,
+              citations: p.citationCount || 0,
+              venue:     p.venue || null,
+              doi:       p.externalIds?.DOI || null,
+            }))
+          } catch {}
+        })
+    )
+
+    return { success: true, results: top }
   } catch(e) { return { success: false, error: e.message } }
 })
 
