@@ -1009,6 +1009,75 @@ ipcMain.handle('fetch-ics', async (_, url) => {
 
 // ─── Live Grant Search ────────────────────────────────────────────────────────
 
+// NIH Reporter — search funded US projects by field + career stage mechanism
+ipcMain.handle('search-nih-reporter', async (_, { keywords, activityCodes, rows = 25 }) => {
+  try {
+    const body = {
+      criteria: {
+        advanced_text_search: { operator: 'And', search_field: 'all', search_text: keywords },
+        ...(activityCodes?.length ? { activity_codes: activityCodes } : {}),
+      },
+      offset: 0, limit: rows,
+      sort_field: 'fiscal_year', sort_order: 'desc',
+      include_fields: ['ProjectTitle','AgencyCode','FiscalYear','AwardAmount',
+        'PrincipalInvestigators','Organization','AbstractText','ActivityCode',
+        'CoreProjectNum','OpportunityNumber'],
+    }
+    const r = await fetch('https://api.reporter.nih.gov/v2/projects/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'User-Agent': 'PhDFlow/0.10' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15000),
+    })
+    if (!r.ok) return { success: false, error: `NIH Reporter HTTP ${r.status}` }
+    const data = await r.json()
+    const results = (data.results || []).map(p => ({
+      id:        `nih-${p.core_project_num || p.appl_id || Math.random().toString(36).slice(2)}`,
+      name:      p.project_title || 'NIH Project',
+      funder:    `NIH${p.agency_code ? ' · ' + p.agency_code : ''}`,
+      mechanism: p.activity_code || '',
+      amount:    p.award_amount ? `$${Number(p.award_amount).toLocaleString()}` : '',
+      pi:        (p.principal_investigators || []).slice(0,2).map(pi=>`${pi.first_name} ${pi.last_name}`).join(', '),
+      org:       p.organization?.org_name || '',
+      year:      p.fiscal_year || '',
+      abstract:  (p.abstract_text || '').replace(/<[^>]+>/g,'').trim().slice(0, 300),
+      url:       p.core_project_num
+        ? `https://reporter.nih.gov/project-details/${p.core_project_num}`
+        : 'https://reporter.nih.gov/',
+      source:    'NIH Reporter',
+    }))
+    return { success: true, results, total: data.meta?.total || results.length }
+  } catch(e) { return { success: false, error: e.message } }
+})
+
+// NSF Awards — funded US STEM awards by field keywords
+ipcMain.handle('search-nsf-awards', async (_, { keywords, rows = 20 }) => {
+  try {
+    const q = encodeURIComponent(keywords)
+    const fields = 'id,title,agency,awardeeName,date,abstractText,fundProgramName,piFirstName,piLastName,estimatedTotalAmt,pdPIName'
+    const r = await fetch(
+      `https://api.nsf.gov/services/v1/awards.json?keyword=${q}&rows=${rows}&printFields=${fields}`,
+      { headers: { 'User-Agent': 'PhDFlow/0.10' }, signal: AbortSignal.timeout(12000) }
+    )
+    if (!r.ok) return { success: false, error: `NSF HTTP ${r.status}` }
+    const data = await r.json()
+    const awards = data.response?.award || []
+    const results = awards.map(a => ({
+      id:       `nsf-${a.id}`,
+      name:     a.title || 'NSF Award',
+      funder:   `NSF${a.fundProgramName ? ' · ' + a.fundProgramName : ''}`,
+      amount:   a.estimatedTotalAmt ? `$${Number(a.estimatedTotalAmt).toLocaleString()}` : '',
+      pi:       `${a.piFirstName || ''} ${a.piLastName || ''}`.trim() || a.pdPIName || '',
+      org:      a.awardeeName || '',
+      year:     a.date ? a.date.split('/')[2] : '',
+      abstract: (a.abstractText || '').replace(/<[^>]+>/g,'').trim().slice(0, 300),
+      url:      `https://www.nsf.gov/awardsearch/showAward?AWD_ID=${a.id}`,
+      source:   'NSF Awards',
+    }))
+    return { success: true, results, total: results.length }
+  } catch(e) { return { success: false, error: e.message } }
+})
+
 // Grants.gov — US federal open opportunities (no API key needed)
 ipcMain.handle('search-grants-gov', async (_, { keywords, rows = 25, start = 0 }) => {
   try {
