@@ -166,8 +166,6 @@ function _buildResultCards(results) {
   return results.map((r, i) => {
     const saved    = state.contacts.some(c => c.s2Id===r.id || c.name===r.name)
     const followed = _discFollowed.has(r.id)
-    const conf     = r.emailConfidence || 0
-    const confCls  = conf>=70 ? 'bg-green-100 text-green-700' : conf>=40 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'
     const liSearch = `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent((r.name||'') + ' ' + (r.institution||''))}`
     const gSearch  = `https://scholar.google.com/scholar?q=${encodeURIComponent(r.name||'')}`
 
@@ -202,18 +200,15 @@ function _buildResultCards(results) {
       <!-- Key contact info -->
       <div class="grid grid-cols-2 gap-2 mb-3">
 
-        <!-- Email -->
+        <!-- Email — only show if sourced directly from ORCID/profile, never from inference -->
         <div class="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2">
           <span class="text-slate-400 text-sm flex-shrink-0">📧</span>
-          ${r.email
-            ? `<div class="min-w-0">
-                <button onclick="navigator.clipboard.writeText('${esc(r.email)}').then(()=>showToast('Copied ✓'))"
-                  class="font-mono text-xs text-slate-700 hover:text-indigo-600 truncate block w-full text-left">
-                  ${esc(r.email)}
-                </button>
-                <span class="text-xs ${confCls} px-1.5 py-px rounded-full inline-block mt-0.5">${conf}% inferred</span>
-               </div>`
-            : `<span class="text-xs text-slate-400 italic">Email not available</span>`}
+          ${r.email && r.emailSource !== 'inferred'
+            ? `<button onclick="navigator.clipboard.writeText('${esc(r.email)}').then(()=>showToast('Copied ✓'))"
+                class="font-mono text-xs text-slate-700 hover:text-indigo-600 truncate block w-full text-left">
+                ${esc(r.email)}
+               </button>`
+            : `<span class="text-xs text-slate-400 italic">Search LinkedIn or Google Scholar for contact details</span>`}
         </div>
 
         <!-- LinkedIn -->

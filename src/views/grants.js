@@ -167,14 +167,14 @@ function _rankForProfile(grants, profile) {
 }
 
 // ── Smart keyword generator ───────────────────────────────────────────────────
+// _buildGrantKeywords  → full phrase (field + stage) for built-in DB matching
+// _buildApiKeywords    → field only for live APIs (stage terms broaden too much)
 
 function _buildGrantKeywords(profile) {
   const field = (profile?.field || '').trim()
   const stage = profile?.careerStage || ''
   const parts  = []
-
   if (field) parts.push(field)
-
   const stageTerms = {
     phd:      'doctoral fellowship graduate student predoctoral',
     masters:  'masters graduate student fellowship',
@@ -182,8 +182,18 @@ function _buildGrantKeywords(profile) {
     pi:       'early career investigator research grant principal investigator',
   }
   if (stageTerms[stage]) parts.push(stageTerms[stage])
-
   return parts.join(' ') || 'research fellowship grant'
+}
+
+function _buildApiKeywords(profile) {
+  // For live API searches, use only the research field.
+  // Stage terms like "fellowship graduate student" cause Grants.gov to return
+  // completely unrelated results (arts fellowships, student housing grants, etc.)
+  const field = (profile?.field || '').trim()
+  if (field) return field
+  // Fallback: use the full query but cap at 3 words to stay focused
+  const full = _buildGrantKeywords(profile)
+  return full.split(' ').slice(0, 3).join(' ')
 }
 
 // ── Live search state ─────────────────────────────────────────────────────────
@@ -710,27 +720,28 @@ async function runLiveGrantSearch() {
   _liveSearchDone    = false
   renderGrantTab()
 
-  const kw = _liveSearchQuery
+  // Built-in DB uses the full query (stage terms help match our curated list).
+  // Live APIs use field-only keywords to avoid broad false-positive results.
+  const apiKw = _buildApiKeywords(state.profile) || _liveSearchQuery.split(' ').slice(0,3).join(' ')
 
-  // Fire all three in parallel, update UI as each completes
   const update = () => renderGrantTab()
 
   if (_liveSourceEnabled.ggov) {
-    api.searchGrantsGov({ keywords: kw, rows: 20 }).then(r => {
+    api.searchGrantsGov({ keywords: apiKw, rows: 20 }).then(r => {
       _liveSearchResults.ggov = r.success ? r.results : { error: r.error }
       update()
     }).catch(e => { _liveSearchResults.ggov = { error: e.message }; update() })
   } else { _liveSearchResults.ggov = null }
 
   if (_liveSourceEnabled.eu) {
-    api.searchEuCordis({ keywords: kw, rows: 20 }).then(r => {
+    api.searchEuCordis({ keywords: apiKw, rows: 20 }).then(r => {
       _liveSearchResults.eu = r.success ? r.results : { error: r.error }
       update()
     }).catch(e => { _liveSearchResults.eu = { error: e.message }; update() })
   } else { _liveSearchResults.eu = null }
 
   if (_liveSourceEnabled.ukri) {
-    api.searchUkri({ keywords: kw, rows: 20 }).then(r => {
+    api.searchUkri({ keywords: apiKw, rows: 20 }).then(r => {
       _liveSearchResults.ukri = r.success ? r.results : { error: r.error }
       update()
     }).catch(e => { _liveSearchResults.ukri = { error: e.message }; update() })

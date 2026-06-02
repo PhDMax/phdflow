@@ -24,6 +24,7 @@ let _wbBg          = 'dots'
 let _wbResizeObs   = null
 let _wbResizing    = null   // { handle:0-7, startPt:{x,y}, origShape:{...} }
 let _wbKeysAdded   = false
+let _wbPasteAdded  = false
 let _wbSpaceHeld   = false
 
 // ── Viewport (zoom + pan) ─────────────────────────────────────────────────────
@@ -333,11 +334,11 @@ function _wbBindKeys() {
   _wbKeysAdded = true
 
   document.addEventListener('keydown', e => {
-    if (!_wb) return
+    if (!_wb || state.currentView !== 'whiteboard') return
     const tag = document.activeElement?.tagName
     const inInput = tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.contentEditable === 'true'
 
-    // Space pan — works even in inputs we don't own (only when canvas is in view)
+    // Space pan — only active when whiteboard is the current view
     if (e.key === ' ' && !inInput) {
       e.preventDefault()
       if (!_wbSpaceHeld) {
@@ -365,7 +366,7 @@ function _wbBindKeys() {
   document.addEventListener('keyup', e => {
     if (e.key === ' ') {
       _wbSpaceHeld = false
-      if (_wbCanvas && !_wbDrawing && !_wbPanning)
+      if (state.currentView === 'whiteboard' && _wbCanvas && !_wbDrawing && !_wbPanning)
         _wbCanvas.style.cursor = _wbTool === 'select' ? 'default' : 'crosshair'
     }
   })
@@ -415,16 +416,19 @@ function _wbBindCanvas() {
     }
   }
 
-  // Paste image from clipboard
-  document.addEventListener('paste', e => {
-    if (!_wb || state.currentView !== 'whiteboard') return
-    const item = [...(e.clipboardData?.items||[])].find(i => i.type.startsWith('image/'))
-    if (item) {
-      e.preventDefault()
-      const file = item.getAsFile()
-      if (file) _wbInsertImageFile(file, 80, 80)
-    }
-  })
+  // Paste image from clipboard — registered once only to prevent escalation
+  if (!_wbPasteAdded) {
+    _wbPasteAdded = true
+    document.addEventListener('paste', e => {
+      if (!_wb || state.currentView !== 'whiteboard') return
+      const item = [...(e.clipboardData?.items||[])].find(i => i.type.startsWith('image/'))
+      if (item) {
+        e.preventDefault()
+        const file = item.getAsFile()
+        if (file) _wbInsertImageFile(file, 80, 80)
+      }
+    })
+  }
 
   // Scroll-wheel zoom
   _wbCanvas.onwheel = e => {

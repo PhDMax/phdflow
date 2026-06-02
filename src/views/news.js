@@ -146,6 +146,7 @@ async function render_news() {
         <option value="14" ${_newsFilter.days===14?'selected':''}>Last 14 days</option>
         <option value="30" ${_newsFilter.days===30?'selected':''}>Last 30 days</option>
         <option value="90" ${_newsFilter.days===90?'selected':''}>Last 90 days</option>
+        <option value="180" ${_newsFilter.days===180?'selected':''}>Last 6 months</option>
         <option value="0"  ${_newsFilter.days===0?'selected':''}>All time</option>
       </select>
 
@@ -188,14 +189,17 @@ async function render_news() {
           <p class="text-slate-400 text-sm mb-4">
             ${_newsFeed.length === 0
               ? 'Click Refresh to search for papers matching your topics.'
-              : 'Try broadening the time range or selecting All Topics.'}
+              : `The <strong>date filter</strong> is hiding all results. Try switching to <strong>Last 6 months</strong> or <strong>All time</strong>.`}
           </p>
           ${_newsFeed.length === 0
             ? `<button onclick="refreshNewsFeed()"
                 class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors">
                 ⟳ Refresh Feed
               </button>`
-            : ''}
+            : `<button onclick="_newsFilter.days=0;render_news()"
+                class="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-sm font-semibold rounded-lg transition-colors border border-indigo-200">
+                Show all time
+              </button>`}
         </div>
       ` : `<div class="space-y-3">${filtered.map(_newsPaperCard).join('')}</div>`}
     </div>
