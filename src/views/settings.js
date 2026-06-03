@@ -410,44 +410,20 @@ function renderAppTab(body) {
       <button onclick="appSaveTopics()" class="btn-primary text-xs py-1.5 px-3 ml-2">Save Topics</button>
     </div>
 
-    <!-- Odysseus AI Assistant -->
-    <div class="bg-white rounded-2xl border border-slate-200 p-5">
-      <h3 class="text-sm font-bold text-slate-700 mb-1">✨ AI Assistant (Odysseus)</h3>
-      <p class="text-xs text-slate-400 mb-3 leading-relaxed">
-        Connect to a running <strong>Odysseus</strong> instance for AI-powered paper summaries,
-        grant writing help, and note assistance. Odysseus runs locally — your data never leaves your machine.
+    <!-- AI Engine -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-5" id="ai-engine-panel">
+      <div class="flex items-center justify-between mb-1">
+        <h3 class="text-sm font-bold text-slate-700">✨ AI Engine (Odysseus)</h3>
+        <div id="ai-engine-badge" class="text-xs px-2 py-0.5 rounded-full font-medium bg-slate-100 text-slate-400">Not running</div>
+      </div>
+      <p class="text-xs text-slate-400 mb-4 leading-relaxed">
+        PhDFlow can automatically start and manage a local Odysseus instance — no manual setup, no API keys.
+        All AI features work out of the box once Odysseus is installed.
         <button onclick="api.openExternal('https://github.com/pewdiepie-archdaemon/odysseus')" class="text-indigo-500 hover:underline ml-1">Get Odysseus ↗</button>
       </p>
-      <div class="space-y-3">
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="label">Odysseus URL</label>
-            <input id="ody-url" type="text" value="${esc(state.profile?.odysseusUrl||'http://localhost:7000')}"
-              class="input" placeholder="http://localhost:7000"/>
-          </div>
-          <div>
-            <label class="label">API Token <span class="text-slate-400 font-normal">(from Odysseus Settings → API Tokens)</span></label>
-            <input id="ody-token" type="password" value="${esc(state.profile?.odysseusToken||'')}"
-              class="input" placeholder="ody_..."/>
-          </div>
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="label">Model endpoint URL <span class="text-slate-400 font-normal">(your Ollama/llama.cpp URL)</span></label>
-            <input id="ody-endpoint" type="text" value="${esc(state.profile?.odysseusEndpoint||'http://localhost:11434/v1')}"
-              class="input" placeholder="http://localhost:11434/v1"/>
-          </div>
-          <div>
-            <label class="label">Model name</label>
-            <input id="ody-model" type="text" value="${esc(state.profile?.odysseusModel||'llama3.2')}"
-              class="input" placeholder="llama3.2"/>
-          </div>
-        </div>
-        <div class="flex gap-2 items-center">
-          <button onclick="appSaveOdysseus()" class="btn-primary text-xs py-1.5 px-4">Save</button>
-          <button onclick="appTestOdysseus()" class="btn-secondary text-xs py-1.5 px-4">Test connection</button>
-          <span id="ody-status" class="text-xs text-slate-400"></span>
-        </div>
+
+      <div id="ai-engine-content">
+        <div class="text-xs text-slate-400 italic">Detecting Odysseus…</div>
       </div>
     </div>
 
@@ -522,6 +498,188 @@ function renderAppTab(body) {
       </div>
     </div>
   </div>`
+  // Initialise the AI engine panel after DOM is ready
+  setTimeout(aiEngineInit, 0)
+}
+
+// ── AI Engine (Odysseus managed instance) ────────────────────────────────────
+
+let _aiEngineStatus = 'unknown'
+
+async function aiEngineInit() {
+  const status = await api.odyStatus()
+  _aiEngineRender(status)
+  // Wire up live status updates
+  api.onOdyStatus(s => _aiEngineUpdateBadge(s.status))
+}
+
+function _aiEngineUpdateBadge(status) {
+  _aiEngineStatus = status
+  const badge = document.getElementById('ai-engine-badge')
+  if (!badge) return
+  const map = {
+    ready:    ['bg-emerald-100 text-emerald-700', '✓ Running'],
+    starting: ['bg-amber-100 text-amber-700',     '⏳ Starting…'],
+    stopped:  ['bg-slate-100 text-slate-500',      'Stopped'],
+    error:    ['bg-rose-100 text-rose-600',        '✕ Error'],
+    unknown:  ['bg-slate-100 text-slate-400',      'Not running'],
+  }
+  const [cls, label] = map[status] || map.unknown
+  badge.className = `text-xs px-2 py-0.5 rounded-full font-medium ${cls}`
+  badge.textContent = label
+}
+
+function _aiEngineRender(status) {
+  const el = document.getElementById('ai-engine-content')
+  if (!el) return
+  _aiEngineUpdateBadge(status.ready ? 'ready' : status.running ? 'starting' : 'stopped')
+
+  if (!status.dir && !status.venvReady) {
+    // Not found
+    el.innerHTML = `
+    <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-3">
+      <p class="text-xs font-semibold text-amber-800 mb-1">Odysseus not found</p>
+      <p class="text-xs text-amber-700 mb-3">
+        Download Odysseus and run <code>launch-windows.ps1</code> once to set it up.
+        PhDFlow will then manage it automatically.
+      </p>
+      <div class="flex gap-2">
+        <button onclick="api.openExternal('https://github.com/pewdiepie-archdaemon/odysseus')"
+          class="btn-primary text-xs py-1.5 px-3">Download Odysseus ↗</button>
+        <button onclick="aiEngineChooseDir()" class="btn-secondary text-xs py-1.5 px-3">Browse for folder…</button>
+      </div>
+    </div>
+    <p class="text-xs text-slate-400">Or point PhDFlow to an existing installation:</p>
+    <div class="flex gap-2 mt-1">
+      <input id="ai-engine-path" type="text" placeholder="Path to odysseus folder (contains app.py)"
+        class="input flex-1 text-xs"/>
+      <button onclick="aiEngineSetPath()" class="btn-secondary text-xs py-1.5 px-3">Set</button>
+    </div>`
+    return
+  }
+
+  if (status.dir && !status.venvReady) {
+    // Found but not set up
+    el.innerHTML = `
+    <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-3">
+      <p class="text-xs font-semibold text-amber-800 mb-1">Odysseus found but not initialised</p>
+      <p class="text-xs text-amber-700 mb-2">
+        Run <code>launch-windows.ps1</code> once in the Odysseus folder to install Python dependencies.
+        PhDFlow will manage it automatically after that.
+      </p>
+      <div class="flex items-center gap-2 p-2 bg-white rounded-lg border border-amber-200 text-xs text-amber-600 font-mono mb-2 break-all">
+        ${esc(status.dir)}
+      </div>
+      <button onclick="aiEngineOpenDir('${esc(status.dir)}')" class="btn-secondary text-xs py-1.5 px-3">Open folder ↗</button>
+    </div>`
+    return
+  }
+
+  // Ready to run
+  const running   = status.running || status.ready
+  const autoStart = status.autoStart
+  el.innerHTML = `
+  <div class="space-y-3">
+    <!-- Status row -->
+    <div class="flex items-center gap-3 p-3 ${running ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'} border rounded-xl">
+      <div class="w-2 h-2 rounded-full flex-shrink-0 ${running ? 'bg-emerald-500' : 'bg-slate-300'}"></div>
+      <div class="flex-1 min-w-0 text-xs">
+        ${running
+          ? `<span class="font-semibold text-emerald-700">Running</span> <span class="text-emerald-600">· localhost:${status.port}</span>`
+          : `<span class="font-semibold text-slate-600">Stopped</span>`}
+        <div class="text-slate-400 truncate mt-0.5">${esc(status.dir)}</div>
+      </div>
+      ${running
+        ? `<button onclick="aiEngineStop()" class="btn-danger text-xs py-1 px-3 flex-shrink-0">Stop</button>`
+        : `<button onclick="aiEngineStart()" class="btn-primary text-xs py-1 px-3 flex-shrink-0">Start AI</button>`}
+    </div>
+
+    <!-- Auto-start toggle -->
+    <label class="flex items-center gap-3 cursor-pointer select-none p-2 rounded-xl hover:bg-slate-50">
+      <input type="checkbox" id="ai-autostart" ${autoStart?'checked':''} onchange="aiEngineSetAutoStart(this.checked)"
+        class="accent-indigo-600 w-4 h-4"/>
+      <div>
+        <div class="text-sm font-medium text-slate-700">Start automatically with PhDFlow</div>
+        <div class="text-xs text-slate-400">Odysseus starts in the background when you open PhDFlow</div>
+      </div>
+    </label>
+
+    <!-- Log output (hidden by default) -->
+    <div>
+      <button onclick="document.getElementById('ai-log-box').classList.toggle('hidden')" class="text-xs text-slate-400 hover:text-slate-600">Show startup log</button>
+      <div id="ai-log-box" class="hidden mt-2 bg-slate-900 text-slate-300 text-xs font-mono p-3 rounded-xl max-h-32 overflow-y-auto">
+        <div id="ai-log-lines">Waiting for log output…</div>
+      </div>
+    </div>
+
+    <button onclick="aiEngineChooseDir()" class="text-xs text-slate-400 hover:text-slate-600">Change Odysseus folder</button>
+  </div>`
+
+  // Wire up log streaming
+  api.onOdyLog(line => {
+    const box = document.getElementById('ai-log-lines')
+    if (box) {
+      box.textContent += line
+      box.parentElement?.scrollTo(0, 99999)
+    }
+  })
+}
+
+async function aiEngineStart() {
+  _aiEngineUpdateBadge('starting')
+  document.querySelectorAll('#ai-engine-content button').forEach(b => { b.disabled = true })
+  const r = await api.odyStart()
+  if (r.success) {
+    // Update PhDFlow's AI connection to point at managed instance (no token needed)
+    if (!state.profile) state.profile = {}
+    state.profile.odysseusUrl   = `http://127.0.0.1:${r.port || 7001}`
+    state.profile.odysseusToken = ''  // AUTH_ENABLED=false, no token needed
+    await save('profile')
+  } else {
+    showToast(r.error || 'Failed to start Odysseus', 'error')
+  }
+  const status = await api.odyStatus()
+  _aiEngineRender(status)
+}
+
+async function aiEngineStop() {
+  await api.odyStop()
+  _aiEngineUpdateBadge('stopped')
+  const status = await api.odyStatus()
+  _aiEngineRender(status)
+}
+
+async function aiEngineSetAutoStart(enabled) {
+  await api.odySetAutoStart(enabled)
+  showToast(enabled ? 'AI Engine will start automatically ✓' : 'Auto-start disabled')
+}
+
+async function aiEngineChooseDir() {
+  const r = await api.openSaveDialog({
+    title: 'Select Odysseus folder (the one that contains app.py)',
+    properties: ['openDirectory'],
+  })
+  // Note: openSaveDialog is for files; for directories we'll use a text field instead
+  // The user can type or paste the path
+  const el = document.getElementById('ai-engine-content')
+  if (el) el.innerHTML += `
+  <div class="mt-3 flex gap-2">
+    <input id="ai-engine-path" type="text" placeholder="Paste Odysseus folder path here…" class="input flex-1 text-xs"/>
+    <button onclick="aiEngineSetPath()" class="btn-primary text-xs py-1.5 px-3">Set path</button>
+  </div>`
+}
+
+async function aiEngineSetPath() {
+  const inp = document.getElementById('ai-engine-path')
+  const dir = inp?.value?.trim()
+  if (!dir) return
+  const r = await api.odySetDir(dir)
+  const status = await api.odyStatus()
+  _aiEngineRender(status)
+}
+
+function aiEngineOpenDir(dir) {
+  api.openFolder(dir)
 }
 
 async function appSaveOdysseus() {

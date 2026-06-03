@@ -83,6 +83,16 @@ contextBridge.exposeInMainWorld('api', {
   searchNihReporter: (opts) => ipcRenderer.invoke('search-nih-reporter',  opts),
   searchNsfAwards:   (opts) => ipcRenderer.invoke('search-nsf-awards',    opts),
 
+  // ── Odysseus managed instance ─────────────────────────────────────────────
+  odyFind:           ()        => ipcRenderer.invoke('odysseus-managed-find'),
+  odySetDir:         (dir)     => ipcRenderer.invoke('odysseus-managed-set-dir', dir),
+  odyStart:          (dir)     => ipcRenderer.invoke('odysseus-managed-start', dir),
+  odyStop:           ()        => ipcRenderer.invoke('odysseus-managed-stop'),
+  odyStatus:         ()        => ipcRenderer.invoke('odysseus-managed-status'),
+  odySetAutoStart:   (enabled) => ipcRenderer.invoke('odysseus-managed-set-autostart', enabled),
+  onOdyStatus:       (cb)      => ipcRenderer.on('odysseus-managed-status', (_, d) => cb(d)),
+  onOdyLog:          (cb)      => ipcRenderer.on('odysseus-managed-log',    (_, d) => cb(d)),
+
   // ── Odysseus AI assistant ─────────────────────────────────────────────────
   odysseusPing:      (opts) => ipcRenderer.invoke('odysseus-ping', opts),
   odysseusChat:      (opts) => ipcRenderer.invoke('odysseus-chat', opts),

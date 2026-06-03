@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, nativeImage } = require('electron')
 const { autoUpdater } = require('electron-updater')
+const { spawn }       = require('child_process')
 const path  = require('path')
 const fs    = require('fs')
 const dgram = require('dgram')
@@ -33,6 +34,171 @@ let mainWindow
 let tray = null
 let _quitting = false
 const _auth = { loggedIn: false }
+
+// ─── Odysseus Managed Instance ────────────────────────────────────────────────
+
+const ODY_PORT       = 7001  // dedicated PhDFlow-managed port (avoids conflict with user's 7000)
+const ODY_CONFIG_KEY = 'odysseus-managed'
+
+let _odyProc  = null   // child process
+let _odyReady = false  // true once the server responds
+
+function _odyConfigPath() { return path.join(app.getPath('userData'), 'odysseus-managed.json') }
+function _readOdyConfig()  { try { return JSON.parse(fs.readFileSync(_odyConfigPath(), 'utf-8')) } catch { return {} } }
+function _saveOdyConfig(c) { try { fs.writeFileSync(_odyConfigPath(), JSON.stringify(c), 'utf-8') } catch {} }
+
+// Search common locations for an Odysseus installation (has app.py + venv)
+function _findOdysseus() {
+  const home   = app.getPath('home')
+  const saved  = _readOdyConfig().dir
+  const candidates = [
+    ...(saved ? [saved] : []),
+    path.join(home, 'Downloads', 'odysseus-main', 'odysseus-main'),
+    path.join(home, 'Downloads', 'odysseus-main'),
+    path.join(home, 'odysseus'),
+    path.join(home, 'Documents', 'odysseus'),
+    path.join(app.getPath('appData'), 'odysseus'),
+    path.join(app.getPath('userData'), 'odysseus'),
+    'C:\\odysseus',
+  ]
+  for (const p of candidates) {
+    if (p && fs.existsSync(path.join(p, 'app.py'))) return p
+  }
+  return null
+}
+
+// Check whether the venv is set up (launch-windows.ps1 has been run)
+function _odyVenvReady(dir) {
+  return dir && fs.existsSync(path.join(dir, 'venv', 'Scripts', 'python.exe'))
+}
+
+// Poll until the server responds (up to 90 s — first cold start can take a while)
+async function _waitForOdysseus(seconds = 90) {
+  for (let i = 0; i < seconds; i++) {
+    await new Promise(r => setTimeout(r, 1000))
+    try {
+      const r = await fetch(`http://127.0.0.1:${ODY_PORT}/`, { signal: AbortSignal.timeout(1500) })
+      if (r.status < 500) return true
+    } catch {}
+  }
+  return false
+}
+
+async function _startManagedOdysseus(dir) {
+  if (_odyProc) return { success: true, alreadyRunning: true }
+  if (!_odyVenvReady(dir)) return { success: false, error: 'setup_needed' }
+
+  const venvPy = path.join(dir, 'venv', 'Scripts', 'python.exe')
+  _sendStatus('starting')
+
+  _odyProc = spawn(
+    venvPy,
+    ['-m', 'uvicorn', 'app:app', '--host', '127.0.0.1', '--port', String(ODY_PORT)],
+    {
+      cwd: dir,
+      env: {
+        ...process.env,
+        AUTH_ENABLED:        'false',   // trust mode — safe on loopback
+        APP_PORT:            String(ODY_PORT),
+        APP_BIND:            '127.0.0.1',
+        HF_HUB_DISABLE_SYMLINKS:         '1',  // Windows symlink fix (mirrors app.py)
+        HF_HUB_DISABLE_SYMLINKS_WARNING: '1',
+      },
+      windowsHide: true,
+    }
+  )
+
+  _odyProc.stdout?.on('data', d => _sendLog(d.toString()))
+  _odyProc.stderr?.on('data', d => _sendLog(d.toString()))
+  _odyProc.on('exit', (code, signal) => {
+    _odyProc  = null
+    _odyReady = false
+    _sendStatus('stopped', { code, signal })
+  })
+  _odyProc.on('error', (err) => {
+    _odyProc  = null
+    _odyReady = false
+    _sendStatus('error', { error: err.message })
+  })
+
+  const ok = await _waitForOdysseus(90)
+  if (ok) {
+    _odyReady = true
+    _sendStatus('ready', { port: ODY_PORT, url: `http://127.0.0.1:${ODY_PORT}` })
+    return { success: true, port: ODY_PORT }
+  }
+  // Timed out — kill and report
+  try { _odyProc?.kill() } catch {}
+  _odyProc  = null
+  _odyReady = false
+  _sendStatus('error', { error: 'Timed out waiting for Odysseus to start (90 s)' })
+  return { success: false, error: 'Startup timed out' }
+}
+
+function _stopManagedOdysseus() {
+  if (_odyProc) {
+    try { _odyProc.kill('SIGTERM') } catch {}
+    _odyProc  = null
+    _odyReady = false
+    _sendStatus('stopped')
+  }
+}
+
+function _sendStatus(status, extra = {}) {
+  mainWindow?.webContents?.send('odysseus-managed-status', { status, ...extra })
+}
+function _sendLog(line) {
+  mainWindow?.webContents?.send('odysseus-managed-log', line)
+}
+
+// ── Odysseus Manager IPC ──────────────────────────────────────────────────────
+
+ipcMain.handle('odysseus-managed-find', () => {
+  const dir = _findOdysseus()
+  if (dir) _saveOdyConfig({ ..._readOdyConfig(), dir })
+  return { dir, venvReady: _odyVenvReady(dir) }
+})
+
+ipcMain.handle('odysseus-managed-set-dir', (_, dir) => {
+  _saveOdyConfig({ ..._readOdyConfig(), dir })
+  return { dir, venvReady: _odyVenvReady(dir) }
+})
+
+ipcMain.handle('odysseus-managed-start', async (_, dir) => {
+  const useDir = dir || _readOdyConfig().dir || _findOdysseus()
+  if (!useDir) return { success: false, error: 'no_dir' }
+  if (dir) _saveOdyConfig({ ..._readOdyConfig(), dir: useDir })
+  return _startManagedOdysseus(useDir)
+})
+
+ipcMain.handle('odysseus-managed-stop', () => {
+  _stopManagedOdysseus()
+  return { success: true }
+})
+
+ipcMain.handle('odysseus-managed-status', () => ({
+  running:  !!_odyProc,
+  ready:    _odyReady,
+  port:     ODY_PORT,
+  url:      `http://127.0.0.1:${ODY_PORT}`,
+  dir:      _readOdyConfig().dir || null,
+  venvReady: _odyVenvReady(_readOdyConfig().dir),
+  autoStart: !!_readOdyConfig().autoStart,
+}))
+
+ipcMain.handle('odysseus-managed-set-autostart', (_, enabled) => {
+  _saveOdyConfig({ ..._readOdyConfig(), autoStart: enabled })
+  return { success: true }
+})
+
+// Auto-start managed Odysseus at app launch if enabled
+app.whenReady().then(async () => {
+  const cfg = _readOdyConfig()
+  if (cfg.autoStart && cfg.dir && _odyVenvReady(cfg.dir)) {
+    // Delay slightly so the window is shown first
+    setTimeout(() => _startManagedOdysseus(cfg.dir), 2000)
+  }
+})
 
 // ─── University Email Inference ───────────────────────────────────────────────
 

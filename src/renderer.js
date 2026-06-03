@@ -370,15 +370,19 @@ async function _aiCall(prompt, systemPrompt) {
   const token    = p.odysseusToken    || ''
   const endpoint = p.odysseusEndpoint || ''
   const model    = p.odysseusModel    || ''
-  if (!token) {
-    showToast('Set up Odysseus in Settings → App → AI Assistant first', 'error')
+  const isManaged = url.includes('127.0.0.1:7001')
+  if (!token && !isManaged) {
+    showToast('Set up the AI Engine in Settings → App → AI Engine first', 'error')
     return { success: false, error: 'not configured' }
   }
   return api.odysseusChat({ url, token, endpointUrl: endpoint, model, prompt, systemPrompt })
 }
 
-// Check if AI is configured (for showing/hiding AI buttons)
+// Check if AI is configured — works for both manually configured and auto-managed instances
 function _aiAvailable() {
+  // Managed instance (no token needed, AUTH_ENABLED=false on localhost:7001)
+  if (state.profile?.odysseusUrl?.includes('127.0.0.1:7001')) return true
+  // Manually configured instance
   return !!(state.profile?.odysseusToken)
 }
 
@@ -837,6 +841,31 @@ async function lockApp() {
   document.getElementById('login-overlay').style.display = 'flex'
 }
 
+// ── Odysseus managed instance — sidebar status ────────────────────────────────
+
+function _initOdyStatusListener() {
+  api.onOdyStatus(d => {
+    const dot = document.getElementById('ody-status-dot')
+    if (!dot) return
+    if (d.status === 'ready') {
+      dot.style.cssText = 'width:7px;height:7px;border-radius:50%;background:#22c55e;flex-shrink:0'
+      dot.title = '✓ AI Engine running'
+      // Auto-configure connection to managed instance
+      if (state.profile && !state.profile.odysseusToken) {
+        state.profile.odysseusUrl   = `http://127.0.0.1:7001`
+        state.profile.odysseusToken = ''
+        save('profile')
+      }
+    } else if (d.status === 'starting') {
+      dot.style.cssText = 'width:7px;height:7px;border-radius:50%;background:#f59e0b;flex-shrink:0'
+      dot.title = '⏳ AI Engine starting…'
+    } else {
+      dot.style.cssText = 'width:7px;height:7px;border-radius:50%;background:#475569;flex-shrink:0'
+      dot.title = 'AI Engine stopped — Settings → App → AI Engine'
+    }
+  })
+}
+
 async function loadAndShowApp() {
   const keys = ['profile','projects','papers','contacts','notes','whiteboards','events','todos',
                  'grants','newsFeeds','newsTopics','newsRead','calGoals','calFeeds','todoGroups',
@@ -855,6 +884,7 @@ async function loadAndShowApp() {
   startDarkSchedule()
   if (typeof _checkAutoBackup === 'function') _checkAutoBackup()
   if (typeof newsInitAutoRefresh === 'function') newsInitAutoRefresh()
+  _initOdyStatusListener()
 }
 
 // Lock event from main process (window hidden via X, or tray "Lock & Minimise")
