@@ -410,6 +410,47 @@ function renderAppTab(body) {
       <button onclick="appSaveTopics()" class="btn-primary text-xs py-1.5 px-3 ml-2">Save Topics</button>
     </div>
 
+    <!-- Odysseus AI Assistant -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-5">
+      <h3 class="text-sm font-bold text-slate-700 mb-1">✨ AI Assistant (Odysseus)</h3>
+      <p class="text-xs text-slate-400 mb-3 leading-relaxed">
+        Connect to a running <strong>Odysseus</strong> instance for AI-powered paper summaries,
+        grant writing help, and note assistance. Odysseus runs locally — your data never leaves your machine.
+        <button onclick="api.openExternal('https://github.com/pewdiepie-archdaemon/odysseus')" class="text-indigo-500 hover:underline ml-1">Get Odysseus ↗</button>
+      </p>
+      <div class="space-y-3">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="label">Odysseus URL</label>
+            <input id="ody-url" type="text" value="${esc(state.profile?.odysseusUrl||'http://localhost:7000')}"
+              class="input" placeholder="http://localhost:7000"/>
+          </div>
+          <div>
+            <label class="label">API Token <span class="text-slate-400 font-normal">(from Odysseus Settings → API Tokens)</span></label>
+            <input id="ody-token" type="password" value="${esc(state.profile?.odysseusToken||'')}"
+              class="input" placeholder="ody_..."/>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="label">Model endpoint URL <span class="text-slate-400 font-normal">(your Ollama/llama.cpp URL)</span></label>
+            <input id="ody-endpoint" type="text" value="${esc(state.profile?.odysseusEndpoint||'http://localhost:11434/v1')}"
+              class="input" placeholder="http://localhost:11434/v1"/>
+          </div>
+          <div>
+            <label class="label">Model name</label>
+            <input id="ody-model" type="text" value="${esc(state.profile?.odysseusModel||'llama3.2')}"
+              class="input" placeholder="llama3.2"/>
+          </div>
+        </div>
+        <div class="flex gap-2 items-center">
+          <button onclick="appSaveOdysseus()" class="btn-primary text-xs py-1.5 px-4">Save</button>
+          <button onclick="appTestOdysseus()" class="btn-secondary text-xs py-1.5 px-4">Test connection</button>
+          <span id="ody-status" class="text-xs text-slate-400"></span>
+        </div>
+      </div>
+    </div>
+
     <!-- Feed auto-refresh -->
     <div class="bg-white rounded-2xl border border-slate-200 p-5">
       <h3 class="text-sm font-bold text-slate-700 mb-1">📡 Feed Auto-Refresh</h3>
@@ -481,6 +522,35 @@ function renderAppTab(body) {
       </div>
     </div>
   </div>`
+}
+
+async function appSaveOdysseus() {
+  if (!state.profile) state.profile = {}
+  state.profile.odysseusUrl      = document.getElementById('ody-url')?.value.trim().replace(/\/$/, '') || 'http://localhost:7000'
+  state.profile.odysseusToken    = document.getElementById('ody-token')?.value.trim() || ''
+  state.profile.odysseusEndpoint = document.getElementById('ody-endpoint')?.value.trim() || ''
+  state.profile.odysseusModel    = document.getElementById('ody-model')?.value.trim() || ''
+  await save('profile')
+  showToast('AI Assistant settings saved ✓')
+}
+
+async function appTestOdysseus() {
+  const url   = document.getElementById('ody-url')?.value.trim().replace(/\/$/, '') || 'http://localhost:7000'
+  const token = document.getElementById('ody-token')?.value.trim() || ''
+  const el    = document.getElementById('ody-status')
+  if (el) el.textContent = 'Testing…'
+  const r = await api.odysseusPing({ url, token })
+  if (!el) return
+  if (r.running && r.status === 200) {
+    el.className = 'text-xs text-emerald-600 font-medium'
+    el.textContent = '✓ Connected'
+  } else if (r.running && r.status === 403) {
+    el.className = 'text-xs text-amber-600'
+    el.textContent = '⚠ Running but token rejected — check your API token'
+  } else {
+    el.className = 'text-xs text-rose-500'
+    el.textContent = '✕ Not reachable — make sure Odysseus is running'
+  }
 }
 
 async function appSaveNewsRefresh(val) {

@@ -361,6 +361,27 @@ function updateSidebarProfile() {
 // ── Save helper ───────────────────────────────────────────────────────────────
 function save(key) { return window.api.storeSet(key, state[key]) }
 
+// ── Odysseus AI helper — call from anywhere in the app ────────────────────────
+// Returns { success, response } or { success: false, error }
+// Shows a loading toast while running; caller handles result display.
+async function _aiCall(prompt, systemPrompt) {
+  const p = state.profile || {}
+  const url      = p.odysseusUrl      || 'http://localhost:7000'
+  const token    = p.odysseusToken    || ''
+  const endpoint = p.odysseusEndpoint || ''
+  const model    = p.odysseusModel    || ''
+  if (!token) {
+    showToast('Set up Odysseus in Settings → App → AI Assistant first', 'error')
+    return { success: false, error: 'not configured' }
+  }
+  return api.odysseusChat({ url, token, endpointUrl: endpoint, model, prompt, systemPrompt })
+}
+
+// Check if AI is configured (for showing/hiding AI buttons)
+function _aiAvailable() {
+  return !!(state.profile?.odysseusToken)
+}
+
 // ── Global Modal ──────────────────────────────────────────────────────────────
 function openModal(html, wide) {
   document.getElementById('modal-content').innerHTML = html

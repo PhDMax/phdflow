@@ -1086,6 +1086,67 @@ ipcMain.handle('fetch-ics', async (_, url) => {
   } catch(e) { return { success: false, error: e.message } }
 })
 
+// ─── Odysseus AI Assistant Integration ───────────────────────────────────────
+
+ipcMain.handle('odysseus-ping', async (_, { url, token }) => {
+  try {
+    const r = await fetch(`${url}/api/sessions`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(4000),
+    })
+    return { running: r.ok || r.status === 403, status: r.status }
+  } catch { return { running: false } }
+})
+
+ipcMain.handle('odysseus-chat', async (_, { url, token, endpointUrl, model, prompt, systemPrompt }) => {
+  let sessionId = null
+  try {
+    // 1. Create a temporary session
+    const formData = new URLSearchParams({
+      name:         'PhDFlow Assistant',
+      endpoint_url: endpointUrl || '',
+      model:        model || '',
+    })
+    const sessRes = await fetch(`${url}/api/session`, {
+      method:  'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body:    formData.toString(),
+      signal:  AbortSignal.timeout(10000),
+    })
+    if (!sessRes.ok) {
+      const err = await sessRes.text().catch(() => '')
+      return { success: false, error: `Could not create session (${sessRes.status}): ${err.slice(0,200)}` }
+    }
+    const sess = await sessRes.json()
+    sessionId = sess.id
+
+    // 2. Send the message
+    const fullMessage = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt
+    const chatRes = await fetch(`${url}/api/chat`, {
+      method:  'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ message: fullMessage, session: sessionId }),
+      signal:  AbortSignal.timeout(60000),
+    })
+    if (!chatRes.ok) {
+      const err = await chatRes.text().catch(() => '')
+      return { success: false, error: `Chat failed (${chatRes.status}): ${err.slice(0,200)}` }
+    }
+    const chat = await chatRes.json()
+    return { success: true, response: chat.response || chat.message || String(chat) }
+  } catch(e) {
+    return { success: false, error: e.message }
+  } finally {
+    // 3. Always clean up the temporary session
+    if (sessionId) {
+      fetch(`${url}/api/session/${sessionId}/delete`, {
+        method:  'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => {})
+    }
+  }
+})
+
 // ─── Live Grant Search ────────────────────────────────────────────────────────
 
 // NIH Reporter — search funded US projects by field + career stage mechanism

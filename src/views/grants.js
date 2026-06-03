@@ -1323,6 +1323,14 @@ function openGrantDetail(id) {
     </div>`
   })()}
 
+  ${_aiAvailable() ? `
+  <div class="flex gap-2 border-t border-slate-100 pt-3 mb-3">
+    <button onclick="grantAiDraftSection('${id}','aims')" class="flex-1 text-xs py-2 px-3 bg-violet-50 hover:bg-violet-100 text-violet-700 rounded-xl font-medium transition-colors">✨ Draft Specific Aims</button>
+    <button onclick="grantAiDraftSection('${id}','significance')" class="flex-1 text-xs py-2 px-3 bg-violet-50 hover:bg-violet-100 text-violet-700 rounded-xl font-medium transition-colors">✨ Draft Significance</button>
+    <button onclick="grantAiDraftSection('${id}','approach')" class="text-xs py-2 px-3 bg-violet-50 hover:bg-violet-100 text-violet-700 rounded-xl font-medium transition-colors">✨ Approach</button>
+  </div>
+  <div id="grant-ai-result-${id}" class="hidden mb-3 p-3 bg-violet-50 border border-violet-100 rounded-xl text-xs text-violet-900 leading-relaxed max-h-48 overflow-y-auto"></div>
+  ` : ''}
   <div class="flex gap-3 border-t border-slate-100 pt-4">
     <button onclick="openGrantModal('${id}')" class="flex-1 btn-secondary">✏️ Edit</button>
     <button onclick="duplicateGrant('${id}')" class="btn-secondary">Duplicate</button>
@@ -1469,6 +1477,48 @@ function _grantCreateEventNow(grantId) {
   _syncGrantCalendarEvent(g)
   openGrantDetail(grantId)
   showToast('📅 Deadline added to Calendar ✓')
+}
+
+// ── AI grant writing ──────────────────────────────────────────────────────────
+
+async function grantAiDraftSection(grantId, section) {
+  const g   = state.grants.find(x => x.id === grantId)
+  const box = document.getElementById(`grant-ai-result-${grantId}`)
+  if (!g || !box) return
+
+  const sections = { aims:'Specific Aims', significance:'Significance & Innovation', approach:'Research Approach' }
+  box.innerHTML = `<span class="text-violet-400">✨ Drafting ${sections[section]}…</span>`
+  box.classList.remove('hidden')
+
+  const profile = state.profile || {}
+  const context = [
+    `Grant: ${g.title}`,
+    `Funder: ${g.funder}`,
+    g.amount   ? `Amount: ${g.amount}` : '',
+    g.eligibility ? `Description: ${g.eligibility}` : '',
+    profile.field ? `Researcher field: ${profile.field}` : '',
+    g.notes    ? `Notes: ${g.notes}` : '',
+  ].filter(Boolean).join('\n')
+
+  const prompts = {
+    aims:         `Write a concise Specific Aims section (1 page equivalent) for this grant application. Include: the problem being addressed, 2-3 specific aims with brief rationale, and expected impact.`,
+    significance: `Write a Significance and Innovation section for this grant. Explain why the research is important, what gap it fills, and what is genuinely novel about the approach.`,
+    approach:     `Draft a Research Approach section outline with: overview paragraph, methodology for each aim, potential challenges and how to address them, and expected outcomes.`,
+  }
+
+  const r = await _aiCall(
+    `${context}\n\n${prompts[section]}`,
+    `You are an expert academic grant writer helping a researcher. Write in formal academic style suitable for submission. Be specific, compelling, and avoid generic statements.`
+  )
+
+  if (r.success) {
+    box.innerHTML = r.response
+      .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+      .replace(/\n\n/g,'<br/><br/>')
+      .replace(/\n/g,'<br/>')
+  } else {
+    box.innerHTML = `<span class="text-rose-500">Error: ${esc(r.error)}</span>`
+  }
 }
 
 // ── Duplicate ─────────────────────────────────────────────────────────────────

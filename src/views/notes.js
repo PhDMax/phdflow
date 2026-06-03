@@ -299,6 +299,12 @@ function _notesEditorPanel(note) {
         style="padding:.3rem .75rem;border:1px solid ${_bdrb};background:${_bg};border-radius:.5rem;font-size:.72rem;color:${_txm};cursor:pointer">
         👁 Read
       </button>
+      ${_aiAvailable() ? `
+      <button onclick="notesAiAssist('${note.id}')" id="note-ai-btn-${note.id}"
+        title="AI assist — expand, improve, or suggest next steps"
+        style="padding:.3rem .75rem;border:1px solid #ede9fe;background:#faf5ff;border-radius:.5rem;font-size:.72rem;color:#7c3aed;cursor:pointer">
+        ✨ AI
+      </button>` : ''}
     </div>
   </div>
 
@@ -563,6 +569,61 @@ document.addEventListener('click', e => {
 })
 
 // ══ Wiki-link System ══════════════════════════════════════════════════════════
+
+// ── AI Assist (Odysseus) ──────────────────────────────────────────────────────
+
+async function notesAiAssist(noteId) {
+  await autoSaveNote()
+  const note = state.notes.find(n => n.id === noteId)
+  if (!note) return
+  const type  = NOTE_TYPES[note.type] || NOTE_TYPES.note
+  const tasks = {
+    note:       ['Expand & improve', 'Summarise key points', 'Suggest next steps'],
+    experiment: ['Suggest follow-up experiments', 'Identify potential issues', 'Write a results summary'],
+    meeting:    ['Extract action items', 'Write follow-up email draft', 'Summarise decisions'],
+    writing:    ['Improve clarity & flow', 'Suggest missing sections', 'Generate an outline'],
+  }
+  const options = tasks[note.type] || tasks.note
+  openModal(`
+  <div>
+    <h3 class="text-base font-bold text-slate-900 mb-1">✨ AI Assist</h3>
+    <p class="text-xs text-slate-400 mb-3">${esc(note.title||'Untitled')} · ${type.label}</p>
+    <div class="space-y-2 mb-4">
+      ${options.map(t=>`
+      <button onclick="_notesAiRun('${noteId}','${esc(t)}')"
+        class="w-full text-left p-3 rounded-xl border border-slate-200 hover:border-violet-300 hover:bg-violet-50 text-sm font-medium text-slate-700 transition-all">
+        ${t}
+      </button>`).join('')}
+    </div>
+    <label class="label">Custom instruction</label>
+    <input id="note-ai-custom" type="text" class="input mb-2" placeholder="e.g. Translate to formal academic language…"
+      onkeydown="if(event.key==='Enter')_notesAiRun('${noteId}',this.value)"/>
+    <button onclick="_notesAiRun('${noteId}',document.getElementById('note-ai-custom').value)"
+      class="btn-primary text-xs py-2 w-full">Run</button>
+  </div>`)
+}
+
+async function _notesAiRun(noteId, task) {
+  if (!task?.trim()) return
+  closeModal()
+  const note = state.notes.find(n => n.id === noteId)
+  if (!note) return
+  const type = NOTE_TYPES[note.type] || NOTE_TYPES.note
+  showToast('✨ AI working…', 'info')
+  const r = await _aiCall(
+    `Note type: ${type.label}\nTitle: ${note.title||'Untitled'}\n\nContent:\n${note.content||(empty)}\n\nTask: ${task}`,
+    'You are a research assistant helping a PhD student with their notes. Provide well-structured, actionable output in Markdown format.'
+  )
+  if (r.success) {
+    note.content = (note.content||'') + `\n\n---\n\n**✨ AI** (${task}):\n\n${r.response}`
+    note.updatedAt = new Date().toISOString()
+    await save('notes')
+    render_notes()
+    showToast('✨ AI response added to note ✓')
+  } else {
+    showToast(`AI error: ${r.error}`, 'error')
+  }
+}
 
 // ── Autocomplete ──────────────────────────────────────────────────────────────
 

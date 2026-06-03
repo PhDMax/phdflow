@@ -80,6 +80,10 @@ contextBridge.exposeInMainWorld('api', {
   searchNihReporter: (opts) => ipcRenderer.invoke('search-nih-reporter',  opts),
   searchNsfAwards:   (opts) => ipcRenderer.invoke('search-nsf-awards',    opts),
 
+  // ── Odysseus AI assistant ─────────────────────────────────────────────────
+  odysseusPing:      (opts) => ipcRenderer.invoke('odysseus-ping', opts),
+  odysseusChat:      (opts) => ipcRenderer.invoke('odysseus-chat', opts),
+
   // ── Reference manager integration ────────────────────────────────────────
   zoteroPing:          ()         => ipcRenderer.invoke('zotero-ping'),
   zoteroBbtCheck:      ()         => ipcRenderer.invoke('zotero-bbt-check'),

@@ -250,7 +250,14 @@ function renderLibrary() {
         ${linkedProj ? `<div class="mt-1"><span class="text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600">${esc(linkedProj.name)}</span></div>` : ''}
       </div>
       <span class="text-xs px-2 py-0.5 rounded-full flex-shrink-0 mt-0.5 ${staColors[p.status] || 'bg-slate-100 text-slate-500'}">${p.status || 'unread'}</span>
-    </div>`
+      ${_aiAvailable() ? `
+      <button onclick="event.stopPropagation();libSummarisePaper('${p.id}')" id="ai-sum-${p.id}"
+        title="AI summary" class="w-6 h-6 flex-shrink-0 flex items-center justify-center
+          rounded-lg text-xs text-violet-500 hover:bg-violet-50 hover:text-violet-700 transition-colors mt-0.5">
+        ✨
+      </button>` : ''}
+    </div>
+    <div id="ai-sum-result-${p.id}" class="hidden mx-4 mb-2 p-2.5 bg-violet-50 border border-violet-100 rounded-xl text-xs text-violet-900 leading-relaxed"></div>`
   }).join('')
 }
 
@@ -777,6 +784,45 @@ async function _libConfirmFetch() {
   renderLibrary()
   showToast('Paper added ✓')
   window._libFetchMeta = null
+}
+
+// ══ AI features (Odysseus) ════════════════════════════════════════════════════
+
+async function libSummarisePaper(paperId) {
+  const p   = state.papers.find(x => x.id === paperId)
+  const btn = document.getElementById(`ai-sum-${paperId}`)
+  const box = document.getElementById(`ai-sum-result-${paperId}`)
+  if (!p || !btn || !box) return
+
+  if (!box.classList.contains('hidden')) { box.classList.add('hidden'); return }
+
+  const orig = btn.textContent
+  btn.textContent = '⏳'
+  btn.disabled = true
+
+  const content = [
+    p.title    ? `Title: ${p.title}` : '',
+    p.authors?.length ? `Authors: ${(Array.isArray(p.authors)?p.authors:p.authors.split(',')).slice(0,3).join(', ')}` : '',
+    p.journal  ? `Journal: ${p.journal}` : '',
+    p.year     ? `Year: ${p.year}` : '',
+    p.abstract ? `Abstract: ${p.abstract}` : '',
+    p.notes    ? `My notes: ${p.notes}` : '',
+  ].filter(Boolean).join('\n')
+
+  const r = await _aiCall(
+    `Research paper:\n\n${content}\n\nPlease provide:\n1. 2–3 sentence plain-language summary\n2. Key findings (3 bullet points)\n3. Why this matters for a PhD researcher`,
+    'You are a research assistant helping a PhD student understand papers quickly. Be concise and specific. Use plain language.'
+  )
+
+  btn.textContent = orig
+  btn.disabled = false
+
+  if (r.success) {
+    box.innerHTML = r.response.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br/>')
+    box.classList.remove('hidden')
+  } else {
+    showToast(`AI error: ${r.error}`, 'error')
+  }
 }
 
 // ══ Reference Manager Integration ════════════════════════════════════════════
