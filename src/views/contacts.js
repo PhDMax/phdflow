@@ -6,6 +6,8 @@ let _discTab      = 'search'   // 'search' | 'following'
 let _discFollowed = new Set()  // S2 IDs being followed
 let _discFollowData = []       // [{id, name, institution, s2Id, s2Url, lastChecked, ...}]
 let _discInited   = false
+let _discMode     = 'name'     // 'name' | 'describe'
+let _discAiQuery  = ''         // last natural-language query for context
 
 async function _initDiscover() {
   if (_discInited) return
@@ -50,20 +52,47 @@ function render_discover() {
       </div>
 
       ${_discTab === 'search' ? `
-      <div class="py-3 flex gap-2">
+      <!-- Mode toggle -->
+      <div class="flex gap-1 pt-2 pb-1">
+        <button onclick="_discMode='name';render_discover()"
+          class="px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${_discMode==='name'?'bg-indigo-100 text-indigo-700':'text-slate-500 hover:bg-slate-100'}">
+          🔍 Search by name
+        </button>
+        ${_aiAvailable() ? `
+        <button onclick="_discMode='describe';render_discover()"
+          class="px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${_discMode==='describe'?'bg-violet-100 text-violet-700':'text-slate-500 hover:bg-slate-100'}">
+          ✨ Describe who you're looking for
+        </button>` : ''}
+      </div>
+
+      ${_discMode === 'name' ? `
+      <div class="py-2 flex gap-2">
         <input id="disc-query" type="text" placeholder="Researcher name (e.g. Jennifer Doudna)"
           class="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-sm
             focus:outline-none focus:ring-2 focus:ring-indigo-500"
           onkeydown="if(event.key==='Enter')doResearcherSearch()"/>
         <input id="disc-inst" type="text" placeholder="Institution (optional)"
-          class="w-44 px-3 py-2.5 rounded-xl border border-slate-200 text-sm
+          class="w-40 px-3 py-2.5 rounded-xl border border-slate-200 text-sm
             focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
         <button onclick="doResearcherSearch()"
           class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-colors">
           Search
         </button>
       </div>
-      <p class="text-xs text-slate-400 pb-3">Free · Semantic Scholar + OpenAlex · 260M+ papers · No API key</p>
+      <p class="text-xs text-slate-400 pb-2">Semantic Scholar + OpenAlex · 260M+ papers · No API key</p>
+      ` : `
+      <div class="py-2 space-y-2">
+        <textarea id="disc-describe" rows="3" placeholder="e.g. A PI at a German university working on synaptic plasticity using calcium imaging, active in the last 5 years"
+          class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm
+            focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"></textarea>
+        <div class="flex items-center justify-between">
+          <p class="text-xs text-slate-400">AI extracts search terms then ranks results by match</p>
+          <button onclick="doDescribeSearch()"
+            class="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold rounded-xl transition-colors">
+            ✨ Find researchers
+          </button>
+        </div>
+      </div>`}
       ` : ''}
     </div>
 
@@ -131,6 +160,80 @@ function _discFollowingPanel() {
 
 // ── Search ────────────────────────────────────────────────────────────────────
 
+async function doDescribeSearch() {
+  const description = (document.getElementById('disc-describe')?.value || '').trim()
+  if (!description) return
+  _discAiQuery = description
+  _discSetState('loading')
+
+  // Step 1: Ask Odysseus to extract structured search terms
+  const extractR = await _aiCall(
+    `Extract search terms from this researcher description:\n"${description}"\n\nReturn ONLY valid JSON (no other text):\n{"name":"...", "institution":"...", "keywords":["...","..."]}\nIf no name is mentioned, set name to null.`,
+    'You extract structured search terms from natural language descriptions. Return only valid JSON.'
+  )
+
+  let searchName = description
+  let searchInst = ''
+  let aiKeywords = []
+
+  if (extractR.success) {
+    try {
+      const stripped = extractR.response.replace(/```(?:json)?\n?/g,'').replace(/```/g,'').trim()
+      const start    = stripped.search(/[\[{]/)
+      const parsed   = start >= 0 ? JSON.parse(stripped.slice(start)) : null
+      if (parsed) {
+        searchName = parsed.name || description
+        searchInst = parsed.institution || ''
+        aiKeywords = parsed.keywords || []
+      }
+    } catch {}
+  }
+
+  // Step 2: Search using extracted terms
+  const combined = [searchName, searchInst].filter(Boolean).join(' ')
+  const result   = await window.api.searchResearchers(combined)
+
+  if (!result.success || !result.results?.length) {
+    _discSetState('error', 'No researchers found for that description. Try rephrasing.')
+    return
+  }
+
+  state.searchResults = result.results
+
+  // Step 3: Ask Odysseus to rank results against the original description
+  const resultList = result.results.map((r, i) =>
+    `${i}. ${r.name}${r.institution ? ' at ' + r.institution : ''}${(r.topics||[]).length ? ' — topics: ' + r.topics.slice(0,3).join(', ') : ''}`
+  ).join('\n')
+
+  const rankR = await _aiCall(
+    `I'm looking for: "${description}"\n\nRank these researchers by how well they match (1-10):\n${resultList}\n\nReturn ONLY JSON array (no other text):\n[{"index":0,"score":9,"match":"brief match reason"}, ...]`,
+    'You rank researcher search results by relevance. Return only valid JSON. Keep match reasons under 8 words.'
+  )
+
+  if (rankR.success) {
+    try {
+      const stripped = rankR.response.replace(/```(?:json)?\n?/g,'').replace(/```/g,'').trim()
+      const start    = stripped.search(/[\[{]/)
+      const scores   = start >= 0 ? JSON.parse(stripped.slice(start)) : null
+      if (Array.isArray(scores)) {
+        // Attach AI scores to results for display
+        scores.forEach(s => {
+          if (s.index != null && state.searchResults[s.index]) {
+            state.searchResults[s.index]._aiScore = Math.round(Number(s.score)||0)
+            state.searchResults[s.index]._aiMatch = s.match || ''
+          }
+        })
+        // Sort by AI score
+        state.searchResults.sort((a,b) => (b._aiScore||0) - (a._aiScore||0))
+      }
+    } catch {}
+  }
+
+  _discSetState('results')
+  const container = document.getElementById('disc-results')
+  if (container) container.innerHTML = _buildResultCards(state.searchResults)
+}
+
 async function doResearcherSearch() {
   const query = (document.getElementById('disc-query')?.value || '').trim()
   const inst  = (document.getElementById('disc-inst')?.value  || '').trim()
@@ -179,6 +282,7 @@ function _buildResultCards(results) {
         </div>
         <div class="flex-1 min-w-0">
           <p class="font-bold text-slate-900">${esc(r.name)}</p>
+          ${r._aiScore ? `<span class="text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-semibold">✨ ${r._aiScore}/10${r._aiMatch ? ' · ' + esc(r._aiMatch) : ''}</span>` : ''}
           <p class="text-sm text-slate-500 truncate">🏛️ ${esc(r.institution || 'Unknown institution')}</p>
           ${(r.affiliations||[]).length > 1
             ? `<p class="text-xs text-slate-400 truncate">${r.affiliations.slice(1,3).map(a=>esc(a)).join(' · ')}</p>`

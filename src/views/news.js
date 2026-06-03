@@ -8,6 +8,8 @@ let _newsLoading     = false
 let _newsInited      = false
 let _newsFilter      = { topicId: 'all', source: 'all', days: 30 }
 let _newsAutoTimer   = null     // setInterval handle for background refresh
+let _newsAiScores    = {}       // paperId → { score:number, reason:string }
+let _newsAiRanking   = false    // true while scoring is in progress
 
 const _NEWS_COLORS = [
   { bg: 'bg-indigo-100', text: 'text-indigo-700', border: 'border-indigo-300' },
@@ -159,10 +161,22 @@ async function render_news() {
         ).join('')}
       </select>
 
-      <span class="text-xs text-slate-400 ml-auto">
-        ${filtered.length} paper${filtered.length !== 1 ? 's' : ''}
-        ${_newsFeed.length > filtered.length ? ` (${_newsFeed.length} total)` : ''}
-      </span>
+      <div class="ml-auto flex items-center gap-2">
+        <span class="text-xs text-slate-400">
+          ${filtered.length} paper${filtered.length !== 1 ? 's' : ''}
+          ${_newsFeed.length > filtered.length ? ` (${_newsFeed.length} total)` : ''}
+        </span>
+        ${_aiAvailable() ? `
+        <button onclick="newsAiRankFeed()"
+          class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors
+            ${_newsAiRanking ? 'bg-violet-100 text-violet-500 cursor-not-allowed' :
+              Object.keys(_newsAiScores).length ? 'bg-violet-100 text-violet-700 border border-violet-200' :
+              'bg-white border border-slate-200 text-slate-500 hover:text-violet-700 hover:border-violet-300'}">
+          ${_newsAiRanking ? '⏳ Scoring…' : Object.keys(_newsAiScores).length ? '✨ AI ranked' : '✨ AI rank'}
+        </button>
+        ${Object.keys(_newsAiScores).length ? `
+        <button onclick="_newsAiScores={};render_news()" title="Clear AI scores" class="text-xs text-slate-400 hover:text-slate-600">✕</button>` : ''}` : ''}
+      </div>
     </div>
 
     <!-- ── Papers Feed ─────────────────────────────────────────────────────── -->
@@ -180,7 +194,12 @@ async function render_news() {
             + Add First Topic
           </button>
         </div>
-      ` : filtered.length === 0 ? `
+      ` : filtered.length > 0 && Object.keys(_newsAiScores).length ? (() => {
+        // Re-sort by AI relevance score when scores are available
+        const withScore = filtered.map(p => ({ p, score: _newsAiScores[p.id]?.score || 0 }))
+        withScore.sort((a,b) => b.score - a.score)
+        return `<div class="space-y-3">${withScore.map(({p}) => _newsPaperCard(p)).join('')}</div>`
+      })() : filtered.length === 0 ? `
         <div class="flex flex-col items-center justify-center h-full text-center py-16">
           <div class="text-4xl mb-4">${_newsFeed.length === 0 ? '🔍' : '🗂️'}</div>
           <p class="text-slate-700 font-semibold mb-2">
@@ -248,8 +267,15 @@ function _newsPaperCard(p) {
           ${p.journal && p.journal !== 'arXiv preprint'
             ? `<span class="text-xs text-slate-400 italic truncate max-w-[200px]">${esc(p.journal)}</span>`
             : ''}
+          ${_newsAiScores[p.id] ? (() => {
+            const s = _newsAiScores[p.id]
+            const col = s.score >= 8 ? 'bg-violet-100 text-violet-700' : s.score >= 5 ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-400'
+            return `<span class="text-xs px-2 py-0.5 rounded-full font-semibold ${col}" title="${esc(s.reason)}">✨ ${s.score}/10</span>`
+          })() : ''}
           <span class="text-xs text-slate-400 ml-auto flex-shrink-0">${dateStr}</span>
         </div>
+        ${_newsAiScores[p.id]?.reason ? `
+        <p class="text-xs text-violet-600 italic mb-1 leading-snug">${esc(_newsAiScores[p.id].reason)}</p>` : ''}
 
         <!-- title -->
         <h4 class="text-sm font-semibold text-slate-900 leading-snug mb-1 cursor-pointer
@@ -583,6 +609,74 @@ async function _newsBackgroundRefresh() {
 
   _newsLoading = false
   if (state.currentView === 'news') render_news()
+}
+
+// ── AI relevance ranking ──────────────────────────────────────────────────────
+
+function _parseAiJson(text) {
+  // Strip markdown code fences if present
+  const stripped = text.replace(/```(?:json)?\n?/g, '').replace(/```/g, '').trim()
+  // Find the first [ or { to locate the JSON
+  const start = stripped.search(/[\[{]/)
+  if (start === -1) return null
+  try { return JSON.parse(stripped.slice(start)) } catch {}
+  // Try extracting just the array/object portion
+  try {
+    const end = stripped.lastIndexOf(stripped[start] === '[' ? ']' : '}')
+    return JSON.parse(stripped.slice(start, end + 1))
+  } catch { return null }
+}
+
+async function newsAiRankFeed() {
+  if (_newsAiRanking) return
+  const p = state.profile || {}
+  if (!p.field && !p.careerStage) {
+    showToast('Add a research field in Settings → Profile for AI ranking', 'info'); return
+  }
+
+  const visible = _newsFeedFiltered().slice(0, 30)
+  if (!visible.length) { showToast('No papers to rank', 'info'); return }
+
+  _newsAiRanking = true
+  render_news()
+
+  const profile = [
+    p.careerStage ? `Career stage: ${p.careerStage}` : '',
+    p.field       ? `Research field: ${p.field}` : '',
+  ].filter(Boolean).join('\n')
+
+  const paperList = visible.map((paper, i) =>
+    `${i}. ${paper.title}${paper.abstract ? ' | ' + paper.abstract.slice(0, 120) : ''}`
+  ).join('\n')
+
+  const r = await _aiCall(
+    `${profile}\n\nRate the relevance of each paper for this researcher (1=not relevant, 10=highly relevant).\nReturn ONLY a JSON array, no other text:\n[{"index":0,"score":8,"reason":"concise 5-word reason"}, ...]\n\nPapers:\n${paperList}`,
+    'You are a research relevance scorer. Return only valid JSON. Keep reasons under 8 words. Score 10=directly relevant to their core field, 1=unrelated.'
+  )
+
+  _newsAiRanking = false
+
+  if (r.success) {
+    const scores = _parseAiJson(r.response)
+    if (Array.isArray(scores)) {
+      _newsAiScores = {}
+      for (const item of scores) {
+        if (item.index != null && visible[item.index]) {
+          _newsAiScores[visible[item.index].id] = {
+            score:  Math.max(1, Math.min(10, Math.round(Number(item.score) || 1))),
+            reason: item.reason || '',
+          }
+        }
+      }
+      showToast(`✨ Scored ${Object.keys(_newsAiScores).length} papers by relevance`)
+    } else {
+      showToast('AI returned unexpected format — try again', 'error')
+    }
+  } else {
+    showToast(`AI ranking failed: ${r.error}`, 'error')
+  }
+
+  render_news()
 }
 
 // ── Click Delegation ──────────────────────────────────────────────────────────
