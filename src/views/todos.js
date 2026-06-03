@@ -441,6 +441,9 @@ function _todoCard(t, eff, pri, groups, highlightOverdue = false) {
           title="Defer 1 day" class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 hover:bg-amber-100 hover:text-amber-700 transition-colors font-semibold">+1d</button>
         <button onclick="event.stopPropagation();todoDefer('${t.id}',7)"
           title="Defer 1 week" class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 hover:bg-amber-100 hover:text-amber-700 transition-colors font-semibold">+7d</button>` : ''}
+      ${t.status !== 'done' && t.todayFlag
+        ? `<button onclick="event.stopPropagation();todoDefer('${t.id}',1)" title="Defer to tomorrow"
+            class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-400 hover:bg-amber-100 hover:text-amber-700 transition-colors">→tmr</button>` : ''}
       ${t.status !== 'done' && !t.todayFlag && !_isDueToday(t)
         ? `<button onclick="todoAddToToday('${t.id}')" title="Add to Today's focus"
             class="text-slate-300 hover:text-indigo-500 text-sm transition-colors">📌</button>` : ''}
@@ -507,6 +510,19 @@ function todoToggle(id) {
 
 // Alias used by dashboard
 function toggleTodo(id) { todoToggle(id) }
+
+function deferTask(id) {
+  const t = state.todos.find(x => x.id === id)
+  if (!t) return
+  const tomorrow = new Date()
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  t.dueDate    = tomorrow.toISOString().split('T')[0]
+  t.todayFlag  = false
+  t.updatedAt  = new Date().toISOString()
+  save('todos')
+  todoSetTab(_todoTab)
+  showToast(`"${t.title.slice(0,30)}" deferred to tomorrow`)
+}
 
 function todoDefer(id, days) {
   const t = state.todos.find(x => x.id === id)

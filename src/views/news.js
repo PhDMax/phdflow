@@ -296,13 +296,18 @@ function _newsPaperCard(p) {
 
       <!-- action buttons -->
       <div class="flex flex-col gap-1.5 flex-shrink-0 ml-2 min-w-[72px]">
-        <button data-save-paper="${esc(p.id)}"
-          class="px-2.5 py-1 rounded-lg text-xs font-medium text-center transition-colors
-            ${saved
-              ? 'bg-green-100 text-green-700 cursor-default'
-              : 'bg-slate-100 hover:bg-indigo-600 hover:text-white text-slate-600'}">
-          ${saved ? '✓ Saved' : '+ Library'}
-        </button>
+        ${saved
+          ? `<span class="px-2.5 py-1 rounded-lg text-xs font-medium bg-green-100 text-green-700">✓ Saved</span>`
+          : `<div class="flex gap-1">
+               <button data-save-paper="${esc(p.id)}" title="Save to library (set status, project & tags)"
+                 class="px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 hover:bg-indigo-600 hover:text-white text-slate-600 transition-colors">
+                 + Library
+               </button>
+               <button onclick="newsQuickSave('${esc(p.id)}')" title="Quick save as Unread (no options)"
+                 class="px-2 py-1 rounded-lg text-xs font-medium bg-slate-100 hover:bg-emerald-600 hover:text-white text-slate-500 transition-colors">
+                 ⚡
+               </button>
+             </div>`}
         ${p.url
           ? `<button data-open-paper="${esc(p.id)}"
               class="px-2.5 py-1 rounded-lg text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors text-center">
@@ -459,6 +464,32 @@ async function refreshNewsFeed() {
 }
 
 // ── Save Paper to Library ─────────────────────────────────────────────────────
+
+async function newsQuickSave(paperId) {
+  if (_newsSavedIds.has(paperId)) return
+  const p = _newsFeedMap[paperId]
+  if (!p) return
+  const dup = state.papers.some(e =>
+    (p.doi && e.doi && e.doi === p.doi) ||
+    (e.title?.toLowerCase().trim() === (p.title||'').toLowerCase().trim())
+  )
+  if (dup) { showToast('Already in your library', 'info'); return }
+  const authors = (Array.isArray(p.authors) ? p.authors : [p.authors]).filter(Boolean)
+  state.papers.unshift({
+    id: 'lib-' + uid(), title: p.title||'', authors,
+    year: p.date ? new Date(p.date).getFullYear() : null,
+    journal: p.journal||p.source||'', doi: p.doi||null, url: p.url||null,
+    abstract: p.abstract||null, topics: p.topicLabel ? [p.topicLabel] : [],
+    status: 'unread', projectIds: [], relevance: 'medium',
+    addedAt: new Date().toISOString(), source: p.source,
+  })
+  await save('papers')
+  _newsSavedIds.add(paperId)
+  await api.storeSet('newsSavedIds', [..._newsSavedIds])
+  const container = document.getElementById('disc-results') // refresh card
+  render_news()
+  showToast('⚡ Saved to library ✓')
+}
 
 function newsSaveToLibrary(paperId) {
   if (_newsSavedIds.has(paperId)) return

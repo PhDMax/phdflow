@@ -186,9 +186,21 @@ function renderLibrary() {
 
   const list = document.getElementById('papers-list')
   if (!papers.length) {
-    list.innerHTML = emptyState('📖', 'No papers found', q || proj !== 'all' || sta !== 'all'
-      ? 'No papers match your filters'
-      : 'Import PDFs or a .bib / .ris file to start your library')
+    const hasFilters = q || proj !== 'all' || sta !== 'all' || coll !== 'all'
+    list.innerHTML = hasFilters
+      ? `<div class="flex flex-col items-center justify-center py-10 text-center">
+           <div class="text-3xl mb-2">🔍</div>
+           <p class="text-sm font-semibold text-slate-700 mb-1">No papers match your filters</p>
+           <p class="text-xs text-slate-400 mb-3">Try broadening your search or removing a filter.</p>
+           <button onclick="
+             document.getElementById('lib-search').value='';
+             document.getElementById('lib-project').value='all';
+             document.getElementById('lib-status').value='all';
+             document.getElementById('lib-collection').value='all';
+             renderLibrary()"
+             class="btn-secondary text-xs py-1.5 px-4">Clear all filters</button>
+         </div>`
+      : emptyState('📖', 'No papers yet', 'Import PDFs, paste a DOI above, or drag a .bib file here to start your library')
     return
   }
 
@@ -249,6 +261,12 @@ function renderLibrary() {
         </div>` : ''}
         ${linkedProj ? `<div class="mt-1"><span class="text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600">${esc(linkedProj.name)}</span></div>` : ''}
       </div>
+      <button onclick="event.stopPropagation();copyPaperBib('${p.id}')"
+        title="Copy BibTeX to clipboard"
+        class="text-[10px] px-1.5 py-0.5 rounded border border-slate-200 text-slate-400
+          hover:border-indigo-300 hover:text-indigo-600 transition-colors flex-shrink-0 mt-0.5 font-mono">
+        BIB
+      </button>
       <span class="text-xs px-2 py-0.5 rounded-full flex-shrink-0 mt-0.5 ${staColors[p.status] || 'bg-slate-100 text-slate-500'}">${p.status || 'unread'}</span>
       ${_aiAvailable() ? `
       <button onclick="event.stopPropagation();libSummarisePaper('${p.id}')" id="ai-sum-${p.id}"

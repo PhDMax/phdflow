@@ -262,7 +262,7 @@ function render_whiteboard() {
       <canvas id="wb-canvas" class="absolute inset-0"
         style="cursor:${_wbTool==='text'?'text':_wbTool==='select'?'default':_wbTool==='erase'?'crosshair':'crosshair'}"></canvas>
       <div id="wb-hint" class="absolute bottom-3 left-1/2 -translate-x-1/2 text-xs text-slate-400 pointer-events-none select-none">
-        Double-click a shape to label it · G=triangle · Del=delete selected
+        Double-click a shape to label it · G=triangle · Del=delete · press <kbd style="background:#1e293b;border:1px solid #334155;padding:0 3px;border-radius:3px">?</kbd> for all shortcuts
       </div>
     </div>
     ` : `

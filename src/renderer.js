@@ -362,6 +362,65 @@ function updateSidebarProfile() {
 // ── Save helper ───────────────────────────────────────────────────────────────
 function save(key) { return window.api.storeSet(key, state[key]) }
 
+// ── Keyboard shortcuts cheatsheet ────────────────────────────────────────────
+function openShortcutsModal() {
+  const sections = [
+    ['Global', [
+      ['Ctrl+K / ⌘K', 'Open search'],
+      ['?', 'Show this cheatsheet'],
+      ['Escape', 'Close modal / search'],
+    ]],
+    ['Notes editor', [
+      ['Ctrl+B', 'Bold'],
+      ['Ctrl+I', 'Italic'],
+      ['Ctrl+K', 'Inline code'],
+      ['Ctrl+S', 'Save note'],
+      ['[[', 'Link to another note'],
+      ['Tab', 'Indent'],
+    ]],
+    ['Whiteboard', [
+      ['V', 'Select tool'],
+      ['P', 'Pen'],
+      ['S', 'Smart pen'],
+      ['L', 'Line'],
+      ['A', 'Arrow'],
+      ['R', 'Rectangle'],
+      ['E', 'Ellipse'],
+      ['D', 'Diamond'],
+      ['G', 'Triangle'],
+      ['N', 'Sticky note'],
+      ['T', 'Text'],
+      ['X', 'Eraser'],
+      ['Space+drag', 'Pan canvas'],
+      ['Scroll', 'Zoom in/out'],
+      ['+/−/0', 'Zoom in/out/reset'],
+      ['Ctrl+Z', 'Undo'],
+      ['Ctrl+Y', 'Redo'],
+      ['Ctrl+D', 'Duplicate selected'],
+      ['Delete', 'Delete selected'],
+    ]],
+    ['To-Do list', [
+      ['Enter', 'Quick-add task to Today'],
+    ]],
+  ]
+  openModal(`
+  <h3 class="text-base font-bold text-slate-900 mb-4">⌨ Keyboard shortcuts</h3>
+  <div class="space-y-4 max-h-[60vh] overflow-y-auto">
+    ${sections.map(([title, keys]) => `
+    <div>
+      <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">${title}</div>
+      <div class="space-y-1">
+        ${keys.map(([k, d]) => `
+        <div class="flex items-center justify-between gap-4 py-1 border-b border-slate-50">
+          <kbd class="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-mono border border-slate-200 flex-shrink-0">${k}</kbd>
+          <span class="text-xs text-slate-600 text-right">${d}</span>
+        </div>`).join('')}
+      </div>
+    </div>`).join('')}
+  </div>
+  <p class="text-xs text-slate-400 mt-4">Press <kbd class="bg-slate-100 px-1 rounded">?</kbd> anytime to show this.</p>`)
+}
+
 // ── Odysseus AI helper — call from anywhere in the app ────────────────────────
 // Returns { success, response } or { success: false, error }
 // Shows a loading toast while running; caller handles result display.
@@ -1104,6 +1163,13 @@ document.addEventListener('keydown', e => {
     const ol = document.getElementById('gsearch-overlay')
     if (ol?.style.display !== 'none') closeGlobalSearch()
     else openGlobalSearch()
+    return
+  }
+
+  // ? — keyboard shortcuts cheatsheet (when not in input)
+  if (e.key === '?' && !inInput) {
+    e.preventDefault()
+    openShortcutsModal()
     return
   }
 

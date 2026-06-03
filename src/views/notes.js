@@ -311,6 +311,9 @@ function _notesEditorPanel(note) {
   <!-- Formatting toolbar -->
   <div style="border-bottom:1px solid ${_bdr};padding:.2rem .75rem;display:flex;align-items:center;flex-shrink:0;overflow-x:auto;gap:.1rem;min-height:34px;background:${_bg}">
     ${tbHtml}
+    <div style="margin-left:auto;flex-shrink:0;font-size:.68rem;color:${_txf};padding:0 .25rem;white-space:nowrap">
+      Type <code style="background:${_bgs};padding:1px 4px;border-radius:3px;font-family:monospace">[[</code> to link notes
+    </div>
   </div>
 
   <!-- ══ THE PAGE ══════════════════════════════════════════════════════════ -->
