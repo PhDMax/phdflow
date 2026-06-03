@@ -1,6 +1,6 @@
 {
   "name": "phdflow",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "PhDFlow — free, local-first research tool for PhD students",
   "main": "main.js",
   "scripts": {
