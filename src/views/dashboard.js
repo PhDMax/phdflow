@@ -262,7 +262,7 @@ function render_dashboard() {
   fab.id = 'dash-fab'
   fab.innerHTML = `
   <div style="position:fixed;bottom:1.5rem;right:1.5rem;z-index:100">
-    <div id="dash-fab-menu" style="display:none;position:absolute;bottom:3.5rem;right:0;background:#fff;border:1px solid #e2e8f0;border-radius:.875rem;box-shadow:0 10px 40px rgba(0,0,0,.12);padding:.375rem;width:160px">
+    <div id="dash-fab-menu" style="display:none;flex-direction:column;position:absolute;bottom:3.25rem;right:0;background:#fff;border:1px solid #e2e8f0;border-radius:.875rem;box-shadow:0 10px 40px rgba(0,0,0,.14);padding:.375rem;min-width:160px">
       ${[
         ['📌 New Task',    `openTodoModal(null,null,true);document.getElementById('dash-fab-menu').style.display='none'`],
         ['📄 New Note',    `newNote('note');document.getElementById('dash-fab-menu').style.display='none'`],
@@ -274,10 +274,15 @@ function render_dashboard() {
     </div>
     <button id="dash-fab-btn" onclick="
       const m=document.getElementById('dash-fab-menu');
-      m.style.display=m.style.display==='none'?'block':'none'"
-      style="width:3rem;height:3rem;background:#4f46e5;color:#fff;border:none;border-radius:9999px;font-size:1.375rem;cursor:pointer;box-shadow:0 4px 20px rgba(79,70,229,.4);display:flex;align-items:center;justify-content:center;transition:background .15s"
+      m.style.display=m.style.display==='none'?'flex':'none'"
+      style="height:2.75rem;background:#4f46e5;color:#fff;border:none;border-radius:9999px;cursor:pointer;
+        box-shadow:0 4px 20px rgba(79,70,229,.4);display:flex;align-items:center;gap:.5rem;
+        padding:0 1.125rem;transition:background .15s;white-space:nowrap"
       onmouseover="this.style.background='#4338ca'" onmouseout="this.style.background='#4f46e5'"
-      title="Quick add">⊕</button>
+      title="Quick add">
+      <span style="font-size:1.25rem;line-height:1;margin-top:-1px">+</span>
+      <span style="font-size:.8rem;font-weight:600;letter-spacing:.01em">Quick add</span>
+    </button>
   </div>`
   vc.appendChild(fab)
   document.addEventListener('click', e => {
