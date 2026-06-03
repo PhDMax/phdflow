@@ -311,13 +311,28 @@ ipcMain.handle('researcher-cache-get', (_, normalizedName) => {
   const cache = _readResearcherCache()
   const entry = cache[normalizedName]
   if (!entry) return null
+  if (entry.profile?._invalid) return null  // busted by "Not them?"
   if (Date.now() - entry.savedAt > CACHE_TTL_MS) { delete cache[normalizedName]; _writeResearcherCache(cache); return null }
   return entry
 })
 
-ipcMain.handle('researcher-cache-set', (_, { normalizedName, profile, questionsUsed }) => {
+ipcMain.handle('researcher-cache-set', (_, { normalizedName, profile, questionsUsed, rejectedIds }) => {
   const cache = _readResearcherCache()
-  cache[normalizedName] = { profile, questionsUsed: questionsUsed || [], savedAt: Date.now() }
+  const existing = cache[normalizedName] || {}
+  // Accumulate question history across sessions — what worked before informs future order
+  const prevHistory = existing.questionHistory || []
+  const newHistory  = [...prevHistory, { questionsUsed: questionsUsed || [], ts: Date.now() }].slice(-20)
+  // Accumulate rejected candidate IDs so we penalise them in future searches
+  const prevRejected = new Set(existing.rejectedIds || [])
+  ;(rejectedIds || []).forEach(id => prevRejected.add(id))
+
+  cache[normalizedName] = {
+    profile,
+    questionsUsed:   questionsUsed || [],
+    questionHistory: newHistory,
+    rejectedIds:     [...prevRejected],
+    savedAt:         Date.now(),
+  }
   _writeResearcherCache(cache)
   return true
 })
@@ -326,8 +341,8 @@ ipcMain.handle('researcher-cache-list', () => {
   const cache = _readResearcherCache()
   const now   = Date.now()
   return Object.entries(cache)
-    .filter(([, v]) => now - v.savedAt <= CACHE_TTL_MS)
-    .map(([k, v]) => ({ key: k, name: v.profile?.name, savedAt: v.savedAt }))
+    .filter(([, v]) => now - v.savedAt <= CACHE_TTL_MS && !v.profile?._invalid)
+    .map(([k, v]) => ({ key: k, name: v.profile?.name, savedAt: v.savedAt, sessions: (v.questionHistory||[]).length }))
 })
 
 // ─── ORCID enrichment ─────────────────────────────────────────────────────────
@@ -366,7 +381,7 @@ async function _enrichWithOrcid(orcid) {
   } catch { return {} }
 }
 
-// ─── DBLP (CS researchers) ────────────────────────────────────────────────────
+// ─── DBLP (CS researchers) — returns full candidate profiles ─────────────────
 
 async function _searchDblp(name) {
   try {
@@ -377,11 +392,47 @@ async function _searchDblp(name) {
     if (!r.ok) return []
     const data = await r.json()
     const hits = data.result?.hits?.hit || []
-    return hits.map(h => ({
-      name:    h.info?.author || '',
-      dblpUrl: h.info?.url   || null,
-      score:   Number(h['@score'] || 0),
-    })).filter(h => h.name)
+
+    // For each DBLP hit, fetch their author page for paper/affiliation info
+    const profiles = await Promise.allSettled(
+      hits.slice(0, 4).map(async h => {
+        const dblpName = h.info?.author || ''
+        const dblpUrl  = h.info?.url    || null
+        if (!dblpName) return null
+
+        // Fetch DBLP author page to get recent paper titles (→ sub-field signal)
+        let recentTitles = []
+        try {
+          const pid = dblpUrl?.match(/pid\/(.*)/)?.[1]
+          if (pid) {
+            const pr = await fetch(
+              `https://dblp.org/search/publ/api?q=a:${encodeURIComponent(pid)}&format=json&h=5`,
+              { headers: { 'User-Agent': 'PhDFlow/0.11' }, signal: AbortSignal.timeout(5000) }
+            )
+            if (pr.ok) {
+              const pd    = await pr.json()
+              const pubs  = pd.result?.hits?.hit || []
+              recentTitles = pubs.map(p => p.info?.title || '').filter(Boolean).slice(0, 5)
+            }
+          }
+        } catch {}
+
+        return {
+          id:           `dblp-${dblpUrl?.split('/').pop() || Math.random().toString(36).slice(2)}`,
+          name:         dblpName,
+          institution:  null,
+          affiliations: [],
+          topics:       [],  // enriched later via ORCID if available
+          recentTitles,
+          dblpUrl,
+          source:       'DBLP',
+        }
+      })
+    )
+
+    return profiles
+      .filter(r => r.status === 'fulfilled' && r.value)
+      .map(r => r.value)
   } catch { return [] }
 }
 
@@ -559,6 +610,39 @@ ipcMain.handle('search-researchers', async (_, queryOrOpts) => {
         dblpUrl:      dblpUrlOa,
         pubmedCount:  pubmedData.count || 0,
         worksApiUrl:  oa.works_api_url || null,
+        email: null, emailSource: 'none',
+      })
+    }
+
+    // Add DBLP-only candidates (researchers in CS not found in S2/OA)
+    for (const dblp of (dblpRes.status === 'fulfilled' ? (dblpRes.value || []) : [])) {
+      if (!dblp?.name) continue
+      const nd = _normName(dblp.name)
+      if (merged.some(r => _normName(r.name) === nd)) {
+        // Already in merged from S2/OA — just attach dblpUrl
+        const existing = merged.find(r => _normName(r.name) === nd)
+        if (existing) existing.dblpUrl = dblp.dblpUrl
+        continue
+      }
+      // New DBLP-only researcher
+      merged.push({
+        id:           dblp.id,
+        name:         dblp.name,
+        institution:  null,
+        affiliations: [],
+        topics:       [],
+        homepage:     null,
+        hIndex:       0,
+        i10Index:     null,
+        paperCount:   0,
+        citationCount:0,
+        orcid:        null,
+        s2Url:        null,
+        oaUrl:        null,
+        dblpUrl:      dblp.dblpUrl,
+        pubmedCount:  0,
+        worksApiUrl:  null,
+        recentTitles: dblp.recentTitles || [],
         email: null, emailSource: 'none',
       })
     }

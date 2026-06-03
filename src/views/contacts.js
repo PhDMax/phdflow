@@ -462,10 +462,11 @@ function _discAkinatorPanel() {
   if (_ak.step === 'found') {
     const r = _ak.remaining[0]
     if (!r) return ''
-    // Auto-save confirmed profile to cache
+    // Auto-save confirmed profile to cache, including rejected candidates for future penalisation
     if (!_ak.fromCache) {
-      const normName = _ak.name.toLowerCase().replace(/[^a-z\s]/g,'').trim().split(/\s+/).sort().join(' ')
-      api.researcherCacheSet({ normalizedName: normName, profile: r, questionsUsed: _ak.history }).catch(() => {})
+      const normName   = _ak.name.toLowerCase().replace(/[^a-z\s]/g,'').trim().split(/\s+/).sort().join(' ')
+      const rejectedIds = _ak.all.filter(c => c.id !== r.id).map(c => c.id)
+      api.researcherCacheSet({ normalizedName: normName, profile: r, questionsUsed: _ak.history, rejectedIds }).catch(() => {})
     }
     const cacheNote = _ak.fromCache
       ? `<span class="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">⚡ Instant — previously found</span>`
@@ -549,14 +550,16 @@ async function akinatorStart() {
   const normName   = name.toLowerCase().replace(/[^a-z\s]/g,'').trim().split(/\s+/).sort().join(' ')
   const cached     = await api.researcherCacheGet(normName)
   if (cached?.profile) {
-    _ak.all       = [cached.profile]
-    _ak.remaining = [cached.profile]
-    _ak.step      = 'found'
-    _ak.fromCache = true
+    _ak.all         = [cached.profile]
+    _ak.remaining   = [cached.profile]
+    _ak.step        = 'found'
+    _ak.fromCache   = true
+    _ak.cacheEntry  = cached   // keep for learning data
     render_discover()
     return
   }
-  _ak.fromCache = false
+  _ak.fromCache  = false
+  _ak.cacheEntry = null
 
   const result = await window.api.searchResearchers({ query: name, institution: '', activeOnly: false })
 
@@ -568,8 +571,21 @@ async function akinatorStart() {
     return
   }
 
-  _ak.all       = result.results
-  _ak.remaining = [...result.results]
+  // Load past session data for this name — used for learning
+  const entry = await api.researcherCacheGet(normName).catch(() => null)
+  _ak.cacheEntry = entry
+
+  let candidates = result.results
+  // Demote previously-rejected candidates (move to end, not remove — they might be right today)
+  if (entry?.rejectedIds?.length) {
+    const rejSet    = new Set(entry.rejectedIds)
+    const confirmed = candidates.filter(c => !rejSet.has(c.id))
+    const rejected  = candidates.filter(c =>  rejSet.has(c.id))
+    candidates = [...confirmed, ...rejected]
+  }
+
+  _ak.all       = candidates
+  _ak.remaining = [...candidates]
 
   if (_ak.remaining.length === 1) {
     _ak.step = 'found'
@@ -653,8 +669,11 @@ async function _akinatorNextStep() {
       return
     }
   }
-  // Fallback: rule-based
-  const q = _akinatorRuleQuestion(_ak.remaining)
+  // Fallback: rule-based, informed by past question history
+  const pastTypes = (_ak.cacheEntry?.questionHistory || [])
+    .flatMap(h => h.questionsUsed || [])
+    .map(q => q.q)  // the short label of each question used
+  const q = _akinatorRuleQuestion(_ak.remaining, pastTypes)
   if (!q) {
     _ak.step = 'exhausted'
     render_discover()
@@ -701,95 +720,113 @@ async function _akinatorOdysseyQuestion(candidates) {
 
 // ── Rule-based question generation (no Odysseus) ──────────────────────────────
 
-function _akinatorRuleQuestion(candidates) {
-  // 1. Topics: find one that splits candidates closest to 50/50
-  const topicFreq = {}
-  candidates.forEach(c => (c.topics||[]).forEach(t => {
-    topicFreq[t] = (topicFreq[t]||0) + 1
-  }))
-  const half = candidates.length / 2
-  const bestTopics = Object.entries(topicFreq)
-    .filter(([,n]) => n >= 1 && n < candidates.length)
-    .sort((a,b) => Math.abs(a[1]-half) - Math.abs(b[1]-half))
-    .slice(0, 3)
+function _akinatorRuleQuestion(candidates, pastTypes = []) {
+  // Build a type → success count from past sessions to reorder questions
+  // A type that has appeared many times in successful sessions is asked first
+  const typeScore = {}
+  pastTypes.forEach(t => { typeScore[t] = (typeScore[t]||0) + 1 })
+  // We'll try question types in this dynamic order:
+  // base order + boost for types that historically worked for this name
+  const tryOrder = ['topic', 'region', 'prominence', 'institution', 'activity']
+    .sort((a, b) => (typeScore[b]||0) - (typeScore[a]||0))
 
-  if (bestTopics.length) {
-    const topic = bestTopics[0][0]
-    const inTopic    = candidates.filter(c => (c.topics||[]).includes(topic))
-    const notInTopic = candidates.filter(c => !(c.topics||[]).includes(topic))
-    if (inTopic.length && notInTopic.length) return {
-      text:      `Does their research involve "${topic}"?`,
-      shortText: `Topic: ${topic}`,
-      options: [
-        { label: `✓ Yes, ${topic}`, fn: () => inTopic    },
-        { label: `✗ No`,            fn: () => notInTopic  },
-      ],
+  for (const type of tryOrder) {
+    const q = _akinatorTryType(type, candidates)
+    if (q) return q
+  }
+  return null
+}
+
+function _akinatorTryType(type, candidates) {
+  switch (type) {
+
+    case 'topic': {
+      const topicFreq = {}
+      candidates.forEach(c => (c.topics||[]).forEach(t => { topicFreq[t] = (topicFreq[t]||0) + 1 }))
+      const half = candidates.length / 2
+      const best = Object.entries(topicFreq)
+        .filter(([,n]) => n >= 1 && n < candidates.length)
+        .sort((a,b) => Math.abs(a[1]-half) - Math.abs(b[1]-half))
+      if (!best.length) return null
+      const topic      = best[0][0]
+      const inTopic    = candidates.filter(c => (c.topics||[]).includes(topic))
+      const notInTopic = candidates.filter(c => !(c.topics||[]).includes(topic))
+      if (!inTopic.length || !notInTopic.length) return null
+      return {
+        text:      `Does their research involve "${topic}"?`,
+        shortText: `Topic: ${topic}`,
+        options: [
+          { label: `✓ Yes — ${topic}`, fn: () => inTopic    },
+          { label: '✗ No',             fn: () => notInTopic },
+        ],
+      }
     }
-  }
 
-  // 2. Region
-  const regionMap = {}
-  candidates.forEach(c => {
-    const reg = _discRegionOf(c.affiliations)
-    if (reg) regionMap[reg] = [...(regionMap[reg]||[]), c]
-  })
-  const regions = Object.keys(regionMap).filter(r => regionMap[r].length < candidates.length)
-  if (regions.length >= 2) return {
-    text:      'Which region are they based in?',
-    shortText: 'Region',
-    options: regions.slice(0,4).map(r => ({
-      label: r,
-      fn:    () => regionMap[r] || [],
-    })).concat(
-      regions.length > 4 ? [{ label: 'Somewhere else', fn: () => candidates.filter(c => !regions.slice(0,4).includes(_discRegionOf(c.affiliations))) }] : []
-    ),
-  }
-
-  // 3. Prominence (h-index)
-  const maxH = Math.max(...candidates.map(c => c.hIndex||0))
-  const minH = Math.min(...candidates.map(c => c.hIndex||0))
-  if (maxH - minH > 15) {
-    const mid = Math.round((maxH + minH) / 2)
-    const senior = candidates.filter(c => (c.hIndex||0) >= mid)
-    const junior = candidates.filter(c => (c.hIndex||0) <  mid)
-    if (senior.length && junior.length) return {
-      text:      `Are they a senior / well-established researcher? (very prominent in their field)`,
-      shortText: 'Seniority',
-      options: [
-        { label: 'Yes, senior & well-cited', fn: () => senior },
-        { label: 'No, earlier career stage',  fn: () => junior },
-      ],
+    case 'region': {
+      const regionMap = {}
+      candidates.forEach(c => {
+        const reg = _discRegionOf(c.affiliations)
+        if (reg) regionMap[reg] = [...(regionMap[reg]||[]), c]
+      })
+      const regions = Object.keys(regionMap).filter(r => regionMap[r].length < candidates.length)
+      if (regions.length < 2) return null
+      return {
+        text:      'Which region are they based in?',
+        shortText: 'Region',
+        options: regions.slice(0,4).map(r => ({ label: r, fn: () => regionMap[r] || [] })).concat(
+          regions.length > 4 ? [{ label: 'Somewhere else', fn: () => candidates.filter(c => !regions.slice(0,4).includes(_discRegionOf(c.affiliations))) }] : []
+        ),
+      }
     }
-  }
 
-  // 4. Institution
-  const instGroups = {}
-  candidates.forEach(c => {
-    if (c.institution) instGroups[c.institution] = [...(instGroups[c.institution]||[]), c]
-  })
-  const insts = Object.keys(instGroups).filter(i => instGroups[i].length < candidates.length)
-  if (insts.length >= 2) return {
-    text:      'Which institution are they at?',
-    shortText: 'Institution',
-    options: insts.slice(0,4).map(inst => ({
-      label: inst,
-      fn:    () => instGroups[inst],
-    })),
-  }
+    case 'prominence': {
+      const maxH = Math.max(...candidates.map(c => c.hIndex||0))
+      const minH = Math.min(...candidates.map(c => c.hIndex||0))
+      if (maxH - minH <= 15) return null
+      const mid    = Math.round((maxH + minH) / 2)
+      const senior = candidates.filter(c => (c.hIndex||0) >= mid)
+      const junior = candidates.filter(c => (c.hIndex||0) <  mid)
+      if (!senior.length || !junior.length) return null
+      return {
+        text:      'Are they a senior / well-established researcher?',
+        shortText: 'Seniority',
+        options: [
+          { label: 'Yes, senior & well-cited', fn: () => senior },
+          { label: 'No, earlier career stage',  fn: () => junior },
+        ],
+      }
+    }
 
-  // 5. Recent activity
-  const active   = candidates.filter(c => c.isActive === true)
-  const inactive = candidates.filter(c => c.isActive === false)
-  if (active.length && inactive.length) return {
-    text:      'Have they published recently in the last few years?',
-    shortText: 'Active?',
-    options: [
-      { label: 'Yes, still publishing',      fn: () => active   },
-      { label: 'Not sure / older career',    fn: () => inactive },
-    ],
-  }
+    case 'institution': {
+      const instGroups = {}
+      candidates.forEach(c => {
+        if (c.institution) instGroups[c.institution] = [...(instGroups[c.institution]||[]), c]
+      })
+      const insts = Object.keys(instGroups).filter(i => instGroups[i].length < candidates.length)
+      if (insts.length < 2) return null
+      return {
+        text:      'Which institution are they at?',
+        shortText: 'Institution',
+        options: insts.slice(0,4).map(inst => ({ label: inst, fn: () => instGroups[inst] })),
+      }
+    }
 
-  return null  // Can't narrow down further
+    case 'activity': {
+      const active   = candidates.filter(c => c.isActive === true)
+      const inactive = candidates.filter(c => c.isActive === false)
+      if (!active.length || !inactive.length) return null
+      return {
+        text:      'Have they published recently (last few years)?',
+        shortText: 'Active?',
+        options: [
+          { label: 'Yes, still active',       fn: () => active   },
+          { label: 'Not sure / older career', fn: () => inactive },
+        ],
+      }
+    }
+
+    default: return null
+  }
 }
 
 // Map affiliation strings to a broad region label
