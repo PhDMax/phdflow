@@ -293,6 +293,134 @@ ipcMain.handle('export-to-pdf', async (_, html, dest) => {
   } catch(e) { return { success: false, error: e.message } }
 })
 
+// ─── Researcher profile cache (local disk) ────────────────────────────────────
+
+const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000  // 30 days
+
+function _researcherCachePath() {
+  return path.join(getDataDir(), 'researcher-cache.json')
+}
+function _readResearcherCache() {
+  try { return JSON.parse(fs.readFileSync(_researcherCachePath(), 'utf-8')) } catch { return {} }
+}
+function _writeResearcherCache(cache) {
+  try { fs.writeFileSync(_researcherCachePath(), JSON.stringify(cache), 'utf-8') } catch {}
+}
+
+ipcMain.handle('researcher-cache-get', (_, normalizedName) => {
+  const cache = _readResearcherCache()
+  const entry = cache[normalizedName]
+  if (!entry) return null
+  if (Date.now() - entry.savedAt > CACHE_TTL_MS) { delete cache[normalizedName]; _writeResearcherCache(cache); return null }
+  return entry
+})
+
+ipcMain.handle('researcher-cache-set', (_, { normalizedName, profile, questionsUsed }) => {
+  const cache = _readResearcherCache()
+  cache[normalizedName] = { profile, questionsUsed: questionsUsed || [], savedAt: Date.now() }
+  _writeResearcherCache(cache)
+  return true
+})
+
+ipcMain.handle('researcher-cache-list', () => {
+  const cache = _readResearcherCache()
+  const now   = Date.now()
+  return Object.entries(cache)
+    .filter(([, v]) => now - v.savedAt <= CACHE_TTL_MS)
+    .map(([k, v]) => ({ key: k, name: v.profile?.name, savedAt: v.savedAt }))
+})
+
+// ─── ORCID enrichment ─────────────────────────────────────────────────────────
+
+async function _enrichWithOrcid(orcid) {
+  try {
+    const headers = { Accept: 'application/json', 'User-Agent': 'PhDFlow/0.11' }
+    const sig     = AbortSignal.timeout(6000)
+    const [personRes, empRes] = await Promise.allSettled([
+      fetch(`https://pub.orcid.org/v3.0/${orcid}/person`,      { headers, signal: sig }).then(r => r.json()),
+      fetch(`https://pub.orcid.org/v3.0/${orcid}/employments`, { headers, signal: sig }).then(r => r.json()),
+    ])
+    const person = personRes.status === 'fulfilled' ? personRes.value : null
+    const emp    = empRes.status    === 'fulfilled' ? empRes.value    : null
+
+    const keywords = (person?.keywords?.keyword || []).map(k => k.content).filter(Boolean)
+    const country  = person?.addresses?.address?.[0]?.country?.value || null
+    const bio      = person?.biography?.content?.slice(0, 400) || null
+
+    // Most recent current employment (no end-date = current)
+    const jobs = (emp?.['affiliation-group'] || [])
+      .flatMap(g => g.summaries || [])
+      .map(s => s['employment-summary'])
+      .filter(e => !e?.['end-date'])
+      .sort((a, b) => Number(b?.['start-date']?.year?.value||0) - Number(a?.['start-date']?.year?.value||0))
+    const job = jobs[0]
+
+    return {
+      keywords,
+      country,
+      bio,
+      position:    job?.['role-title']        || null,
+      department:  job?.['department-name']   || null,
+      orcidInst:   job?.organization?.name    || null,
+    }
+  } catch { return {} }
+}
+
+// ─── DBLP (CS researchers) ────────────────────────────────────────────────────
+
+async function _searchDblp(name) {
+  try {
+    const r = await fetch(
+      `https://dblp.org/search/author/api?q=${encodeURIComponent(name)}&format=json&h=6`,
+      { headers: { 'User-Agent': 'PhDFlow/0.11' }, signal: AbortSignal.timeout(7000) }
+    )
+    if (!r.ok) return []
+    const data = await r.json()
+    const hits = data.result?.hits?.hit || []
+    return hits.map(h => ({
+      name:    h.info?.author || '',
+      dblpUrl: h.info?.url   || null,
+      score:   Number(h['@score'] || 0),
+    })).filter(h => h.name)
+  } catch { return [] }
+}
+
+// ─── PubMed / NCBI (biomedical researchers) ──────────────────────────────────
+
+async function _searchPubmed(name) {
+  try {
+    // Step 1: find PMIDs for this author
+    const q        = encodeURIComponent(name + '[AUTH]')
+    const searchR  = await fetch(
+      `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${q}&retmode=json&retmax=8&sort=relevance`,
+      { headers: { 'User-Agent': 'PhDFlow/0.11' }, signal: AbortSignal.timeout(8000) }
+    )
+    if (!searchR.ok) return { count: 0, meshTerms: [], affiliation: null }
+    const searchData = await searchR.json()
+    const pmids      = searchData.esearchresult?.idlist || []
+    const total      = Number(searchData.esearchresult?.count || 0)
+    if (!pmids.length) return { count: total, meshTerms: [], affiliation: null }
+
+    // Step 2: fetch article details for MeSH terms + affiliation
+    const fetchR = await fetch(
+      `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=${pmids.slice(0,4).join(',')}&retmode=xml`,
+      { headers: { 'User-Agent': 'PhDFlow/0.11' }, signal: AbortSignal.timeout(8000) }
+    )
+    if (!fetchR.ok) return { count: total, meshTerms: [], affiliation: null }
+    const xml = await fetchR.text()
+
+    // Parse MeSH descriptor names from XML
+    const meshMatches = [...xml.matchAll(/<DescriptorName[^>]*>([^<]+)<\/DescriptorName>/g)]
+    const meshTerms   = [...new Set(meshMatches.map(m => m[1].trim()))].slice(0, 8)
+
+    // Parse first author affiliation
+    const affMatch  = xml.match(/<Affiliation>([^<]{10,200})<\/Affiliation>/)
+    const affiliation = affMatch ? affMatch[1].trim() : null
+
+    return { count: total, meshTerms, affiliation }
+  } catch { return { count: 0, meshTerms: [], affiliation: null } }
+}
+
 // ─── IPC: Researcher Search ───────────────────────────────────────────────────
 
 // Normalise a name for fuzzy matching: lowercase, strip punctuation, sort words
@@ -330,19 +458,30 @@ ipcMain.handle('search-researchers', async (_, queryOrOpts) => {
     }
     const oaFilterParam = oaFilters.length ? `&filter=${oaFilters.join(',')}` : ''
 
-    const [s2Res, oaRes] = await Promise.allSettled([
+    const [s2Res, oaRes, dblpRes, pubmedRes] = await Promise.allSettled([
       fetch(
-        `https://api.semanticscholar.org/graph/v1/author/search?query=${encodeURIComponent(s2Query)}&fields=${s2Fields}&limit=8`,
-        { headers: { 'User-Agent': 'PhDFlow/0.10 (open-source)' }, signal: sig }
+        `https://api.semanticscholar.org/graph/v1/author/search?query=${encodeURIComponent(s2Query)}&fields=${s2Fields}&limit=10`,
+        { headers: { 'User-Agent': 'PhDFlow/0.11 (open-source)' }, signal: sig }
       ).then(r => r.json()),
       fetch(
-        `https://api.openalex.org/authors?search=${encodeURIComponent(nameOnly)}&select=${oaSelect}${oaFilterParam}&per-page=8`,
-        { headers: { 'User-Agent': 'PhDFlow/0.10 (mailto:phd-cc@example.com)' }, signal: sig }
+        `https://api.openalex.org/authors?search=${encodeURIComponent(nameOnly)}&select=${oaSelect}${oaFilterParam}&per-page=10`,
+        { headers: { 'User-Agent': 'PhDFlow/0.11 (mailto:phd-cc@example.com)' }, signal: sig }
       ).then(r => r.json()),
+      _searchDblp(nameOnly),
+      _searchPubmed(nameOnly),
     ])
 
-    const s2Authors = s2Res.status === 'fulfilled' ? (s2Res.value.data || []) : []
-    const oaAuthors = oaRes.status === 'fulfilled' ? (oaRes.value.results || []) : []
+    const s2Authors  = s2Res.status     === 'fulfilled' ? (s2Res.value.data || [])     : []
+    const oaAuthors  = oaRes.status     === 'fulfilled' ? (oaRes.value.results || [])  : []
+    const dblpHits   = dblpRes.status   === 'fulfilled' ? (dblpRes.value || [])        : []
+    const pubmedData = pubmedRes.status === 'fulfilled' ? (pubmedRes.value || {})      : {}
+
+    // Build DBLP lookup: normalised name → dblpUrl (validates CS presence)
+    const dblpMap = {}
+    dblpHits.forEach(h => { dblpMap[_normName(h.name)] = h.dblpUrl })
+
+    // PubMed mesh terms = biomedical sub-field vocabulary; attach to anyone confirmed there
+    const pubmedMesh = pubmedData.meshTerms || []
 
     const usedOaIds = new Set()
     const merged = []
@@ -368,12 +507,17 @@ ipcMain.handle('search-researchers', async (_, queryOrOpts) => {
       // OA `topics` field (current) — NOT the deprecated `x_concepts`
       const topics  = (oa?.topics || []).slice(0, 6).map(t => t.display_name).filter(Boolean)
 
+      const ns2     = _normName(s2.name)
+      const dblpUrl = dblpMap[ns2] || null
+      // Merge PubMed mesh terms when this author is confirmed in PubMed
+      const combinedTopics = [...new Set([...topics, ...(pubmedData.count > 0 ? pubmedMesh : [])])].slice(0, 10)
+
       merged.push({
         id:           s2.authorId,
         name:         s2.name,
         institution:  allAffs[0] || null,
         affiliations: allAffs,
-        topics,
+        topics:       combinedTopics,
         homepage:     s2.homepage || null,
         hIndex:       s2.hIndex || oa?.summary_stats?.h_index || 0,
         i10Index:     oa?.summary_stats?.i10 || null,
@@ -382,6 +526,8 @@ ipcMain.handle('search-researchers', async (_, queryOrOpts) => {
         orcid,
         s2Url:        `https://www.semanticscholar.org/author/${s2.authorId}`,
         oaUrl:        oa?.id ? `https://openalex.org/authors/${oa.id.split('/').pop()}` : null,
+        dblpUrl,
+        pubmedCount:  pubmedData.count || 0,
         worksApiUrl:  oa?.works_api_url || null,
         email: null, emailSource: 'none',
       })
@@ -392,13 +538,16 @@ ipcMain.handle('search-researchers', async (_, queryOrOpts) => {
       if (usedOaIds.has(oa.id)) continue
       const insts  = oa.last_known_institutions?.map(i => i.display_name) || []
       const orcid  = oa.ids?.orcid?.replace('https://orcid.org/','') || null
-      const topics = (oa.topics || []).slice(0, 6).map(t => t.display_name).filter(Boolean)
+      const oaTopics = (oa.topics || []).slice(0, 6).map(t => t.display_name).filter(Boolean)
+      const noa      = _normName(oa.display_name)
+      const dblpUrlOa = dblpMap[noa] || null
+      const combinedOaTopics = [...new Set([...oaTopics, ...(pubmedData.count > 0 ? pubmedMesh : [])])].slice(0, 10)
       merged.push({
         id:           `oa-${oa.id?.split('/').pop()}`,
         name:         oa.display_name,
         institution:  insts[0] || null,
         affiliations: insts,
-        topics,
+        topics:       combinedOaTopics,
         homepage:     null,
         hIndex:       oa.summary_stats?.h_index || 0,
         i10Index:     oa.summary_stats?.i10 || null,
@@ -407,6 +556,8 @@ ipcMain.handle('search-researchers', async (_, queryOrOpts) => {
         orcid,
         s2Url:        null,
         oaUrl:        oa.id ? `https://openalex.org/authors/${oa.id.split('/').pop()}` : null,
+        dblpUrl:      dblpUrlOa,
+        pubmedCount:  pubmedData.count || 0,
         worksApiUrl:  oa.works_api_url || null,
         email: null, emailSource: 'none',
       })
@@ -443,6 +594,29 @@ ipcMain.handle('search-researchers', async (_, queryOrOpts) => {
     // OA already filtered by activity, this catches any S2-only results)
     const filtered = activeOnly ? merged.filter(r => r.isActive !== false) : merged
     const top = filtered.slice(0, 8)
+
+    // Enrich top 5 results that have an ORCID with position/department/keywords
+    await Promise.allSettled(
+      top
+        .filter(r => r.orcid)
+        .slice(0, 5)
+        .map(async author => {
+          const enriched = await _enrichWithOrcid(author.orcid)
+          if (enriched.position)   author.position   = enriched.position
+          if (enriched.department) author.department = enriched.department
+          // ORCID institution overrides if more specific
+          if (enriched.orcidInst && enriched.orcidInst !== author.institution) {
+            author.affiliations = [enriched.orcidInst, ...author.affiliations.filter(a => a !== enriched.orcidInst)]
+            author.institution  = enriched.orcidInst
+          }
+          if (enriched.country)    author.country  = enriched.country
+          if (enriched.bio)        author.bio      = enriched.bio
+          // Merge ORCID keywords into topics
+          if (enriched.keywords?.length) {
+            author.topics = [...new Set([...enriched.keywords, ...author.topics])].slice(0, 12)
+          }
+        })
+    )
 
     // Fetch top 5 recent papers for S2-based results (parallel, non-blocking)
     await Promise.allSettled(

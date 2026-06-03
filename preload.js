@@ -30,7 +30,10 @@ contextBridge.exposeInMainWorld('api', {
   removePages:       (fp, dest, pages)   => ipcRenderer.invoke('remove-pages', fp, dest, pages),
 
   // ── Research APIs ─────────────────────────────────────────────────────────
-  searchResearchers: (opts)              => ipcRenderer.invoke('search-researchers', opts),
+  searchResearchers:     (opts)              => ipcRenderer.invoke('search-researchers', opts),
+  researcherCacheGet:    (name)              => ipcRenderer.invoke('researcher-cache-get', name),
+  researcherCacheSet:    (opts)              => ipcRenderer.invoke('researcher-cache-set', opts),
+  researcherCacheList:   ()                  => ipcRenderer.invoke('researcher-cache-list'),
   searchPapers:      (topics, days)      => ipcRenderer.invoke('search-papers', topics, days),
   fetchNews:         (feeds)             => ipcRenderer.invoke('fetch-news', feeds),
   fetchICS:          (url)               => ipcRenderer.invoke('fetch-ics', url),

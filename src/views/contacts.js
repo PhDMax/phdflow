@@ -340,13 +340,23 @@ function _buildResultCards(results) {
         </div>
       </div>` : ''}
 
-      <!-- Profile links -->
+      <!-- ORCID-enriched position / bio -->
+      ${r.position || r.department ? `
+      <div class="text-xs text-slate-600 mb-2">
+        ${r.position ? `<span class="font-medium">${esc(r.position)}</span>` : ''}
+        ${r.department ? `<span class="text-slate-400">${r.position?' · ':''}${esc(r.department)}</span>` : ''}
+      </div>` : ''}
+      ${r.bio ? `<p class="text-xs text-slate-500 italic mb-2 line-clamp-2">${esc(r.bio)}</p>` : ''}
+
+      <!-- Profile links + source badges -->
       <div class="flex flex-wrap gap-3 text-xs border-t border-slate-100 pt-3">
-        ${r.s2Url    ? `<button onclick="api.openExternal('${esc(r.s2Url)}')"    class="text-indigo-500 hover:underline">📚 Semantic Scholar</button>` : ''}
+        ${r.s2Url     ? `<button onclick="api.openExternal('${esc(r.s2Url)}')"    class="text-indigo-500 hover:underline">📚 Semantic Scholar</button>` : ''}
         <button onclick="api.openExternal('${gSearch}')" class="text-indigo-500 hover:underline">🎓 Google Scholar</button>
-        ${r.oaUrl    ? `<button onclick="api.openExternal('${esc(r.oaUrl)}')"    class="text-indigo-500 hover:underline">OpenAlex</button>` : ''}
-        ${r.orcid    ? `<button onclick="api.openExternal('https://orcid.org/${esc(r.orcid)}')" class="text-indigo-500 hover:underline">ORCID</button>` : ''}
-        ${r.homepage ? `<button onclick="api.openExternal('${esc(r.homepage)}')" class="text-indigo-500 hover:underline">🔗 Homepage</button>` : ''}
+        ${r.oaUrl     ? `<button onclick="api.openExternal('${esc(r.oaUrl)}')"    class="text-indigo-500 hover:underline">OpenAlex</button>` : ''}
+        ${r.orcid     ? `<button onclick="api.openExternal('https://orcid.org/${esc(r.orcid)}')" class="text-indigo-500 hover:underline">ORCID ✓</button>` : ''}
+        ${r.dblpUrl   ? `<button onclick="api.openExternal('${esc(r.dblpUrl)}')"  class="text-indigo-500 hover:underline">DBLP</button>` : ''}
+        ${r.pubmedCount>0 ? `<button onclick="api.openExternal('https://pubmed.ncbi.nlm.nih.gov/?term=${encodeURIComponent(r.name)}[AUTH]')" class="text-indigo-500 hover:underline">PubMed (${r.pubmedCount})</button>` : ''}
+        ${r.homepage  ? `<button onclick="api.openExternal('${esc(r.homepage)}')" class="text-indigo-500 hover:underline">🔗 Homepage</button>` : ''}
       </div>
     </div>`
   }).join('')
@@ -452,20 +462,30 @@ function _discAkinatorPanel() {
   if (_ak.step === 'found') {
     const r = _ak.remaining[0]
     if (!r) return ''
-    const saved    = state.contacts.some(c => c.s2Id===r.id || c.name===r.name)
-    const followed = _discFollowed.has(r.id)
+    // Auto-save confirmed profile to cache
+    if (!_ak.fromCache) {
+      const normName = _ak.name.toLowerCase().replace(/[^a-z\s]/g,'').trim().split(/\s+/).sort().join(' ')
+      api.researcherCacheSet({ normalizedName: normName, profile: r, questionsUsed: _ak.history }).catch(() => {})
+    }
+    const cacheNote = _ak.fromCache
+      ? `<span class="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">⚡ Instant — previously found</span>`
+      : `<span class="text-xs text-slate-400">from ${_ak.all.length} candidates → ${_ak.history.length} question${_ak.history.length!==1?'s':''}</span>`
     return `
     <div class="max-w-xl mx-auto">
       <div class="flex items-center gap-2 mb-4">
         <div class="text-2xl">🧞</div>
-        <div>
+        <div class="flex-1 flex items-center gap-2 flex-wrap">
           <p class="font-bold text-slate-900">Found them!</p>
-          <p class="text-xs text-slate-400">from ${_ak.all.length} candidates → ${_ak.history.length} question${_ak.history.length!==1?'s':''}</p>
+          ${cacheNote}
         </div>
-        <button onclick="akinatorReset()" class="ml-auto text-xs text-slate-400 hover:text-slate-600 hover:underline">Start over</button>
+        <div class="flex gap-2 flex-shrink-0">
+          ${_ak.fromCache ? `<button onclick="akinatorForceRefresh()" class="text-xs text-slate-400 hover:text-indigo-600 hover:underline">🔄 Refresh</button>` : ''}
+          <button onclick="akinatorReset()" class="text-xs text-slate-400 hover:text-slate-600 hover:underline">Start over</button>
+        </div>
       </div>
       ${trail}
       ${_buildResultCards([r])}
+      ${_ak.fromCache ? '' : `<p class="text-xs text-slate-400 text-center mt-3">Profile saved — next search will be instant. <button onclick="akinatorWrongPerson()" class="text-indigo-500 hover:underline">Not the right person?</button></p>`}
     </div>`
   }
 
@@ -525,6 +545,19 @@ async function akinatorStart() {
   _ak.question  = null
   render_discover()
 
+  // Check local cache first — confirmed profiles load instantly
+  const normName   = name.toLowerCase().replace(/[^a-z\s]/g,'').trim().split(/\s+/).sort().join(' ')
+  const cached     = await api.researcherCacheGet(normName)
+  if (cached?.profile) {
+    _ak.all       = [cached.profile]
+    _ak.remaining = [cached.profile]
+    _ak.step      = 'found'
+    _ak.fromCache = true
+    render_discover()
+    return
+  }
+  _ak.fromCache = false
+
   const result = await window.api.searchResearchers({ query: name, institution: '', activeOnly: false })
 
   if (!result.success || !result.results?.length) {
@@ -581,7 +614,32 @@ function akinatorReset() {
   _ak.name = ''
   _ak.all = _ak.remaining = _ak.history = []
   _ak.question = null
+  _ak.fromCache = false
   render_discover()
+}
+
+async function akinatorWrongPerson() {
+  // Remove this cached result and restart the question flow with the full candidate list
+  const normName = _ak.name.toLowerCase().replace(/[^a-z\s]/g,'').trim().split(/\s+/).sort().join(' ')
+  // Bust cache by setting savedAt far in the past
+  const entry = await api.researcherCacheGet(normName)
+  if (entry) api.researcherCacheSet({ normalizedName: normName, profile: {...entry.profile, _invalid: true}, questionsUsed: [] })
+  _ak.remaining = [..._ak.all]
+  _ak.history   = []
+  _ak.fromCache = false
+  await _akinatorNextStep()
+}
+
+async function akinatorForceRefresh() {
+  // Re-run the full search ignoring cache
+  _ak.fromCache = false
+  _ak.step      = 'searching'
+  render_discover()
+  const result = await window.api.searchResearchers({ query: _ak.name, institution: '', activeOnly: false })
+  if (!result.success || !result.results?.length) { _ak.step = 'exhausted'; _ak.remaining = []; render_discover(); return }
+  _ak.all = _ak.remaining = result.results
+  if (_ak.remaining.length === 1) { _ak.step = 'found'; render_discover(); return }
+  await _akinatorNextStep()
 }
 
 async function _akinatorNextStep() {
