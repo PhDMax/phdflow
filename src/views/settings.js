@@ -510,19 +510,21 @@ async function aiEngineInit() {
   const status = await api.odyStatus()
   _aiEngineRender(status)
   // Wire up live status updates
-  api.onOdyStatus(s => _aiEngineUpdateBadge(s.status))
+  api.onOdyStatus(s => _aiEngineUpdateBadge(s.status, s))
 }
 
-function _aiEngineUpdateBadge(status) {
+function _aiEngineUpdateBadge(status, extra = {}) {
   _aiEngineStatus = status
   const badge = document.getElementById('ai-engine-badge')
   if (!badge) return
   const map = {
-    ready:    ['bg-emerald-100 text-emerald-700', '✓ Running'],
-    starting: ['bg-amber-100 text-amber-700',     '⏳ Starting…'],
-    stopped:  ['bg-slate-100 text-slate-500',      'Stopped'],
-    error:    ['bg-rose-100 text-rose-600',        '✕ Error'],
-    unknown:  ['bg-slate-100 text-slate-400',      'Not running'],
+    ready:       ['bg-emerald-100 text-emerald-700', '✓ Running'],
+    starting:    ['bg-amber-100 text-amber-700',     '⏳ Starting…'],
+    setup:       ['bg-indigo-100 text-indigo-700',   `⚙ ${extra.step || 'Setting up…'}`],
+    setup_error: ['bg-rose-100 text-rose-600',       '✕ Setup error'],
+    stopped:     ['bg-slate-100 text-slate-500',     'Stopped'],
+    error:       ['bg-rose-100 text-rose-600',       '✕ Error'],
+    unknown:     ['bg-slate-100 text-slate-400',     'Not running'],
   }
   const [cls, label] = map[status] || map.unknown
   badge.className = `text-xs px-2 py-0.5 rounded-full font-medium ${cls}`
@@ -534,43 +536,28 @@ function _aiEngineRender(status) {
   if (!el) return
   _aiEngineUpdateBadge(status.ready ? 'ready' : status.running ? 'starting' : 'stopped')
 
-  if (!status.dir && !status.venvReady) {
-    // Not found
+  if (!status.dir) {
+    // Shouldn't happen when bundled, but handle gracefully
     el.innerHTML = `
-    <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-3">
-      <p class="text-xs font-semibold text-amber-800 mb-1">Odysseus not found</p>
-      <p class="text-xs text-amber-700 mb-3">
-        Download Odysseus and run <code>launch-windows.ps1</code> once to set it up.
-        PhDFlow will then manage it automatically.
-      </p>
-      <div class="flex gap-2">
-        <button onclick="api.openExternal('https://github.com/pewdiepie-archdaemon/odysseus')"
-          class="btn-primary text-xs py-1.5 px-3">Download Odysseus ↗</button>
-        <button onclick="aiEngineChooseDir()" class="btn-secondary text-xs py-1.5 px-3">Browse for folder…</button>
-      </div>
-    </div>
-    <p class="text-xs text-slate-400">Or point PhDFlow to an existing installation:</p>
-    <div class="flex gap-2 mt-1">
-      <input id="ai-engine-path" type="text" placeholder="Path to odysseus folder (contains app.py)"
-        class="input flex-1 text-xs"/>
-      <button onclick="aiEngineSetPath()" class="btn-secondary text-xs py-1.5 px-3">Set</button>
+    <div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
+      <p class="text-xs font-semibold text-amber-800 mb-1">AI Engine source not found</p>
+      <p class="text-xs text-amber-700 mb-2">PhDFlow couldn't locate the bundled Odysseus source.</p>
+      <button onclick="aiEngineChooseDir()" class="btn-secondary text-xs py-1.5 px-3">Browse for Odysseus folder…</button>
     </div>`
     return
   }
 
   if (status.dir && !status.venvReady) {
-    // Found but not set up
+    // Source found but venv not set up — show "first run" state
     el.innerHTML = `
-    <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-3">
-      <p class="text-xs font-semibold text-amber-800 mb-1">Odysseus found but not initialised</p>
-      <p class="text-xs text-amber-700 mb-2">
-        Run <code>launch-windows.ps1</code> once in the Odysseus folder to install Python dependencies.
-        PhDFlow will manage it automatically after that.
+    <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-3">
+      <p class="text-xs font-semibold text-indigo-900 mb-1">✨ First-time setup required</p>
+      <p class="text-xs text-indigo-700 mb-3 leading-relaxed">
+        The AI Engine needs a one-time setup to install Python packages (~5 minutes, internet required).
+        PhDFlow handles everything automatically — just click <strong>Set up & Start</strong>.
+        <br/><span class="text-indigo-500">Requires Python 3.11+ on your system.</span>
       </p>
-      <div class="flex items-center gap-2 p-2 bg-white rounded-lg border border-amber-200 text-xs text-amber-600 font-mono mb-2 break-all">
-        ${esc(status.dir)}
-      </div>
-      <button onclick="aiEngineOpenDir('${esc(status.dir)}')" class="btn-secondary text-xs py-1.5 px-3">Open folder ↗</button>
+      <button onclick="aiEngineStart()" class="btn-primary text-xs py-2 px-4">⚡ Set up & Start AI Engine</button>
     </div>`
     return
   }

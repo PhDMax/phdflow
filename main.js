@@ -47,18 +47,32 @@ function _odyConfigPath() { return path.join(app.getPath('userData'), 'odysseus-
 function _readOdyConfig()  { try { return JSON.parse(fs.readFileSync(_odyConfigPath(), 'utf-8')) } catch { return {} } }
 function _saveOdyConfig(c) { try { fs.writeFileSync(_odyConfigPath(), JSON.stringify(c), 'utf-8') } catch {} }
 
-// Search common locations for an Odysseus installation (has app.py + venv)
+// Bundled Odysseus source lives in resources/odysseus (packed by electron-builder)
+function _odyBundledDir() {
+  const inResources = path.join(process.resourcesPath || path.join(__dirname, '..'), 'odysseus')
+  if (fs.existsSync(path.join(inResources, 'app.py'))) return inResources
+  // Dev mode: source is right in the project root
+  const inDev = path.join(__dirname, 'odysseus')
+  if (fs.existsSync(path.join(inDev, 'app.py'))) return inDev
+  return null
+}
+
+// The venv lives in userData (survives app updates, not inside the asar)
+function _odyVenvDir() {
+  return path.join(getDataDir(), 'odysseus-venv')
+}
+
+// Search for an Odysseus installation — bundled first, then external paths
 function _findOdysseus() {
-  const home   = app.getPath('home')
-  const saved  = _readOdyConfig().dir
+  const bundled = _odyBundledDir()
+  if (bundled) return bundled  // always prefer the bundled copy
+  const home  = app.getPath('home')
+  const saved = _readOdyConfig().dir
   const candidates = [
     ...(saved ? [saved] : []),
     path.join(home, 'Downloads', 'odysseus-main', 'odysseus-main'),
-    path.join(home, 'Downloads', 'odysseus-main'),
     path.join(home, 'odysseus'),
     path.join(home, 'Documents', 'odysseus'),
-    path.join(app.getPath('appData'), 'odysseus'),
-    path.join(app.getPath('userData'), 'odysseus'),
     'C:\\odysseus',
   ]
   for (const p of candidates) {
@@ -67,9 +81,81 @@ function _findOdysseus() {
   return null
 }
 
-// Check whether the venv is set up (launch-windows.ps1 has been run)
-function _odyVenvReady(dir) {
-  return dir && fs.existsSync(path.join(dir, 'venv', 'Scripts', 'python.exe'))
+// Venv is ready when python.exe exists inside the dedicated venv dir
+function _odyVenvReady() {
+  return fs.existsSync(path.join(_odyVenvDir(), 'Scripts', 'python.exe'))
+}
+
+// Run first-time setup: find Python → create venv → pip install → setup.py
+async function _odyFirstTimeSetup(sourceDir) {
+  _sendStatus('setup', { step: 'Finding Python 3.11+…' })
+
+  // Find Python (py launcher or python command)
+  const findPython = async () => {
+    for (const cmd of ['py -3.13', 'py -3.12', 'py -3.11', 'python']) {
+      try {
+        const { execSync } = require('child_process')
+        const ver = execSync(`${cmd} -c "import sys; print('.'.join(map(str, sys.version_info[:2])))"`, {
+          encoding: 'utf8', timeout: 5000, windowsHide: true,
+        }).trim()
+        const [maj, min] = ver.split('.').map(Number)
+        if (maj > 3 || (maj === 3 && min >= 11)) return cmd
+      } catch {}
+    }
+    return null
+  }
+
+  const pyCmd = await findPython()
+  if (!pyCmd) {
+    _sendStatus('setup_error', { error: 'Python 3.11+ not found. Install from python.org then restart PhDFlow.' })
+    return { success: false, error: 'python_not_found' }
+  }
+
+  const venvDir = _odyVenvDir()
+  const venvPy  = path.join(venvDir, 'Scripts', 'python.exe')
+
+  // Create virtualenv if needed
+  if (!fs.existsSync(venvPy)) {
+    _sendStatus('setup', { step: 'Creating Python environment…' })
+    await new Promise((resolve, reject) => {
+      const proc = spawn(pyCmd.split(' ')[0], [...pyCmd.split(' ').slice(1), '-m', 'venv', venvDir], {
+        windowsHide: true,
+      })
+      proc.on('exit', code => code === 0 ? resolve() : reject(new Error(`venv creation failed (exit ${code})`)))
+      proc.on('error', reject)
+    })
+  }
+
+  // Install/update dependencies
+  _sendStatus('setup', { step: 'Installing AI packages (first time only, ~5 minutes)…' })
+  const reqFile = path.join(sourceDir, 'requirements.txt')
+  await new Promise((resolve, reject) => {
+    const proc = spawn(venvPy, ['-m', 'pip', 'install', '-r', reqFile, '--quiet'], {
+      windowsHide: true, cwd: sourceDir,
+    })
+    proc.stdout?.on('data', d => _sendLog(d.toString()))
+    proc.stderr?.on('data', d => _sendLog(d.toString()))
+    proc.on('exit', code => code === 0 ? resolve() : reject(new Error(`pip install failed (exit ${code})`)))
+    proc.on('error', reject)
+  })
+
+  // First-time app setup (creates DB, admin user, .env)
+  _sendStatus('setup', { step: 'Initialising Odysseus…' })
+  const dataDir = path.join(getDataDir(), 'odysseus-data')
+  fs.mkdirSync(dataDir, { recursive: true })
+  await new Promise((resolve) => {
+    const proc = spawn(venvPy, ['setup.py'], {
+      windowsHide: true, cwd: sourceDir,
+      env: { ...process.env, DATABASE_URL: `sqlite:///${path.join(dataDir, 'db.sqlite3')}` },
+    })
+    proc.stdout?.on('data', d => _sendLog(d.toString()))
+    proc.stderr?.on('data', d => _sendLog(d.toString()))
+    proc.on('exit', () => resolve())
+    proc.on('error', () => resolve())
+  })
+
+  _sendStatus('setup', { step: 'Setup complete!' })
+  return { success: true }
 }
 
 // Poll until the server responds (up to 90 s — first cold start can take a while)
@@ -86,9 +172,16 @@ async function _waitForOdysseus(seconds = 90) {
 
 async function _startManagedOdysseus(dir) {
   if (_odyProc) return { success: true, alreadyRunning: true }
-  if (!_odyVenvReady(dir)) return { success: false, error: 'setup_needed' }
 
-  const venvPy = path.join(dir, 'venv', 'Scripts', 'python.exe')
+  // Run first-time setup if venv isn't ready yet
+  if (!_odyVenvReady()) {
+    const setup = await _odyFirstTimeSetup(dir)
+    if (!setup.success) return setup
+  }
+
+  const venvPy  = path.join(_odyVenvDir(), 'Scripts', 'python.exe')
+  const dataDir = path.join(getDataDir(), 'odysseus-data')
+  fs.mkdirSync(dataDir, { recursive: true })
   _sendStatus('starting')
 
   _odyProc = spawn(
@@ -101,7 +194,10 @@ async function _startManagedOdysseus(dir) {
         AUTH_ENABLED:        'false',   // trust mode — safe on loopback
         APP_PORT:            String(ODY_PORT),
         APP_BIND:            '127.0.0.1',
-        HF_HUB_DISABLE_SYMLINKS:         '1',  // Windows symlink fix (mirrors app.py)
+        DATABASE_URL:        `sqlite:///${path.join(dataDir, 'db.sqlite3')}`,
+        SESSIONS_FILE:       path.join(dataDir, 'sessions.json'),
+        DATA_DIR:            dataDir,
+        HF_HUB_DISABLE_SYMLINKS:         '1',
         HF_HUB_DISABLE_SYMLINKS_WARNING: '1',
       },
       windowsHide: true,
@@ -167,7 +263,7 @@ ipcMain.handle('odysseus-managed-set-dir', (_, dir) => {
 ipcMain.handle('odysseus-managed-start', async (_, dir) => {
   const useDir = dir || _readOdyConfig().dir || _findOdysseus()
   if (!useDir) return { success: false, error: 'no_dir' }
-  if (dir) _saveOdyConfig({ ..._readOdyConfig(), dir: useDir })
+  if (dir && dir !== _findOdysseus()) _saveOdyConfig({ ..._readOdyConfig(), dir })
   return _startManagedOdysseus(useDir)
 })
 
@@ -176,15 +272,19 @@ ipcMain.handle('odysseus-managed-stop', () => {
   return { success: true }
 })
 
-ipcMain.handle('odysseus-managed-status', () => ({
-  running:  !!_odyProc,
-  ready:    _odyReady,
-  port:     ODY_PORT,
-  url:      `http://127.0.0.1:${ODY_PORT}`,
-  dir:      _readOdyConfig().dir || null,
-  venvReady: _odyVenvReady(_readOdyConfig().dir),
-  autoStart: !!_readOdyConfig().autoStart,
-}))
+ipcMain.handle('odysseus-managed-status', () => {
+  const dir = _findOdysseus()
+  return {
+    running:   !!_odyProc,
+    ready:     _odyReady,
+    port:      ODY_PORT,
+    url:       `http://127.0.0.1:${ODY_PORT}`,
+    dir,
+    bundled:   !!_odyBundledDir(),
+    venvReady: _odyVenvReady(),
+    autoStart: !!_readOdyConfig().autoStart,
+  }
+})
 
 ipcMain.handle('odysseus-managed-set-autostart', (_, enabled) => {
   _saveOdyConfig({ ..._readOdyConfig(), autoStart: enabled })
@@ -194,9 +294,10 @@ ipcMain.handle('odysseus-managed-set-autostart', (_, enabled) => {
 // Auto-start managed Odysseus at app launch if enabled
 app.whenReady().then(async () => {
   const cfg = _readOdyConfig()
-  if (cfg.autoStart && cfg.dir && _odyVenvReady(cfg.dir)) {
-    // Delay slightly so the window is shown first
-    setTimeout(() => _startManagedOdysseus(cfg.dir), 2000)
+  const dir = _findOdysseus()
+  if (cfg.autoStart && dir) {
+    // Delay slightly so the window is shown first, then start (setup runs automatically if needed)
+    setTimeout(() => _startManagedOdysseus(dir), 2500)
   }
 })
 

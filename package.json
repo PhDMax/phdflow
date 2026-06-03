@@ -37,12 +37,35 @@
       "main.js",
       "preload.js",
       "src/**/*",
+      "odysseus/**/*",
+      "!odysseus/venv/**/*",
+      "!odysseus/.git/**/*",
+      "!odysseus/__pycache__/**/*",
+      "!odysseus/**/__pycache__/**/*",
+      "!odysseus/**/*.pyc",
+      "!odysseus/data/**/*",
+      "!odysseus/docs/**/*",
       "node_modules/**/*",
       "!node_modules/electron/**/*",
       "!node_modules/electron-builder/**/*",
       "!node_modules/@tailwindcss/**/*",
       "!node_modules/tailwindcss/**/*",
       "!src/input.css"
+    ],
+    "extraResources": [
+      {
+        "from": "odysseus",
+        "to": "odysseus",
+        "filter": [
+          "**/*",
+          "!venv/**",
+          "!.git/**",
+          "!**/__pycache__/**",
+          "!**/*.pyc",
+          "!data/**",
+          "!docs/**"
+        ]
+      }
     ],
     "win": {
       "icon": "build/icon.png",
