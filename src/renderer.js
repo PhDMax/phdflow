@@ -143,7 +143,7 @@ function applyFont(font) {
 // ── Onboarding + view init are called after login via loadAndShowApp() ─────────
 
 // ── Onboarding — Step 1: Identity & Theme ────────────────────────────────────
-function showOnboarding() {
+function showOnboarding(prefillName = '') {
   window._onboardTheme = 'light'
   document.getElementById('view-content').innerHTML = `
   <div class="flex-1 flex items-center justify-center p-8 h-full overflow-y-auto">
@@ -161,6 +161,7 @@ function showOnboarding() {
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1.5">What's your name?</label>
           <input id="onboard-name" type="text" placeholder="e.g. Anya Sharma"
+            value="${esc(prefillName)}"
             class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             onkeydown="if(event.key==='Enter')onboardNext()"/>
         </div>
@@ -878,7 +879,21 @@ async function loadAndShowApp() {
   ])
   updateSidebarProfile()
   renderSidebar()
-  if (!state.profile) { showOnboarding(); return }
+  if (!state.profile) {
+    // Pre-fill name from auth so users don't have to type it twice
+    const authName = await window.api.authGetName().catch(() => null)
+    showOnboarding(authName || '')
+    return
+  }
+  // If profile exists but name is empty, recover it from the auth record
+  if (!state.profile.name) {
+    const authName = await window.api.authGetName().catch(() => null)
+    if (authName) {
+      state.profile.name   = authName
+      state.profile.avatar = authName[0].toUpperCase()
+      await save('profile')
+    }
+  }
   showView('dashboard')
   scheduleEventReminders()
   startDarkSchedule()
@@ -894,12 +909,17 @@ window.api.onAuthLocked(() => {
 })
 
 // ── Global Search ─────────────────────────────────────────────────────────────
-let _gsearchIdx = -1
+let _gsearchIdx       = -1
+let _gsearchPrevFocus = null  // restore focus on close
 
 function openGlobalSearch() {
   const ol = document.getElementById('gsearch-overlay')
   if (!ol) return
-  ol.style.display = 'flex'
+  // Remember what had focus so we can restore it on close
+  _gsearchPrevFocus = document.activeElement
+  ol.style.display  = 'flex'
+  ol.style.opacity  = '0'
+  requestAnimationFrame(() => { ol.style.transition = 'opacity .12s'; ol.style.opacity = '1' })
   const inp = document.getElementById('gsearch-input')
   if (inp) { inp.value = ''; inp.focus() }
   document.getElementById('gsearch-results').innerHTML = `<div style="padding:2rem;text-align:center;color:#94a3b8;font-size:.85rem">Start typing to search across your research workspace…</div>`
@@ -908,8 +928,11 @@ function openGlobalSearch() {
 
 function closeGlobalSearch() {
   const ol = document.getElementById('gsearch-overlay')
-  if (ol) ol.style.display = 'none'
+  if (ol) { ol.style.display = 'none'; ol.style.opacity = '' }
   _gsearchIdx = -1
+  // Restore focus to whatever the user was doing before the search opened
+  try { _gsearchPrevFocus?.focus() } catch {}
+  _gsearchPrevFocus = null
 }
 
 function _runGlobalSearch(q) {
@@ -1075,8 +1098,8 @@ document.addEventListener('keydown', e => {
   const inInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
     || document.activeElement?.contentEditable === 'true'
 
-  // Ctrl+K / Cmd+K — global search
-  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+  // Ctrl+K / Cmd+K — global search (always fires even in inputs so it works universally)
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
     e.preventDefault()
     const ol = document.getElementById('gsearch-overlay')
     if (ol?.style.display !== 'none') closeGlobalSearch()
