@@ -300,23 +300,43 @@ function _normName(n) {
   return (n||'').toLowerCase().replace(/[^a-z\s]/g,'').trim().split(/\s+/).sort().join(' ')
 }
 
-ipcMain.handle('search-researchers', async (_, query) => {
+ipcMain.handle('search-researchers', async (_, queryOrOpts) => {
   try {
-    const nameOnly = query.split(' ').slice(0, 3).join(' ')  // first 3 words = name
+    // Accept both legacy string and new options object
+    const opts        = typeof queryOrOpts === 'string' ? { query: queryOrOpts } : (queryOrOpts || {})
+    const rawQuery    = (opts.query || '').trim()
+    const institution = (opts.institution || '').trim()
+    const activeOnly  = !!opts.activeOnly
+
+    // S2 query: name only (first 3 words). Adding institution sometimes helps
+    // disambiguation on common names (e.g. "John Smith MIT").
+    const nameOnly  = rawQuery.split(/\s+/).slice(0, 3).join(' ')
+    const s2Query   = institution ? `${nameOnly} ${institution}`.trim() : nameOnly
+
     const sig = AbortSignal.timeout(12000)
 
-    // S2: include externalIds to get ORCID directly
     const s2Fields = 'name,affiliations,homepage,paperCount,citationCount,hIndex,externalIds'
-    // OA: use `topics` (not deprecated x_concepts), request summary_stats, affiliations, ids
     const oaSelect = 'id,display_name,works_count,cited_by_count,summary_stats,affiliations,last_known_institutions,ids,topics,works_api_url'
+
+    // Build OA filter: institution + optional active-only constraint
+    const oaFilters = []
+    if (institution) {
+      // Fuzzy institution name search in OA
+      oaFilters.push(`last_known_institutions.display_name.search:${encodeURIComponent(institution)}`)
+    }
+    if (activeOnly) {
+      // Researchers cited in the last 2 years are still active in the field
+      oaFilters.push('summary_stats.2yr_cited_by_count:>0')
+    }
+    const oaFilterParam = oaFilters.length ? `&filter=${oaFilters.join(',')}` : ''
 
     const [s2Res, oaRes] = await Promise.allSettled([
       fetch(
-        `https://api.semanticscholar.org/graph/v1/author/search?query=${encodeURIComponent(nameOnly)}&fields=${s2Fields}&limit=8`,
+        `https://api.semanticscholar.org/graph/v1/author/search?query=${encodeURIComponent(s2Query)}&fields=${s2Fields}&limit=8`,
         { headers: { 'User-Agent': 'PhDFlow/0.10 (open-source)' }, signal: sig }
       ).then(r => r.json()),
       fetch(
-        `https://api.openalex.org/authors?search=${encodeURIComponent(nameOnly)}&select=${oaSelect}&per-page=8`,
+        `https://api.openalex.org/authors?search=${encodeURIComponent(nameOnly)}&select=${oaSelect}${oaFilterParam}&per-page=8`,
         { headers: { 'User-Agent': 'PhDFlow/0.10 (mailto:phd-cc@example.com)' }, signal: sig }
       ).then(r => r.json()),
     ])
@@ -392,10 +412,37 @@ ipcMain.handle('search-researchers', async (_, query) => {
       })
     }
 
-    // Sort by h-index descending — most prominent person with this name floats up
-    merged.sort((a, b) => (b.hIndex || 0) - (a.hIndex || 0))
+    // Tag active researchers: has been cited in the last 2 years (from OA)
+    // We'll also check recentPapers later to refine this.
+    for (const r of merged) {
+      const oaEntry = [...(oaRes.status === 'fulfilled' ? (oaRes.value.results || []) : [])]
+        .find(o => {
+          const orcid = o.ids?.orcid?.replace('https://orcid.org/','') || null
+          if (orcid && r.orcid && orcid === r.orcid) return true
+          return _normName(o.display_name) === _normName(r.name)
+        })
+      r.isActive = oaEntry ? (oaEntry.summary_stats?.['2yr_cited_by_count'] || 0) > 0 : null
+    }
 
-    const top = merged.slice(0, 8)
+    // Scoring: h-index base, boosted when institution matches the filter
+    const instLower = institution.toLowerCase()
+    merged.sort((a, b) => {
+      let scoreA = a.hIndex || 0
+      let scoreB = b.hIndex || 0
+      // Boost by 1000 if institution matches (ensures institution-filtered results stay on top)
+      if (institution) {
+        const affsA = (a.affiliations || []).join(' ').toLowerCase()
+        const affsB = (b.affiliations || []).join(' ').toLowerCase()
+        if (affsA.includes(instLower)) scoreA += 1000
+        if (affsB.includes(instLower)) scoreB += 1000
+      }
+      return scoreB - scoreA
+    })
+
+    // Apply activeOnly post-filter on the merged list (belt-and-suspenders:
+    // OA already filtered by activity, this catches any S2-only results)
+    const filtered = activeOnly ? merged.filter(r => r.isActive !== false) : merged
+    const top = filtered.slice(0, 8)
 
     // Fetch top 5 recent papers for S2-based results (parallel, non-blocking)
     await Promise.allSettled(
@@ -411,13 +458,17 @@ ipcMain.handle('search-researchers', async (_, query) => {
             )
             if (!r.ok) return
             const data = await r.json()
-            author.recentPapers = (data.data || []).slice(0, 5).map(p => ({
+            const papers = (data.data || []).slice(0, 5).map(p => ({
               title:     p.title || '',
               year:      p.year || null,
               citations: p.citationCount || 0,
               venue:     p.venue || null,
               doi:       p.externalIds?.DOI || null,
             }))
+            author.recentPapers = papers
+            // Refine isActive: a paper in the last 3 years = definitely active
+            const cutoff = new Date().getFullYear() - 3
+            if (papers.some(p => p.year && p.year >= cutoff)) author.isActive = true
           } catch {}
         })
     )

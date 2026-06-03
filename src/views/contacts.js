@@ -6,8 +6,9 @@ let _discTab      = 'search'   // 'search' | 'following'
 let _discFollowed = new Set()  // S2 IDs being followed
 let _discFollowData = []       // [{id, name, institution, s2Id, s2Url, lastChecked, ...}]
 let _discInited   = false
-let _discMode     = 'name'     // 'name' | 'describe'
-let _discAiQuery  = ''         // last natural-language query for context
+let _discMode        = 'name'  // 'name' | 'describe'
+let _discAiQuery     = ''      // last natural-language query for context
+let _discActiveOnly  = false   // filter: only show recently active researchers
 
 async function _initDiscover() {
   if (_discInited) return
@@ -79,7 +80,16 @@ function render_discover() {
           Search
         </button>
       </div>
-      <p class="text-xs text-slate-400 pb-2">Semantic Scholar + OpenAlex · 260M+ papers · No API key</p>
+      <div class="flex items-center gap-2 pb-2">
+        <p class="text-xs text-slate-400">Semantic Scholar + OpenAlex · 260M+ papers</p>
+        <button onclick="_discActiveOnly=!_discActiveOnly;render_discover()"
+          class="text-xs px-2.5 py-1 rounded-full border font-medium transition-colors flex-shrink-0
+            ${_discActiveOnly
+              ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
+              : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'}">
+          🕐 Active in last 3 years
+        </button>
+      </div>
       ` : `
       <div class="py-2 space-y-2">
         <textarea id="disc-describe" rows="3" placeholder="e.g. A PI at a German university working on synaptic plasticity using calcium imaging, active in the last 5 years"
@@ -190,8 +200,11 @@ async function doDescribeSearch() {
   }
 
   // Step 2: Search using extracted terms
-  const combined = [searchName, searchInst].filter(Boolean).join(' ')
-  const result   = await window.api.searchResearchers(combined)
+  const result = await window.api.searchResearchers({
+    query:       searchName || description,
+    institution: searchInst,
+    activeOnly:  _discActiveOnly,
+  })
 
   if (!result.success || !result.results?.length) {
     _discSetState('error', 'No researchers found for that description. Try rephrasing.')
@@ -238,12 +251,20 @@ async function doResearcherSearch() {
   const query = (document.getElementById('disc-query')?.value || '').trim()
   const inst  = (document.getElementById('disc-inst')?.value  || '').trim()
   if (!query) return
-  const combined = inst ? `${query} ${inst}` : query
   _discSetState('loading')
-  const result = await window.api.searchResearchers(combined)
+  const result = await window.api.searchResearchers({
+    query,
+    institution: inst,
+    activeOnly:  _discActiveOnly,
+  })
   if (!result.success) { _discSetState('error', result.error); return }
   state.searchResults = result.results || []
-  if (!state.searchResults.length) { _discSetState('error','No researchers found. Try a different name.'); return }
+  if (!state.searchResults.length) {
+    _discSetState('error', inst
+      ? `No researchers named "${query}" found at "${inst}". Try a broader institution name.`
+      : 'No researchers found. Try a different name.')
+    return
+  }
   _discSetState('results')
   const container = document.getElementById('disc-results')
   if (container) container.innerHTML = _buildResultCards(state.searchResults)
@@ -281,8 +302,12 @@ function _buildResultCards(results) {
           ${initials(r.name)}
         </div>
         <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-1.5 flex-wrap">
           <p class="font-bold text-slate-900">${esc(r.name)}</p>
+          ${r.isActive === true  ? `<span class="text-xs bg-emerald-100 text-emerald-700 px-1.5 py-px rounded-full font-medium">● Active</span>` : ''}
+          ${r.isActive === false ? `<span class="text-xs bg-slate-100 text-slate-400 px-1.5 py-px rounded-full">inactive?</span>` : ''}
           ${r._aiScore ? `<span class="text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-semibold">✨ ${r._aiScore}/10${r._aiMatch ? ' · ' + esc(r._aiMatch) : ''}</span>` : ''}
+        </div>
           <p class="text-sm text-slate-500 truncate">🏛️ ${esc(r.institution || 'Unknown institution')}</p>
           ${(r.affiliations||[]).length > 1
             ? `<p class="text-xs text-slate-400 truncate">${r.affiliations.slice(1,3).map(a=>esc(a)).join(' · ')}</p>`
