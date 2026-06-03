@@ -94,11 +94,11 @@ function render_dashboard() {
 
     <!-- ── AI Engine prompt (shown only when not set up) ─────────────────── -->
     ${!_aiAvailable() ? `
-    <div class="mx-6 mt-4 bg-gradient-to-r from-indigo-50 to-violet-50 border border-indigo-200 rounded-2xl px-5 py-4 flex items-center gap-4">
+    <div id="dash-ai-banner" class="mx-6 mt-4 border rounded-2xl px-5 py-4 flex items-center gap-4">
       <div class="text-2xl flex-shrink-0">✨</div>
       <div class="flex-1 min-w-0">
-        <p class="text-sm font-semibold text-slate-900">Activate AI features</p>
-        <p class="text-xs text-slate-500 mt-0.5">Paper summaries · Grant writing · Smart researcher search · Feed ranking — all free, runs on your machine.</p>
+        <p class="text-sm font-semibold" id="dash-ai-banner-title">Activate AI features</p>
+        <p class="text-xs mt-0.5" id="dash-ai-banner-desc">Paper summaries · Grant writing · Smart researcher search · Feed ranking — all free, runs on your machine.</p>
       </div>
       <button onclick="showView('settings');setTimeout(()=>settingsTab('app'),100)"
         class="flex-shrink-0 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl transition-colors">
