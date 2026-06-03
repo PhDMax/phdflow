@@ -416,11 +416,25 @@ function renderAppTab(body) {
         <h3 class="text-sm font-bold text-slate-700">✨ AI Engine (Odysseus)</h3>
         <div id="ai-engine-badge" class="text-xs px-2 py-0.5 rounded-full font-medium bg-slate-100 text-slate-400">Not running</div>
       </div>
-      <p class="text-xs text-slate-400 mb-4 leading-relaxed">
-        PhDFlow can automatically start and manage a local Odysseus instance — no manual setup, no API keys.
-        All AI features work out of the box once Odysseus is installed.
-        <button onclick="api.openExternal('https://github.com/pewdiepie-archdaemon/odysseus')" class="text-indigo-500 hover:underline ml-1">Get Odysseus ↗</button>
+      <p class="text-xs text-slate-400 mb-3 leading-relaxed">
+        PhDFlow includes a built-in AI engine that runs entirely on your computer — no API keys, no subscriptions, no data leaving your machine.
       </p>
+      <div class="grid grid-cols-2 gap-1.5 mb-4 text-xs text-slate-600">
+        ${[
+          ['📄','Paper summaries','One click → key findings from any abstract'],
+          ['✍️','Grant writing','Draft Specific Aims, Significance & Approach'],
+          ['📝','Note assist','Expand notes, extract action items, improve writing'],
+          ['📡','Feed ranking','Score papers 1–10 by relevance to your field'],
+          ['🧞','Smart researcher search','Find the right person with guided questions'],
+        ].map(([icon, title, desc]) => `
+        <div class="flex items-start gap-2 p-2 bg-slate-50 rounded-xl">
+          <span class="text-base flex-shrink-0 mt-0.5">${icon}</span>
+          <div>
+            <div class="font-semibold text-slate-700 text-xs">${title}</div>
+            <div class="text-slate-400 text-[11px] leading-tight mt-0.5">${desc}</div>
+          </div>
+        </div>`).join('')}
+      </div>
 
       <div id="ai-engine-content">
         <div class="text-xs text-slate-400 italic">Detecting Odysseus…</div>
@@ -548,16 +562,29 @@ function _aiEngineRender(status) {
   }
 
   if (status.dir && !status.venvReady) {
-    // Source found but venv not set up — show "first run" state
     el.innerHTML = `
-    <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-3">
-      <p class="text-xs font-semibold text-indigo-900 mb-1">✨ First-time setup required</p>
-      <p class="text-xs text-indigo-700 mb-3 leading-relaxed">
-        The AI Engine needs a one-time setup to install Python packages (~5 minutes, internet required).
-        PhDFlow handles everything automatically — just click <strong>Set up & Start</strong>.
-        <br/><span class="text-indigo-500">Requires Python 3.11+ on your system.</span>
-      </p>
-      <button onclick="aiEngineStart()" class="btn-primary text-xs py-2 px-4">⚡ Set up & Start AI Engine</button>
+    <div class="bg-gradient-to-br from-indigo-50 to-violet-50 border border-indigo-200 rounded-xl p-5">
+      <div class="flex items-start gap-3 mb-4">
+        <div class="text-3xl">✨</div>
+        <div>
+          <p class="text-sm font-bold text-slate-900 mb-1">Ready to activate AI features</p>
+          <p class="text-xs text-slate-600 leading-relaxed">
+            One-time setup installs the AI packages on your machine (~5 minutes, needs internet).
+            After that, everything runs locally — no accounts, no subscriptions, no limits.
+          </p>
+        </div>
+      </div>
+      <div class="bg-white/70 rounded-xl p-3 mb-4 text-xs text-slate-600 space-y-1">
+        <div class="font-semibold text-slate-700 mb-1">What happens when you click Set up:</div>
+        <div>① PhDFlow finds Python 3.11+ on your computer</div>
+        <div>② Downloads and installs AI packages (~200 MB)</div>
+        <div>③ Starts the AI engine automatically</div>
+        <div>④ All ✨ features activate across the app</div>
+      </div>
+      <div class="flex items-center gap-3">
+        <button onclick="aiEngineStart()" class="btn-primary text-sm py-2.5 px-5">⚡ Set up AI Engine (free)</button>
+        <span class="text-xs text-slate-400">Requires Python 3.11+ · <button onclick="api.openExternal('https://www.python.org/downloads/')" class="text-indigo-500 hover:underline">Get Python ↗</button></span>
+      </div>
     </div>`
     return
   }
