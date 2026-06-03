@@ -2,13 +2,23 @@
 
 // ── Discover state ────────────────────────────────────────────────────────────
 
-let _discTab      = 'search'   // 'search' | 'following'
+let _discTab      = 'find'     // 'find' | 'following'
 let _discFollowed = new Set()  // S2 IDs being followed
 let _discFollowData = []       // [{id, name, institution, s2Id, s2Url, lastChecked, ...}]
 let _discInited   = false
 let _discMode        = 'name'  // 'name' | 'describe'
 let _discAiQuery     = ''      // last natural-language query for context
 let _discActiveOnly  = false   // filter: only show recently active researchers
+
+// ── Akinator state ────────────────────────────────────────────────────────────
+const _ak = {
+  step:      'idle',  // idle | searching | asking | found | exhausted
+  name:      '',
+  all:       [],      // all candidates from initial search
+  remaining: [],      // candidates still in play after answers
+  history:   [],      // [{q, a}] — trail of answered questions
+  question:  null,    // {text, options:[{label, fn}]}
+}
 
 async function _initDiscover() {
   if (_discInited) return
@@ -40,10 +50,10 @@ function render_discover() {
     <!-- Tabs + search bar -->
     <div class="bg-white border-b border-slate-200 px-6 pt-0 flex-shrink-0">
       <div class="flex gap-1 border-b border-slate-200 -mb-px">
-        <button onclick="_discTab='search';render_discover()"
+        <button onclick="_discTab='find';render_discover()"
           class="px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors
-            ${_discTab==='search' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}">
-          🔍 Search
+            ${_discTab==='find' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}">
+          🧞 Find a Researcher
         </button>
         <button onclick="_discTab='following';render_discover()"
           class="px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors
@@ -52,63 +62,11 @@ function render_discover() {
         </button>
       </div>
 
-      ${_discTab === 'search' ? `
-      <!-- Mode toggle -->
-      <div class="flex gap-1 pt-2 pb-1">
-        <button onclick="_discMode='name';render_discover()"
-          class="px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${_discMode==='name'?'bg-indigo-100 text-indigo-700':'text-slate-500 hover:bg-slate-100'}">
-          🔍 Search by name
-        </button>
-        ${_aiAvailable() ? `
-        <button onclick="_discMode='describe';render_discover()"
-          class="px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${_discMode==='describe'?'bg-violet-100 text-violet-700':'text-slate-500 hover:bg-slate-100'}">
-          ✨ Describe who you're looking for
-        </button>` : ''}
-      </div>
-
-      ${_discMode === 'name' ? `
-      <div class="py-2 flex gap-2">
-        <input id="disc-query" type="text" placeholder="Researcher name (e.g. Jennifer Doudna)"
-          class="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-sm
-            focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          onkeydown="if(event.key==='Enter')doResearcherSearch()"/>
-        <input id="disc-inst" type="text" placeholder="Institution (optional)"
-          class="w-40 px-3 py-2.5 rounded-xl border border-slate-200 text-sm
-            focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
-        <button onclick="doResearcherSearch()"
-          class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-colors">
-          Search
-        </button>
-      </div>
-      <div class="flex items-center gap-2 pb-2">
-        <p class="text-xs text-slate-400">Semantic Scholar + OpenAlex · 260M+ papers</p>
-        <button onclick="_discActiveOnly=!_discActiveOnly;render_discover()"
-          class="text-xs px-2.5 py-1 rounded-full border font-medium transition-colors flex-shrink-0
-            ${_discActiveOnly
-              ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
-              : 'bg-white text-slate-400 border-slate-200 hover:border-slate-300'}">
-          🕐 Active in last 3 years
-        </button>
-      </div>
-      ` : `
-      <div class="py-2 space-y-2">
-        <textarea id="disc-describe" rows="3" placeholder="e.g. A PI at a German university working on synaptic plasticity using calcium imaging, active in the last 5 years"
-          class="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm
-            focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"></textarea>
-        <div class="flex items-center justify-between">
-          <p class="text-xs text-slate-400">AI extracts search terms then ranks results by match</p>
-          <button onclick="doDescribeSearch()"
-            class="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold rounded-xl transition-colors">
-            ✨ Find researchers
-          </button>
-        </div>
-      </div>`}
-      ` : ''}
     </div>
 
     <!-- Content -->
     <div class="flex-1 overflow-y-auto p-6">
-      ${_discTab === 'search' ? _discSearchPanel() : _discFollowingPanel()}
+      ${_discTab === 'find' ? _discAkinatorPanel() : _discFollowingPanel()}
     </div>
   </div>`
 }
@@ -445,6 +403,355 @@ async function discUnfollow(id) {
 }
 
 // discRecentPapers removed — papers now pre-loaded in main.js search-researchers handler
+
+// ══ Akinator — step-by-step researcher finder ═════════════════════════════════
+
+function _discAkinatorPanel() {
+  if (_ak.step === 'idle') return `
+  <div class="max-w-xl mx-auto py-8">
+    <div class="text-center mb-8">
+      <div class="text-5xl mb-3">🧞</div>
+      <h2 class="text-xl font-bold text-slate-900 mb-2">Researcher Finder</h2>
+      <p class="text-sm text-slate-500 leading-relaxed">
+        Think of a researcher. I'll ask a few questions to find them — starting from their name.
+      </p>
+    </div>
+    <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+      <label class="block text-sm font-semibold text-slate-700 mb-2">What's their name?</label>
+      <div class="flex gap-2">
+        <input id="ak-name" type="text" placeholder="e.g. Jennifer Doudna"
+          class="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          onkeydown="if(event.key==='Enter')akinatorStart()"/>
+        <button onclick="akinatorStart()"
+          class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-colors">
+          Start →
+        </button>
+      </div>
+      <p class="text-xs text-slate-400 mt-2">Don't know the exact name? Type a partial name or just their institution and field — I'll narrow it down from there.</p>
+    </div>
+  </div>`
+
+  if (_ak.step === 'searching') return `
+  <div class="max-w-xl mx-auto py-16 text-center">
+    <div class="text-4xl mb-4">🧞</div>
+    <div class="flex items-center justify-center gap-2 text-slate-500">
+      <div class="w-4 h-4 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin"></div>
+      <span class="text-sm">Searching for "${esc(_ak.name)}"…</span>
+    </div>
+  </div>`
+
+  // History trail
+  const trail = _ak.history.length ? `
+  <div class="flex flex-wrap gap-1.5 mb-5">
+    ${_ak.history.map(h => `
+    <span class="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full">
+      ${esc(h.q)}: <strong>${esc(h.a)}</strong>
+    </span>`).join('')}
+  </div>` : ''
+
+  if (_ak.step === 'found') {
+    const r = _ak.remaining[0]
+    if (!r) return ''
+    const saved    = state.contacts.some(c => c.s2Id===r.id || c.name===r.name)
+    const followed = _discFollowed.has(r.id)
+    return `
+    <div class="max-w-xl mx-auto">
+      <div class="flex items-center gap-2 mb-4">
+        <div class="text-2xl">🧞</div>
+        <div>
+          <p class="font-bold text-slate-900">Found them!</p>
+          <p class="text-xs text-slate-400">from ${_ak.all.length} candidates → ${_ak.history.length} question${_ak.history.length!==1?'s':''}</p>
+        </div>
+        <button onclick="akinatorReset()" class="ml-auto text-xs text-slate-400 hover:text-slate-600 hover:underline">Start over</button>
+      </div>
+      ${trail}
+      ${_buildResultCards([r])}
+    </div>`
+  }
+
+  if (_ak.step === 'exhausted') return `
+  <div class="max-w-xl mx-auto">
+    <div class="flex items-center gap-2 mb-4">
+      <div class="text-2xl">🧞</div>
+      <div>
+        <p class="font-bold text-slate-900">I'm not sure — are any of these them?</p>
+        <p class="text-xs text-slate-400">${_ak.remaining.length} candidate${_ak.remaining.length!==1?'s':''} remain after ${_ak.history.length} question${_ak.history.length!==1?'s':''}</p>
+      </div>
+      <button onclick="akinatorReset()" class="ml-auto text-xs text-slate-400 hover:text-slate-600 hover:underline">Start over</button>
+    </div>
+    ${trail}
+    ${_buildResultCards(_ak.remaining.slice(0,5))}
+  </div>`
+
+  // step === 'asking'
+  const q = _ak.question
+  return `
+  <div class="max-w-xl mx-auto">
+    <div class="flex items-center gap-2 mb-5">
+      <div class="text-2xl">🧞</div>
+      <div>
+        <p class="text-xs text-slate-500">Thinking of <strong>${esc(_ak.name)}</strong> · ${_ak.remaining.length} candidate${_ak.remaining.length!==1?'s':''} · question ${_ak.history.length+1}</p>
+      </div>
+      <button onclick="akinatorReset()" class="ml-auto text-xs text-slate-400 hover:text-slate-600 hover:underline">Start over</button>
+    </div>
+    ${trail}
+
+    <div class="bg-white rounded-2xl border border-indigo-100 shadow-sm p-6">
+      <p class="text-base font-semibold text-slate-900 mb-5">${esc(q.text)}</p>
+      <div class="grid gap-2 ${q.options.length <= 2 ? 'grid-cols-2' : 'grid-cols-1'}">
+        ${q.options.map((o, i) => `
+        <button onclick="akinatorAnswer(${i})"
+          class="w-full text-left px-4 py-3 rounded-xl border-2 border-slate-200
+            hover:border-indigo-400 hover:bg-indigo-50 hover:text-indigo-800
+            text-sm font-medium text-slate-700 transition-all">
+          ${esc(o.label)}
+        </button>`).join('')}
+      </div>
+      <button onclick="akinatorSkip()" class="mt-3 text-xs text-slate-400 hover:text-slate-600 hover:underline w-full text-center">
+        Not sure / skip this question
+      </button>
+    </div>
+  </div>`
+}
+
+// ── Akinator actions ──────────────────────────────────────────────────────────
+
+async function akinatorStart() {
+  const name = (document.getElementById('ak-name')?.value || '').trim()
+  if (!name) return
+  _ak.name      = name
+  _ak.step      = 'searching'
+  _ak.history   = []
+  _ak.question  = null
+  render_discover()
+
+  const result = await window.api.searchResearchers({ query: name, institution: '', activeOnly: false })
+
+  if (!result.success || !result.results?.length) {
+    _ak.step = 'exhausted'
+    _ak.remaining = []
+    _ak.all = []
+    render_discover()
+    return
+  }
+
+  _ak.all       = result.results
+  _ak.remaining = [...result.results]
+
+  if (_ak.remaining.length === 1) {
+    _ak.step = 'found'
+    render_discover()
+    return
+  }
+
+  await _akinatorNextStep()
+}
+
+async function akinatorAnswer(optionIndex) {
+  const opt = _ak.question?.options?.[optionIndex]
+  if (!opt) return
+
+  _ak.history.push({ q: _ak.question.shortText || _ak.question.text, a: opt.label })
+  _ak.remaining = opt.fn(_ak.remaining)
+
+  if (_ak.remaining.length === 0) {
+    // Filtered too aggressively — restore to last known good set and exhaust
+    _ak.remaining = _ak.all.slice(0, 5)
+    _ak.step = 'exhausted'
+    render_discover()
+    return
+  }
+  if (_ak.remaining.length === 1) {
+    _ak.step = 'found'
+    render_discover()
+    return
+  }
+
+  await _akinatorNextStep()
+}
+
+function akinatorSkip() {
+  // Don't filter, just try next question
+  _ak.history.push({ q: _ak.question.shortText || _ak.question.text, a: 'Skipped' })
+  _akinatorNextStep()
+}
+
+function akinatorReset() {
+  _ak.step = 'idle'
+  _ak.name = ''
+  _ak.all = _ak.remaining = _ak.history = []
+  _ak.question = null
+  render_discover()
+}
+
+async function _akinatorNextStep() {
+  // Try Odysseus for smarter questions when available
+  if (_aiAvailable() && _ak.remaining.length <= 8) {
+    const odysseusQ = await _akinatorOdysseyQuestion(_ak.remaining)
+    if (odysseusQ) {
+      _ak.question = odysseusQ
+      _ak.step     = 'asking'
+      render_discover()
+      return
+    }
+  }
+  // Fallback: rule-based
+  const q = _akinatorRuleQuestion(_ak.remaining)
+  if (!q) {
+    _ak.step = 'exhausted'
+    render_discover()
+    return
+  }
+  _ak.question = q
+  _ak.step     = 'asking'
+  render_discover()
+}
+
+// ── Odysseus-powered question generation ──────────────────────────────────────
+
+async function _akinatorOdysseyQuestion(candidates) {
+  const list = candidates.map((c,i) =>
+    `${i+1}. ${c.name}${c.institution?' at '+c.institution:''}${(c.topics||[]).length?' — '+c.topics.slice(0,3).join(', '):''} (h-index: ${c.hIndex||0})`
+  ).join('\n')
+
+  const r = await _aiCall(
+    `I'm trying to identify a specific researcher from this list:\n${list}\n\nAsk the single most discriminating yes/no or multiple-choice question to narrow it down. The question should be answerable by anyone who knows this researcher.\n\nReturn ONLY JSON:\n{"question":"full question text","short":"3-5 word label","options":["option1","option2"...],"split":[[0,2],[1,3]]}
+\nwhere split is an array of arrays of candidate indices (0-based) for each option.`,
+    'You are helping identify a researcher with yes/no questions like the game Akinator. Return only valid JSON.'
+  )
+
+  if (!r.success) return null
+  try {
+    const txt  = r.response.replace(/```(?:json)?\n?/g,'').replace(/```/g,'').trim()
+    const data = JSON.parse(txt.slice(txt.search(/[{[]/)))
+    if (!data.question || !Array.isArray(data.options) || !Array.isArray(data.split)) return null
+
+    return {
+      text:      data.question,
+      shortText: data.short || data.question.slice(0, 40),
+      options:   data.options.map((label, i) => ({
+        label,
+        fn: (cs) => {
+          const idxSet = new Set(data.split[i] || [])
+          // Map split indices back to the current candidates list by position
+          return cs.filter((_, pos) => idxSet.has(pos))
+        },
+      })),
+    }
+  } catch { return null }
+}
+
+// ── Rule-based question generation (no Odysseus) ──────────────────────────────
+
+function _akinatorRuleQuestion(candidates) {
+  // 1. Topics: find one that splits candidates closest to 50/50
+  const topicFreq = {}
+  candidates.forEach(c => (c.topics||[]).forEach(t => {
+    topicFreq[t] = (topicFreq[t]||0) + 1
+  }))
+  const half = candidates.length / 2
+  const bestTopics = Object.entries(topicFreq)
+    .filter(([,n]) => n >= 1 && n < candidates.length)
+    .sort((a,b) => Math.abs(a[1]-half) - Math.abs(b[1]-half))
+    .slice(0, 3)
+
+  if (bestTopics.length) {
+    const topic = bestTopics[0][0]
+    const inTopic    = candidates.filter(c => (c.topics||[]).includes(topic))
+    const notInTopic = candidates.filter(c => !(c.topics||[]).includes(topic))
+    if (inTopic.length && notInTopic.length) return {
+      text:      `Does their research involve "${topic}"?`,
+      shortText: `Topic: ${topic}`,
+      options: [
+        { label: `✓ Yes, ${topic}`, fn: () => inTopic    },
+        { label: `✗ No`,            fn: () => notInTopic  },
+      ],
+    }
+  }
+
+  // 2. Region
+  const regionMap = {}
+  candidates.forEach(c => {
+    const reg = _discRegionOf(c.affiliations)
+    if (reg) regionMap[reg] = [...(regionMap[reg]||[]), c]
+  })
+  const regions = Object.keys(regionMap).filter(r => regionMap[r].length < candidates.length)
+  if (regions.length >= 2) return {
+    text:      'Which region are they based in?',
+    shortText: 'Region',
+    options: regions.slice(0,4).map(r => ({
+      label: r,
+      fn:    () => regionMap[r] || [],
+    })).concat(
+      regions.length > 4 ? [{ label: 'Somewhere else', fn: () => candidates.filter(c => !regions.slice(0,4).includes(_discRegionOf(c.affiliations))) }] : []
+    ),
+  }
+
+  // 3. Prominence (h-index)
+  const maxH = Math.max(...candidates.map(c => c.hIndex||0))
+  const minH = Math.min(...candidates.map(c => c.hIndex||0))
+  if (maxH - minH > 15) {
+    const mid = Math.round((maxH + minH) / 2)
+    const senior = candidates.filter(c => (c.hIndex||0) >= mid)
+    const junior = candidates.filter(c => (c.hIndex||0) <  mid)
+    if (senior.length && junior.length) return {
+      text:      `Are they a senior / well-established researcher? (very prominent in their field)`,
+      shortText: 'Seniority',
+      options: [
+        { label: 'Yes, senior & well-cited', fn: () => senior },
+        { label: 'No, earlier career stage',  fn: () => junior },
+      ],
+    }
+  }
+
+  // 4. Institution
+  const instGroups = {}
+  candidates.forEach(c => {
+    if (c.institution) instGroups[c.institution] = [...(instGroups[c.institution]||[]), c]
+  })
+  const insts = Object.keys(instGroups).filter(i => instGroups[i].length < candidates.length)
+  if (insts.length >= 2) return {
+    text:      'Which institution are they at?',
+    shortText: 'Institution',
+    options: insts.slice(0,4).map(inst => ({
+      label: inst,
+      fn:    () => instGroups[inst],
+    })),
+  }
+
+  // 5. Recent activity
+  const active   = candidates.filter(c => c.isActive === true)
+  const inactive = candidates.filter(c => c.isActive === false)
+  if (active.length && inactive.length) return {
+    text:      'Have they published recently in the last few years?',
+    shortText: 'Active?',
+    options: [
+      { label: 'Yes, still publishing',      fn: () => active   },
+      { label: 'Not sure / older career',    fn: () => inactive },
+    ],
+  }
+
+  return null  // Can't narrow down further
+}
+
+// Map affiliation strings to a broad region label
+function _discRegionOf(affiliations) {
+  const s = (affiliations||[]).join(' ').toLowerCase()
+  if (/harvard|mit\b|stanford|berkeley|caltech|columbia|yale|princeton|cornell|nyu|ucla|uc\s|johns hopkins|carnegie mellon|chicago|michigan|wisconsin|texas|duke|vanderbilt|rice|tufts|brown|dartmouth|university of.*usa|american university/.test(s)) return 'USA'
+  if (/oxford|cambridge|imperial college|ucl|king's college|manchester|edinburgh|bristol|warwick|birmingham|durham|nottingham/.test(s)) return 'UK'
+  if (/max planck|helmholtz|eth zürich|eth zurich|epfl|heidelberg|humboldt|tu berlin|tu münchen|rwth|lmu munich|charité|bonn|freiburg|göttingen|tübingen/.test(s)) return 'Germany / DACH'
+  if (/paris|sorbonne|école normale|inria|inserm|cnrs|pasteur|montpellier|lyon|strasbourg/.test(s)) return 'France'
+  if (/tu delft|amsterdam|leiden|utrecht|erasmus|radboud|groningen|eindhoven/.test(s)) return 'Netherlands'
+  if (/karolinska|stockholm|umeå|chalmers|linköping|oslo|bergen|aarhus|copenhagen|helsinki|aalto/.test(s)) return 'Scandinavia'
+  if (/toronto|mcgill|ubc|waterloo|alberta|montreal|queens|dalhousie/.test(s)) return 'Canada'
+  if (/melbourne|sydney|queensland|monash|anu|adelaide|unsw/.test(s)) return 'Australia'
+  if (/tokyo|kyoto|osaka|tohoku|nagoya|riken|waseda|keio/.test(s)) return 'Japan'
+  if (/tsinghua|peking|fudan|shanghai jiao tong|zhejiang|chinese academy/.test(s)) return 'China'
+  if (/nus|nanyang|ntu\b|singapore/.test(s)) return 'Singapore'
+  if (/weizmann|technion|hebrew university|tel aviv|bar-ilan/.test(s)) return 'Israel'
+  if (/iit\b|iim\b|delhi|mumbai|bangalore|hyderabad|indian/.test(s)) return 'India'
+  return null
+}
 
 async function discCheckPapers(followId, listIndex) {
   const r   = _discFollowData.find(x => x.id === followId)
