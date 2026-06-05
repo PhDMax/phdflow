@@ -2236,9 +2236,6 @@ function wbChartAddRow(id) {
   const s = (_wb?.shapes||[]).find(s=>s.id===id); if(!s) return
   const cols = (s.data?.headers||[]).length || 2
   s.data.rows.push(Array(cols).fill(''))
-  // Re-render modal grid
-  const grid = document.getElementById('wbed-grid')
-  if (grid) grid.innerHTML = (()=>{ const f=wbEditChartData; return '' })()
   saveWb(); _wbRender()
   // Refresh modal grid
   const gridEl = document.getElementById('wbed-grid')

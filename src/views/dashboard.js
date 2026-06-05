@@ -1,12 +1,11 @@
 // ══ Dashboard View ════════════════════════════════════════════════════════════
 
-// Dashboard background — cached, updated when settings change
+// Dashboard background — cached at startup and on every settings change
 let _dashBg = null
-async function _dashBgLoad() { _dashBg = await api.storeGet('dashBg').catch(()=>null) }
-_dashBgLoad()
+api.storeGet('dashBg').then(v => { _dashBg = v || null }).catch(() => {})
+function _dashBgSet(v) { _dashBg = v || null }
 
-async function render_dashboard() {
-  await _dashBgLoad()  // always fresh from store
+function render_dashboard() {
   const vc = document.getElementById('view-content')
   const now   = new Date()
   const today = now.toISOString().split('T')[0]

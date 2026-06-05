@@ -106,10 +106,9 @@ async function _clearToolHist(key) {
 }
 
 // ── 1. PDF Tools ─────────────────────────────────────────────────────────────
-async function render_pdf_tools() {
+function render_pdf_tools() {
   const vc = document.getElementById('view-content')
   if (!vc) return
-  await _loadToolHist('pdf')
   vc.innerHTML = `<div class="flex h-full overflow-hidden">
     ${_histSidebar('pdf','PDF Tools')}
     <div class="flex-1 flex flex-col overflow-hidden">
@@ -117,7 +116,7 @@ async function render_pdf_tools() {
       <div id="pdf-tool-area" class="flex-1 overflow-y-auto p-3 lg:p-5">${_utilRenderPdf()}</div>
     </div>
   </div>`
-  _refreshHistPanel('pdf')
+  _loadToolHist('pdf').then(() => _refreshHistPanel('pdf'))
 }
 
 // ── 2. Citations ──────────────────────────────────────────────────────────────
@@ -125,10 +124,9 @@ function _rerenderCitTool() {
   const el = document.getElementById('cit-tool-area')
   if (el) el.innerHTML = _utilRenderText()
 }
-async function render_citations() {
+function render_citations() {
   const vc = document.getElementById('view-content')
   if (!vc) return
-  await _loadToolHist('cit')
   vc.innerHTML = `<div class="flex h-full overflow-hidden">
     ${_histSidebar('cit','Citations')}
     <div class="flex-1 flex flex-col overflow-hidden">
@@ -136,7 +134,7 @@ async function render_citations() {
       <div id="cit-tool-area" class="flex-1 overflow-y-auto p-3 lg:p-5">${_utilRenderText()}</div>
     </div>
   </div>`
-  _refreshHistPanel('cit')
+  _loadToolHist('cit').then(() => _refreshHistPanel('cit'))
 }
 
 // ── 3. Unit Converter ─────────────────────────────────────────────────────────
@@ -144,10 +142,9 @@ function _rerenderUnitTool() {
   const el = document.getElementById('unit-tool-area')
   if (el) el.innerHTML = _utilRenderUnits()
 }
-async function render_unit_conv() {
+function render_unit_conv() {
   const vc = document.getElementById('view-content')
   if (!vc) return
-  await _loadToolHist('units')
   vc.innerHTML = `<div class="flex h-full overflow-hidden">
     ${_histSidebar('units','Unit Converter')}
     <div class="flex-1 flex flex-col overflow-hidden">
@@ -155,7 +152,7 @@ async function render_unit_conv() {
       <div id="unit-tool-area" class="flex-1 overflow-y-auto p-3 lg:p-5">${_utilRenderUnits()}</div>
     </div>
   </div>`
-  _refreshHistPanel('units')
+  _loadToolHist('units').then(() => _refreshHistPanel('units'))
 }
 
 // ── 4. R Assistant ────────────────────────────────────────────────────────────
@@ -163,10 +160,9 @@ function _rerenderRTool() {
   const el = document.getElementById('r-tool-area')
   if (el) el.innerHTML = _utilRenderR()
 }
-async function render_r_assist() {
+function render_r_assist() {
   const vc = document.getElementById('view-content')
   if (!vc) return
-  await _loadToolHist('r')
   vc.innerHTML = `<div class="flex h-full overflow-hidden">
     ${_histSidebar('r','R Assistant')}
     <div class="flex-1 flex flex-col overflow-hidden">
@@ -174,7 +170,7 @@ async function render_r_assist() {
       <div id="r-tool-area" class="flex-1 overflow-y-auto p-3 lg:p-5">${_utilRenderR()}</div>
     </div>
   </div>`
-  _refreshHistPanel('r')
+  _loadToolHist('r').then(() => _refreshHistPanel('r'))
 }
 
 // ══ PDF TOOLS ═════════════════════════════════════════════════════════════════

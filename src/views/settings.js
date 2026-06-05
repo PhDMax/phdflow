@@ -373,6 +373,7 @@ async function personSetFont(font) {
 // ── Dashboard background ──────────────────────────────────────────────────────
 async function dashBgSetPreset(id, src) {
   const val = (id === 'none' || !src) ? null : src
+  if (typeof _dashBgSet === 'function') _dashBgSet(val)
   await api.storeSet('dashBg', val)
   await api.storeSet('dashBgId', id)
   if (state.currentView === 'dashboard') render_dashboard()
@@ -429,6 +430,7 @@ function _dashBgPreviewUrl(url) {
 async function dashBgApplyUrl() {
   const url = document.getElementById('dash-bg-url-inp')?.value.trim()
   if (!url || !url.startsWith('http')) { showToast('Enter a valid URL', 'error'); return }
+  if (typeof _dashBgSet === 'function') _dashBgSet(url)
   await api.storeSet('dashBg', url)
   await api.storeSet('dashBgId', 'custom')
   closeModal()
@@ -438,6 +440,7 @@ async function dashBgApplyUrl() {
 }
 
 async function dashBgClear() {
+  if (typeof _dashBgSet === 'function') _dashBgSet(null)
   await api.storeSet('dashBg', null)
   await api.storeSet('dashBgId', 'none')
   if (state.currentView === 'dashboard') render_dashboard()
