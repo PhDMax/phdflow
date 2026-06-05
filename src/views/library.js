@@ -261,6 +261,13 @@ function renderLibrary() {
         </div>` : ''}
         ${linkedProj ? `<div class="mt-1"><span class="text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600">${esc(linkedProj.name)}</span></div>` : ''}
       </div>
+      ${p.filepath ? `
+      <button onclick="event.stopPropagation();api.openExternal('file:///${p.filepath.replace(/\\/g,'/')}')"
+        title="Open PDF"
+        class="text-[10px] px-1.5 py-0.5 rounded border border-slate-200 text-slate-400
+          hover:border-rose-300 hover:text-rose-600 transition-colors flex-shrink-0 mt-0.5">
+        PDF
+      </button>` : ''}
       <button onclick="event.stopPropagation();copyPaperBib('${p.id}')"
         title="Copy BibTeX to clipboard"
         class="text-[10px] px-1.5 py-0.5 rounded border border-slate-200 text-slate-400

@@ -3,6 +3,7 @@
 let _notesActiveId   = null
 let _notesSearch     = ''
 let _notesTypeFilter = 'all'
+let _notesSort       = 'updated'  // 'updated' | 'created' | 'alpha'
 let _notesSaveTimer  = null
 let _notesReadMode   = false
 
@@ -131,6 +132,12 @@ function render_notes() {
       <button onclick="${allPill('all')}" style="${filterPillStyle('all')}">All</button>
       ${Object.entries(NOTE_TYPES).map(([k,v])=>`
       <button onclick="${allPill(k)}" title="${v.label}" style="${filterPillStyle(k)}">${v.icon}</button>`).join('')}
+      <select onchange="_notesSort=this.value;render_notes()" title="Sort order"
+        style="margin-left:auto;font-size:.68rem;background:transparent;border:none;color:#6b7280;outline:none;cursor:pointer;padding:.1rem 0">
+        <option value="updated" ${_notesSort==='updated'?'selected':''}>Recent</option>
+        <option value="created" ${_notesSort==='created'?'selected':''}>Oldest</option>
+        <option value="alpha"   ${_notesSort==='alpha'  ?'selected':''}>A–Z</option>
+      </select>
     </div>
 
     <div style="${_S.noteList}">${listHtml}</div>
@@ -148,7 +155,12 @@ function render_notes() {
           style="${_S.quickBtn}"
           onmouseover="this.style.background='#2d2d2d'" onmouseout="this.style.background='none'">${v.icon}</button>`).join('')}
       </div>
-      <div style="${_S.noteCount}">${state.notes.length} note${state.notes.length!==1?'s':''}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;${_S.noteCount}">
+        <span>${state.notes.length} note${state.notes.length!==1?'s':''}</span>
+        <button onclick="openNotesTrash()" title="Recently deleted (7 days)"
+          style="background:none;border:none;color:#4b5563;cursor:pointer;font-size:.75rem;padding:0 .25rem;opacity:.6"
+          onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='.6'">🗑</button>
+      </div>
     </div>
   </div>
 
@@ -385,10 +397,11 @@ function _notesInitGrow() {
 
 function _notesFiltered() {
   let list = [...state.notes].sort((a,b) => {
-    // Pinned first, then most-recently-updated
     if (a.pinned && !b.pinned) return -1
     if (!a.pinned && b.pinned) return 1
-    return (b.updatedAt||'').localeCompare(a.updatedAt||'')
+    if (_notesSort === 'alpha')   return (a.title||'Untitled').localeCompare(b.title||'Untitled')
+    if (_notesSort === 'created') return (b.createdAt||'').localeCompare(a.createdAt||'')
+    return (b.updatedAt||'').localeCompare(a.updatedAt||'')  // default: updated
   })
   if (_notesTypeFilter !== 'all') list = list.filter(n => n.type === _notesTypeFilter)
   if (_notesSearch) {
@@ -457,9 +470,19 @@ async function toggleNotePin(id) {
 }
 
 async function deleteNote(id) {
-  const snap     = [...state.notes]
-  const title    = state.notes.find(n => n.id === id)?.title || 'Note'
+  const note  = state.notes.find(n => n.id === id)
+  const snap  = [...state.notes]
+  const title = note?.title || 'Note'
   const wasActive = _notesActiveId === id
+
+  // Move to trash (stored in storeSet separately, kept for 7 days)
+  if (note) {
+    const trash = (await api.storeGet('notesTrash') || []).slice(0, 49)
+    trash.unshift({ ...note, deletedAt: new Date().toISOString() })
+    const cutoff = new Date(Date.now() - 7*864e5).toISOString()
+    await api.storeSet('notesTrash', trash.filter(n => n.deletedAt > cutoff).slice(0, 50))
+  }
+
   state.notes = state.notes.filter(n => n.id !== id)
   await save('notes')
   if (wasActive) { _notesActiveId = state.notes[0]?.id || null; _notesReadMode = false }
@@ -470,6 +493,41 @@ async function deleteNote(id) {
     if (wasActive) _notesActiveId = id
     render_notes(); showToast('Note restored ✓')
   })
+}
+
+async function openNotesTrash() {
+  const trash = (await api.storeGet('notesTrash') || [])
+  if (!trash.length) { showToast('Trash is empty', 'info'); return }
+  openModal(`
+  <h3 class="text-base font-bold text-slate-900 mb-1">🗑 Recently deleted</h3>
+  <p class="text-xs text-slate-400 mb-3">Notes deleted in the last 7 days. Restoring adds them back to your notes.</p>
+  <div class="space-y-2 max-h-72 overflow-y-auto">
+    ${trash.map((n,i) => `
+    <div class="flex items-center gap-3 p-2.5 rounded-xl border border-slate-100 hover:bg-slate-50">
+      <div class="flex-1 min-w-0">
+        <p class="text-sm font-medium text-slate-800 truncate">${NOTE_TYPES[n.type]?.icon||'📄'} ${esc(n.title||'Untitled')}</p>
+        <p class="text-xs text-slate-400">Deleted ${new Date(n.deletedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</p>
+      </div>
+      <button onclick="_notesRestoreTrash(${i})" class="text-xs px-3 py-1.5 btn-secondary flex-shrink-0">Restore</button>
+    </div>`).join('')}
+  </div>`, false)
+  window._notesTrashData = trash
+}
+
+async function _notesRestoreTrash(idx) {
+  const trash = window._notesTrashData || []
+  const note  = trash[idx]
+  if (!note) return
+  const { deletedAt, ...restored } = note
+  state.notes.unshift(restored)
+  await save('notes')
+  const newTrash = trash.filter((_,i) => i !== idx)
+  await api.storeSet('notesTrash', newTrash)
+  window._notesTrashData = newTrash
+  closeModal()
+  _notesActiveId = restored.id
+  render_notes()
+  showToast('Note restored ✓')
 }
 
 async function exportNote(noteId) {

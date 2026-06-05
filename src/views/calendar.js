@@ -113,12 +113,13 @@ function _calEventChip(e, extra = '') {
       <span class="truncate">${esc(e.title)}</span>
     </div>`
   }
-  const conf    = (_calTypeConf()[e.type] || _calTypeConf().personal)
+  const conf     = (_calTypeConf()[e.type] || _calTypeConf().personal)
   const recurPfx = (e.recurrence && e.recurrence !== 'none') ? '🔁 ' : ''
+  const timePfx  = e.startTime ? `<span style="opacity:.7">${e.startTime.slice(0,5)}</span> ` : ''
   return `<div class="text-[10px] px-1.5 py-0.5 rounded truncate cursor-pointer ${conf.bg} ${conf.text} font-medium ${extra}"
     onclick="${sp}openEventDetail('${e.id}')"
-    title="${e.recurrence && e.recurrence !== 'none' ? '🔁 Repeats ' + e.recurrence + ' — ' : ''}${esc(e.title)}"
-    >${recurPfx}${esc(e.title)}</div>`
+    title="${e.recurrence && e.recurrence !== 'none' ? '🔁 Repeats ' + e.recurrence + ' — ' : ''}${esc(e.title)}${e.startTime ? ' · ' + e.startTime : ''}"
+    >${recurPfx}${timePfx}${esc(e.title)}</div>`
 }
 
 // ── Type & colour config ──────────────────────────────────────────────────────

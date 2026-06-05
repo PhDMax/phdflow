@@ -353,6 +353,12 @@ function _wbBindKeys() {
     if ((e.ctrlKey||e.metaKey) && e.key==='z') { e.preventDefault(); wbUndo(); return }
     if ((e.ctrlKey||e.metaKey) && (e.key==='y'||(e.shiftKey&&e.key==='z'))) { e.preventDefault(); wbRedo(); return }
     if ((e.ctrlKey||e.metaKey) && e.key==='d') { e.preventDefault(); wbSelDuplicate(); return }
+    if ((e.ctrlKey||e.metaKey) && e.key==='a') {
+      e.preventDefault()
+      _wbSelIds = (_wb.shapes||[]).map(s=>s.id)
+      _wbSelId  = _wbSelIds[_wbSelIds.length-1] || null
+      _wbRender(); return
+    }
     if (e.key==='Delete'||e.key==='Backspace') { if (_wbSelId) { e.preventDefault(); _wbDeleteSelected() }; return }
     if (e.key==='Escape') { _wbSelId=null; _wbRender(); return }
     if (e.key==='+' || e.key==='=') { e.preventDefault(); wbZoomIn(); return }

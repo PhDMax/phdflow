@@ -465,7 +465,7 @@ function _todoCard(t, eff, pri, groups, highlightOverdue = false) {
       ${t.status !== 'done' && !t.todayFlag && !_isDueToday(t)
         ? `<button onclick="todoAddToToday('${t.id}')" title="Add to Today's focus"
             class="text-slate-300 hover:text-indigo-500 text-sm transition-colors">📌</button>` : ''}
-      <button onclick="deleteTodo('${t.id}')" class="text-slate-200 hover:text-rose-400 transition-colors text-sm">✕</button>
+      <button onclick="deleteTodo('${t.id}')" title="Delete task" class="text-slate-200 hover:text-rose-400 transition-colors text-sm">✕</button>
     </div>
   </div>`
 }

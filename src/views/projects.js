@@ -75,8 +75,9 @@ function threadChip(status) {
   return `<span class="text-xs px-2 py-0.5 rounded-full ${s.cls}">${s.label}</span>`
 }
 
-// ── Progress from threads ─────────────────────────────────────────────────────
+// ── Progress from threads (or manual override) ───────────────────────────────
 function _calcProgress(p) {
+  if (p.progressOverride != null) return p.progressOverride
   const threads = p.threads || []
   if (!threads.length) return p.progress || 0
   const done = threads.filter(t => t.status === 'done').length
@@ -290,9 +291,27 @@ function openProjectDetail(id) {
   <div class="grid grid-cols-3 gap-3 mb-4 text-sm">
     ${p.startDate ? `<div class="bg-slate-50 rounded-xl p-2.5"><div class="text-xs text-slate-400 mb-0.5">Started</div><div class="font-medium text-slate-700">${fmtDate(p.startDate)}</div></div>` : ''}
     ${p.endDate   ? `<div class="bg-slate-50 rounded-xl p-2.5"><div class="text-xs text-slate-400 mb-0.5">Deadline</div><div class="font-medium ${_projectAttention(p)<=2?'text-red-600':'text-slate-700'}">${fmtDate(p.endDate)}</div></div>` : ''}
-    ${(p.threads||[]).length ? `<div class="bg-slate-50 rounded-xl p-2.5"><div class="text-xs text-slate-400 mb-0.5">Progress</div>
-      <div class="flex items-center gap-2"><div class="flex-1 bg-slate-200 rounded-full h-1.5"><div class="h-1.5 rounded-full" style="width:${prog}%;background:${barColor}"></div></div><span class="text-xs font-semibold">${prog}%</span></div>
-    </div>` : ''}
+    <div class="bg-slate-50 rounded-xl p-2.5">
+    <div class="flex items-center justify-between text-xs text-slate-400 mb-1">
+      <span>Progress</span>
+      ${p.progressOverride != null
+        ? `<button onclick="projectClearOverride('${id}')" class="text-indigo-400 hover:text-indigo-600" title="Switch back to automatic (thread-based)">auto</button>`
+        : `<button onclick="projectEnableOverride('${id}',${prog})" class="text-slate-400 hover:text-indigo-500" title="Set progress manually">manual</button>`}
+    </div>
+    ${p.progressOverride != null
+      ? `<div class="flex items-center gap-2">
+           <input type="range" min="0" max="100" value="${prog}"
+             oninput="projectSetOverride('${id}',+this.value)"
+             class="flex-1 accent-indigo-600" style="height:4px"/>
+           <span class="text-xs font-semibold w-8 text-right">${prog}%</span>
+         </div>`
+      : `<div class="flex items-center gap-2">
+           <div class="flex-1 bg-slate-200 rounded-full h-1.5">
+             <div class="h-1.5 rounded-full" style="width:${prog}%;background:${barColor}"></div>
+           </div>
+           <span class="text-xs font-semibold">${prog}%</span>
+         </div>`}
+  </div>
   </div>
 
   <!-- ── Threads ─────────────────────────────────────────────────────────── -->
@@ -769,6 +788,24 @@ async function shareProjectToLan(projectId) {
   if (el) el.innerHTML = r.success
     ? `<span class="text-emerald-600 font-semibold">✓ Project sent to ${esc(peer.name)}</span>`
     : `<span class="text-rose-500">✕ ${esc(r.error)}</span>`
+}
+
+// ── Progress override ─────────────────────────────────────────────────────────
+function projectEnableOverride(id, current) {
+  const p = state.projects.find(x=>x.id===id); if(!p) return
+  p.progressOverride = current; save('projects'); openProjectDetail(id)
+}
+function projectSetOverride(id, val) {
+  const p = state.projects.find(x=>x.id===id); if(!p) return
+  p.progressOverride = val; save('projects')
+  const bar = document.querySelector(`#modal-content .flex-1.bg-slate-200.rounded-full`)
+  const lbl = document.querySelector(`#modal-content .text-xs.font-semibold.w-8`)
+  if (bar?.children[0]) bar.children[0].style.width = val+'%'
+  if (lbl) lbl.textContent = val+'%'
+}
+function projectClearOverride(id) {
+  const p = state.projects.find(x=>x.id===id); if(!p) return
+  delete p.progressOverride; save('projects'); openProjectDetail(id)
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────────
