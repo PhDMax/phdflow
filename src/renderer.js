@@ -21,10 +21,11 @@ const state = {
   darkModeSchedule: null,
   paperCollections: [],
   sidebarTools: null,
+  writingDocs:  [],
   _sidebarCollapsed: false,
 }
 
-const VIEWS = ['dashboard','pipeline','projects','notes','whiteboard','library','calendar','todos','contacts',
+const VIEWS = ['dashboard','pipeline','writing','projects','notes','whiteboard','library','calendar','todos','contacts',
                'pdf_tools','citations','unit_conv','r_assist',
                'news','grants','discover','feedback','settings','support']
 
@@ -32,6 +33,7 @@ const VIEWS = ['dashboard','pipeline','projects','notes','whiteboard','library',
 const ALL_TOOLS = [
   // ── Workspace — persistent spaces where your work lives ───────────────────
   { id:'pipeline',   label:'Pipeline',         icon:'🔗', section:'Workspace', desc:'See how papers, notes and boards connect per project' },
+  { id:'writing',    label:'Writing',          icon:'✍️',  section:'Workspace', desc:'Academic writing assistant with grant, journal, and thesis templates' },
   { id:'projects',   label:'Projects',         icon:'📋', section:'Workspace', desc:'Manage research projects and work threads' },
   { id:'notes',      label:'Notes',           icon:'📝', section:'Workspace', desc:'Linked markdown notes and lab logs' },
   { id:'whiteboard', label:'Whiteboard',      icon:'🎨', section:'Workspace', desc:'Visual brainstorming canvas with smart pen' },
@@ -1044,7 +1046,7 @@ function _initOdyStatusListener() {
 async function loadAndShowApp() {
   const keys = ['profile','projects','papers','contacts','notes','whiteboards','events','todos',
                  'grants','newsFeeds','newsTopics','newsRead','calGoals','calFeeds','todoGroups',
-                 'darkModeSchedule','paperCollections','sidebarTools']
+                 'darkModeSchedule','paperCollections','sidebarTools','writingDocs']
   await Promise.all([
     window.api.storeGet('theme').then(t => applyTheme(t || 'light')),
     window.api.storeGet('accentColor').then(c => applyAccent(c || 'indigo')),
