@@ -1544,14 +1544,14 @@ async function wbToggleTplPanel() {
 function wbTplTab(t) { _wbTplTab = t; render_whiteboard() }
 
 // Shape factory — gives each shape a fresh ID at insert time
-const _S = (type, fields) => ({ id: 'ws-' + uid(), type, color:'#1e293b', sw:1.5, ...fields })
-const _R = (x,y,w,h,f={}) => _S('rect',   {x,y,w,h,...f})
-const _E = (cx,cy,rx,ry,f={}) => _S('ellipse',{cx,cy,rx,ry,...f})
-const _D = (x,y,w,h,f={}) => _S('diamond', {x,y,w,h,...f})
-const _L = (x1,y1,x2,y2,f={}) => _S('line',  {x1,y1,x2,y2,color:'#94a3b8',sw:1,...f})
-const _A = (x1,y1,x2,y2,f={}) => _S('arrow', {x1,y1,x2,y2,color:'#6366f1',sw:2,...f})
-const _T = (x,y,text,f={}) => _S('text',  {x,y,text,color:'#475569',fontSize:12,...f})
-const _lbl = (text,sz=11) => ({ label:{text,fontSize:sz,color:'#1e293b'} })
+const _tS = (type, fields) => ({ id: 'ws-' + uid(), type, color:'#1e293b', sw:1.5, ...fields })
+const _tR = (x,y,w,h,f={}) => _tS('rect',   {x,y,w,h,...f})
+const _tE = (cx,cy,rx,ry,f={}) => _tS('ellipse',{cx,cy,rx,ry,...f})
+const _tD = (x,y,w,h,f={}) => _tS('diamond', {x,y,w,h,...f})
+const _tL = (x1,y1,x2,y2,f={}) => _tS('line',  {x1,y1,x2,y2,color:'#94a3b8',sw:1,...f})
+const _tA = (x1,y1,x2,y2,f={}) => _tS('arrow', {x1,y1,x2,y2,color:'#6366f1',sw:2,...f})
+const _tT = (x,y,text,f={}) => _tS('text',  {x,y,text,color:'#475569',fontSize:12,...f})
+const _tLbl = (text,sz=11) => ({ label:{text,fontSize:sz,color:'#1e293b'} })
 
 // Palette
 const C = { indigo:'#818cf8', blue:'#60a5fa', teal:'#34d399', amber:'#fbbf24',
@@ -1562,110 +1562,110 @@ const _WB_GRAPHS = [
     const bars = [0.5,0.75,0.45,0.9,0.6], bw=36, gap=10
     const totalW = bars.length*(bw+gap)-gap, h=160, x0=cx-totalW/2-20, y0=cy-h/2+20
     return [
-      _L(x0,y0-h-10,x0,y0+5),                              // y axis
-      _L(x0-5,y0,x0+totalW+30,y0),                          // x axis
-      ...bars.map((v,i)=>_R(x0+5+i*(bw+gap), y0-h*v, bw, h*v,
+      _tL(x0,y0-h-10,x0,y0+5),                              // y axis
+      _tL(x0-5,y0,x0+totalW+30,y0),                          // x axis
+      ...bars.map((v,i)=>_tR(x0+5+i*(bw+gap), y0-h*v, bw, h*v,
         {fill:true,fillColor:[C.indigo,C.blue,C.teal,C.amber,C.rose][i],sw:0})),
-      ...bars.map((v,i)=>_T(x0+5+i*(bw+gap)+bw/2-12, y0+14, `Cat ${i+1}`,{fontSize:10,color:'#64748b'})),
-      _T(cx-30,cy-h/2-30,'Bar Chart',{fontSize:14,color:'#0f172a'}),
+      ...bars.map((v,i)=>_tT(x0+5+i*(bw+gap)+bw/2-12, y0+14, `Cat ${i+1}`,{fontSize:10,color:'#64748b'})),
+      _tT(cx-30,cy-h/2-30,'Bar Chart',{fontSize:14,color:'#0f172a'}),
     ]
   }},
   { id:'line-graph', name:'Line Graph', icon:'📈', gen(cx,cy) {
     const pts=[{x:-120,y:30},{x:-60,y:-10},{x:0,y:20},{x:60,y:-50},{x:120,y:-30}]
     const shapes=[
-      _L(cx-130,cy+60,cx+130,cy+60), _L(cx-130,cy-80,cx-130,cy+60),
-      _T(cx-30,cy-110,'Line Graph',{fontSize:14,color:'#0f172a'}),
+      _tL(cx-130,cy+60,cx+130,cy+60), _tL(cx-130,cy-80,cx-130,cy+60),
+      _tT(cx-30,cy-110,'Line Graph',{fontSize:14,color:'#0f172a'}),
     ]
-    pts.forEach((p,i)=>{ if(i<pts.length-1) shapes.push(_S('line',{x1:cx+p.x,y1:cy+p.y,x2:cx+pts[i+1].x,y2:cy+pts[i+1].y,color:'#6366f1',sw:2.5})) })
-    pts.forEach(p=>shapes.push(_E(cx+p.x,cy+p.y,5,5,{fill:true,fillColor:'#6366f1',sw:0})))
+    pts.forEach((p,i)=>{ if(i<pts.length-1) shapes.push(_tS('line',{x1:cx+p.x,y1:cy+p.y,x2:cx+pts[i+1].x,y2:cy+pts[i+1].y,color:'#6366f1',sw:2.5})) })
+    pts.forEach(p=>shapes.push(_tE(cx+p.x,cy+p.y,5,5,{fill:true,fillColor:'#6366f1',sw:0})))
     return shapes
   }},
   { id:'scatter', name:'Scatter Plot', icon:'⋯', gen(cx,cy) {
     const dots=[[-90,40],[-60,-20],[-30,50],[0,-40],[30,20],[60,-60],[90,30],[-70,60],[70,-10]]
     return [
-      _L(cx-130,cy+70,cx+130,cy+70), _L(cx-130,cy-80,cx-130,cy+70),
-      _T(cx-35,cy-110,'Scatter Plot',{fontSize:14,color:'#0f172a'}),
-      _T(cx-15,cy+85,'X Axis',{fontSize:10,color:'#64748b'}),
-      ...dots.map(([dx,dy])=>_E(cx+dx,cy+dy,6,6,{fill:true,fillColor:'#6366f1',sw:0})),
+      _tL(cx-130,cy+70,cx+130,cy+70), _tL(cx-130,cy-80,cx-130,cy+70),
+      _tT(cx-35,cy-110,'Scatter Plot',{fontSize:14,color:'#0f172a'}),
+      _tT(cx-15,cy+85,'X Axis',{fontSize:10,color:'#64748b'}),
+      ...dots.map(([dx,dy])=>_tE(cx+dx,cy+dy,6,6,{fill:true,fillColor:'#6366f1',sw:0})),
     ]
   }},
   { id:'pie-chart', name:'Pie Chart', icon:'🥧', gen(cx,cy) {
     const slices=[{label:'A',pct:'32%',col:C.indigo},{label:'B',pct:'28%',col:C.blue},{label:'C',pct:'24%',col:C.teal},{label:'D',pct:'16%',col:C.amber}]
-    const bars=slices.map((s,i)=>_R(cx+90,cy-50+i*30,50,22,{fill:true,fillColor:s.col,sw:0,..._lbl(`${s.label}: ${s.pct}`,10)}))
+    const bars=slices.map((s,i)=>_tR(cx+90,cy-50+i*30,50,22,{fill:true,fillColor:s.col,sw:0,..._lbl(`${s.label}: ${s.pct}`,10)}))
     return [
-      _E(cx-30,cy,80,80,{fill:true,fillColor:'#e0e7ff',sw:1.5,color:'#6366f1'}),
-      _L(cx-30,cy,cx-30,cy-80), _L(cx-30,cy,cx+30,cy-10), _L(cx-30,cy,cx+40,cy+50), _L(cx-30,cy,cx-110,cy+30),
-      _T(cx-65,cy-110,'Pie Chart',{fontSize:14,color:'#0f172a'}),
+      _tE(cx-30,cy,80,80,{fill:true,fillColor:'#e0e7ff',sw:1.5,color:'#6366f1'}),
+      _tL(cx-30,cy,cx-30,cy-80), _tL(cx-30,cy,cx+30,cy-10), _tL(cx-30,cy,cx+40,cy+50), _tL(cx-30,cy,cx-110,cy+30),
+      _tT(cx-65,cy-110,'Pie Chart',{fontSize:14,color:'#0f172a'}),
       ...bars,
     ]
   }},
   { id:'2x2-matrix', name:'2×2 Matrix', icon:'⊞', gen(cx,cy) {
     const labels=[{x:-100,y:-90,t:'High Impact\nLow Effort'},{x:20,y:-90,t:'High Impact\nHigh Effort'},{x:-100,y:10,t:'Low Impact\nLow Effort'},{x:20,y:10,t:'Low Impact\nHigh Effort'}]
     return [
-      _R(cx-120,cy-100,220,200,{sw:0.5,color:'#e2e8f0'}),
-      _L(cx-10,cy-100,cx-10,cy+100), _L(cx-120,cy,cx+100,cy),
-      _T(cx-60,cy-120,'Impact',{fontSize:11,color:'#64748b'}),
-      _T(cx-175,cy,'Effort',{fontSize:11,color:'#64748b'}),
-      _T(cx-75,cy-115,'2×2 Matrix',{fontSize:14,color:'#0f172a'}),
-      ...labels.map(l=>_T(cx+l.x,cy+l.y,l.t,{fontSize:10,color:'#475569'})),
+      _tR(cx-120,cy-100,220,200,{sw:0.5,color:'#e2e8f0'}),
+      _tL(cx-10,cy-100,cx-10,cy+100), _tL(cx-120,cy,cx+100,cy),
+      _tT(cx-60,cy-120,'Impact',{fontSize:11,color:'#64748b'}),
+      _tT(cx-175,cy,'Effort',{fontSize:11,color:'#64748b'}),
+      _tT(cx-75,cy-115,'2×2 Matrix',{fontSize:14,color:'#0f172a'}),
+      ...labels.map(l=>_tT(cx+l.x,cy+l.y,l.t,{fontSize:10,color:'#475569'})),
     ]
   }},
   { id:'timeline', name:'Timeline', icon:'→', gen(cx,cy) {
     const pts=[-140,-70,0,70,140], years=['Year 1','Year 2','Year 3','Year 4','Year 5']
     return [
-      _A(cx-160,cy,cx+160,cy,{color:'#6366f1',sw:2}),
+      _tA(cx-160,cy,cx+160,cy,{color:'#6366f1',sw:2}),
       ...pts.map((x,i)=>[
-        _D(cx+x-12,cy-12,24,24,{fill:true,fillColor:C.indigo,sw:0}),
-        _T(cx+x-20,cy-35,years[i],{fontSize:10,color:'#475569'}),
-        _T(cx+x-25,cy+20,`Milestone ${i+1}`,{fontSize:10,color:'#64748b'}),
+        _tD(cx+x-12,cy-12,24,24,{fill:true,fillColor:C.indigo,sw:0}),
+        _tT(cx+x-20,cy-35,years[i],{fontSize:10,color:'#475569'}),
+        _tT(cx+x-25,cy+20,`Milestone ${i+1}`,{fontSize:10,color:'#64748b'}),
       ]).flat(),
-      _T(cx-30,cy-80,'Timeline',{fontSize:14,color:'#0f172a'}),
+      _tT(cx-30,cy-80,'Timeline',{fontSize:14,color:'#0f172a'}),
     ]
   }},
   { id:'comparison', name:'Comparison Table', icon:'⊡', gen(cx,cy) {
     const cols=['Criteria','Option A','Option B'], rows=['Cost','Time','Quality','Complexity','Risk']
     const cw=80, rh=28, shapes=[]
-    cols.forEach((c,i)=>shapes.push(_R(cx-130+i*cw,cy-100,cw,rh,{fill:true,fillColor:i===0?C.slate:i===1?C.indigo:C.blue,sw:0,..._lbl(c,11)})))
-    rows.forEach((r,i)=>{ shapes.push(_T(cx-125,cy-65+i*rh,r,{fontSize:10})); cols.slice(1).forEach((_,j)=>shapes.push(_R(cx-50+j*cw,cy-72+i*rh,cw,rh,{color:'#e2e8f0',sw:0.5}))) })
-    shapes.push(_T(cx-60,cy-120,'Comparison Table',{fontSize:14,color:'#0f172a'}))
+    cols.forEach((c,i)=>shapes.push(_tR(cx-130+i*cw,cy-100,cw,rh,{fill:true,fillColor:i===0?C.slate:i===1?C.indigo:C.blue,sw:0,..._tLbl(c,11)})))
+    rows.forEach((r,i)=>{ shapes.push(_tT(cx-125,cy-65+i*rh,r,{fontSize:10})); cols.slice(1).forEach((_,j)=>shapes.push(_tR(cx-50+j*cw,cy-72+i*rh,cw,rh,{color:'#e2e8f0',sw:0.5}))) })
+    shapes.push(_tT(cx-60,cy-120,'Comparison Table',{fontSize:14,color:'#0f172a'}))
     return shapes
   }},
   { id:'decision-tree', name:'Decision Tree', icon:'◇', gen(cx,cy) {
     return [
-      _T(cx-50,cy-150,'Decision Tree',{fontSize:14,color:'#0f172a'}),
-      _D(cx-30,cy-100,60,40,{fill:true,fillColor:'#e0e7ff',..._lbl('Decision?',10)}),
-      _A(cx-20,cy-80,cx-70,cy-20), _A(cx+20,cy-80,cx+70,cy-20),
-      _T(cx-105,cy-55,'Yes',{fontSize:10,color:'#22c55e'}), _T(cx+75,cy-55,'No',{fontSize:10,color:'#ef4444'}),
-      _D(cx-100,cy-20,60,40,{fill:true,fillColor:'#dcfce7',..._lbl('Option A',10)}),
-      _D(cx+40,cy-20,60,40,{fill:true,fillColor:'#fee2e2',..._lbl('Option B',10)}),
-      _A(cx-70,cy+20,cx-70,cy+60), _A(cx+70,cy+20,cx+70,cy+60),
-      _R(cx-100,cy+60,60,30,{fill:true,fillColor:'#22c55e',sw:0,..._lbl('Outcome 1',10)}),
-      _R(cx+40,cy+60,60,30,{fill:true,fillColor:'#ef4444',sw:0,..._lbl('Outcome 2',10)}),
+      _tT(cx-50,cy-150,'Decision Tree',{fontSize:14,color:'#0f172a'}),
+      _tD(cx-30,cy-100,60,40,{fill:true,fillColor:'#e0e7ff',..._lbl('Decision?',10)}),
+      _tA(cx-20,cy-80,cx-70,cy-20), _tA(cx+20,cy-80,cx+70,cy-20),
+      _tT(cx-105,cy-55,'Yes',{fontSize:10,color:'#22c55e'}), _tT(cx+75,cy-55,'No',{fontSize:10,color:'#ef4444'}),
+      _tD(cx-100,cy-20,60,40,{fill:true,fillColor:'#dcfce7',..._lbl('Option A',10)}),
+      _tD(cx+40,cy-20,60,40,{fill:true,fillColor:'#fee2e2',..._lbl('Option B',10)}),
+      _tA(cx-70,cy+20,cx-70,cy+60), _tA(cx+70,cy+20,cx+70,cy+60),
+      _tR(cx-100,cy+60,60,30,{fill:true,fillColor:'#22c55e',sw:0,..._lbl('Outcome 1',10)}),
+      _tR(cx+40,cy+60,60,30,{fill:true,fillColor:'#ef4444',sw:0,..._lbl('Outcome 2',10)}),
     ]
   }},
   { id:'flowchart', name:'Flowchart', icon:'◇', gen(cx,cy) {
     return [
-      _T(cx-30,cy-155,'Flowchart',{fontSize:14,color:'#0f172a'}),
-      _E(cx,cy-110,50,22,{fill:true,fillColor:'#22c55e',sw:0,..._lbl('Start',11)}),
-      _A(cx,cy-88,cx,cy-58),
-      _R(cx-45,cy-58,90,30,{fill:true,fillColor:'#e0e7ff',sw:0,..._lbl('Process',11)}),
-      _A(cx,cy-28,cx,cy+2),
-      _D(cx-45,cy+2,90,36,{fill:true,fillColor:'#fef9c3',sw:0,..._lbl('Decision?',11)}),
-      _A(cx,cy+38,cx,cy+60), _A(cx+45,cy+20,cx+100,cy+20),
-      _T(cx+108,cy+16,'No',{fontSize:10,color:'#ef4444'}),
-      _T(cx+5,cy+44,'Yes',{fontSize:10,color:'#22c55e'}),
-      _R(cx-45,cy+60,90,30,{fill:true,fillColor:'#e0e7ff',sw:0,..._lbl('Process 2',11)}),
-      _A(cx,cy+90,cx,cy+115),
-      _E(cx,cy+115,50,22,{fill:true,fillColor:'#ef4444',sw:0,..._lbl('End',11)}),
+      _tT(cx-30,cy-155,'Flowchart',{fontSize:14,color:'#0f172a'}),
+      _tE(cx,cy-110,50,22,{fill:true,fillColor:'#22c55e',sw:0,..._lbl('Start',11)}),
+      _tA(cx,cy-88,cx,cy-58),
+      _tR(cx-45,cy-58,90,30,{fill:true,fillColor:'#e0e7ff',sw:0,..._lbl('Process',11)}),
+      _tA(cx,cy-28,cx,cy+2),
+      _tD(cx-45,cy+2,90,36,{fill:true,fillColor:'#fef9c3',sw:0,..._lbl('Decision?',11)}),
+      _tA(cx,cy+38,cx,cy+60), _tA(cx+45,cy+20,cx+100,cy+20),
+      _tT(cx+108,cy+16,'No',{fontSize:10,color:'#ef4444'}),
+      _tT(cx+5,cy+44,'Yes',{fontSize:10,color:'#22c55e'}),
+      _tR(cx-45,cy+60,90,30,{fill:true,fillColor:'#e0e7ff',sw:0,..._lbl('Process 2',11)}),
+      _tA(cx,cy+90,cx,cy+115),
+      _tE(cx,cy+115,50,22,{fill:true,fillColor:'#ef4444',sw:0,..._lbl('End',11)}),
     ]
   }},
   { id:'swot', name:'SWOT Analysis', icon:'⊕', gen(cx,cy) {
     const quads=[{dx:-65,dy:-55,col:'#dcfce7',label:'Strengths\n+ list here'},{dx:65,dy:-55,col:'#fee2e2',label:'Weaknesses\n– list here'},{dx:-65,dy:55,col:'#dbeafe',label:'Opportunities\n+ list here'},{dx:65,dy:55,col:'#fef9c3',label:'Threats\n– list here'}]
     return [
-      _R(cx-135,cy-110,270,220,{color:'#e2e8f0',sw:0.5}),
-      _L(cx,cy-110,cx,cy+110), _L(cx-135,cy,cx+135,cy),
-      _T(cx-115,cy-120,'SWOT Analysis',{fontSize:14,color:'#0f172a'}),
-      ...quads.map(q=>_R(cx+q.dx-65,cy+q.dy-50,130,100,{fill:true,fillColor:q.col,sw:0.5,..._lbl(q.label,10)})),
+      _tR(cx-135,cy-110,270,220,{color:'#e2e8f0',sw:0.5}),
+      _tL(cx,cy-110,cx,cy+110), _tL(cx-135,cy,cx+135,cy),
+      _tT(cx-115,cy-120,'SWOT Analysis',{fontSize:14,color:'#0f172a'}),
+      ...quads.map(q=>_tR(cx+q.dx-65,cy+q.dy-50,130,100,{fill:true,fillColor:q.col,sw:0.5,..._tLbl(q.label,10)})),
     ]
   }},
 ]
@@ -1673,84 +1673,84 @@ const _WB_GRAPHS = [
 const _WB_FIGURES = [
   { id:'venn2', name:'Venn (2)', icon:'◎', gen(cx,cy) {
     return [
-      _T(cx-35,cy-130,'Venn Diagram',{fontSize:14,color:'#0f172a'}),
-      _E(cx-40,cy,70,70,{fill:true,fillColor:'#818cf870',sw:1.5,color:'#6366f1'}),
-      _E(cx+40,cy,70,70,{fill:true,fillColor:'#34d39970',sw:1.5,color:'#059669'}),
-      _T(cx-75,cy-5,'Set A',{fontSize:11,color:'#4f46e5'}), _T(cx+55,cy-5,'Set B',{fontSize:11,color:'#059669'}),
-      _T(cx-20,cy-5,'Both',{fontSize:10,color:'#475569'}),
+      _tT(cx-35,cy-130,'Venn Diagram',{fontSize:14,color:'#0f172a'}),
+      _tE(cx-40,cy,70,70,{fill:true,fillColor:'#818cf870',sw:1.5,color:'#6366f1'}),
+      _tE(cx+40,cy,70,70,{fill:true,fillColor:'#34d39970',sw:1.5,color:'#059669'}),
+      _tT(cx-75,cy-5,'Set A',{fontSize:11,color:'#4f46e5'}), _tT(cx+55,cy-5,'Set B',{fontSize:11,color:'#059669'}),
+      _tT(cx-20,cy-5,'Both',{fontSize:10,color:'#475569'}),
     ]
   }},
   { id:'venn3', name:'Venn (3)', icon:'⊛', gen(cx,cy) {
     return [
-      _T(cx-35,cy-145,'Venn (3 Sets)',{fontSize:14,color:'#0f172a'}),
-      _E(cx,cy-55,65,65,{fill:true,fillColor:'#818cf860',sw:1.5,color:'#6366f1'}),
-      _E(cx-55,cy+30,65,65,{fill:true,fillColor:'#34d39960',sw:1.5,color:'#059669'}),
-      _E(cx+55,cy+30,65,65,{fill:true,fillColor:'#fbbf2460',sw:1.5,color:'#d97706'}),
-      _T(cx-15,cy-120,'A',{fontSize:12,color:'#4f46e5'}), _T(cx-100,cy+55,'B',{fontSize:12,color:'#059669'}), _T(cx+85,cy+55,'C',{fontSize:12,color:'#d97706'}),
+      _tT(cx-35,cy-145,'Venn (3 Sets)',{fontSize:14,color:'#0f172a'}),
+      _tE(cx,cy-55,65,65,{fill:true,fillColor:'#818cf860',sw:1.5,color:'#6366f1'}),
+      _tE(cx-55,cy+30,65,65,{fill:true,fillColor:'#34d39960',sw:1.5,color:'#059669'}),
+      _tE(cx+55,cy+30,65,65,{fill:true,fillColor:'#fbbf2460',sw:1.5,color:'#d97706'}),
+      _tT(cx-15,cy-120,'A',{fontSize:12,color:'#4f46e5'}), _tT(cx-100,cy+55,'B',{fontSize:12,color:'#059669'}), _tT(cx+85,cy+55,'C',{fontSize:12,color:'#d97706'}),
     ]
   }},
   { id:'fishbone', name:'Fishbone', icon:'⊸', gen(cx,cy) {
     const branches=[[-130,-40,cx-60,cy,'Cause 1'],[130,-40,cx+60,cy,'Cause 2'],[-130,40,cx-60,cy,'Cause 3'],[130,40,cx+60,cy,'Cause 4'],[-60,-40,cx-20,cy,'Cause 5'],[60,-40,cx+20,cy,'Cause 6']]
     return [
-      _T(cx-55,cy-130,'Fishbone Diagram',{fontSize:14,color:'#0f172a'}),
-      _A(cx-160,cy,cx+130,cy,{color:'#1e293b',sw:2}),
-      _D(cx+100,cy-20,70,40,{fill:true,fillColor:'#fee2e2',..._lbl('Effect',11)}),
+      _tT(cx-55,cy-130,'Fishbone Diagram',{fontSize:14,color:'#0f172a'}),
+      _tA(cx-160,cy,cx+130,cy,{color:'#1e293b',sw:2}),
+      _tD(cx+100,cy-20,70,40,{fill:true,fillColor:'#fee2e2',..._lbl('Effect',11)}),
       ...branches.map(([dx,dy,tx,ty,lbl])=>[
-        _L(cx+dx,cy+dy,tx,ty,{color:'#94a3b8',sw:1}),
-        _T(cx+dx-25,cy+dy+(dy<0?-18:8),lbl,{fontSize:10}),
+        _tL(cx+dx,cy+dy,tx,ty,{color:'#94a3b8',sw:1}),
+        _tT(cx+dx-25,cy+dy+(dy<0?-18:8),lbl,{fontSize:10}),
       ]).flat(),
     ]
   }},
   { id:'mind-map', name:'Mind Map', icon:'✦', gen(cx,cy) {
     const branches=[[-130,-60,'Branch A'],[-140,0,'Branch B'],[-130,60,'Branch C'],[130,-60,'Branch D'],[140,0,'Branch E'],[130,60,'Branch F']]
     return [
-      _E(cx,cy,55,30,{fill:true,fillColor:'#e0e7ff',sw:1.5,..._lbl('Central\nIdea',11)}),
+      _tE(cx,cy,55,30,{fill:true,fillColor:'#e0e7ff',sw:1.5,..._lbl('Central\nIdea',11)}),
       ...branches.map(([dx,dy,lbl])=>[
-        _L(cx+(dx>0?55:-55),cy,cx+dx,cy+dy,{color:'#94a3b8',sw:1.5}),
-        _R(cx+dx+(dx>0?0:-80),cy+dy-15,80,30,{fill:true,fillColor:'#f8fafc',sw:1,..._lbl(lbl,11)}),
+        _tL(cx+(dx>0?55:-55),cy,cx+dx,cy+dy,{color:'#94a3b8',sw:1.5}),
+        _tR(cx+dx+(dx>0?0:-80),cy+dy-15,80,30,{fill:true,fillColor:'#f8fafc',sw:1,..._tLbl(lbl,11)}),
       ]).flat(),
-      _T(cx-30,cy-120,'Mind Map',{fontSize:14,color:'#0f172a'}),
+      _tT(cx-30,cy-120,'Mind Map',{fontSize:14,color:'#0f172a'}),
     ]
   }},
   { id:'kanban', name:'Kanban', icon:'▦', gen(cx,cy) {
     const cols=[{x:-130,label:'To Do',col:'#fee2e2'},{x:0,label:'In Progress',col:'#fef9c3'},{x:130,label:'Done',col:'#dcfce7'}]
     const tasks=[{col:0,y:-30,t:'Task 1'},{col:0,y:10,t:'Task 2'},{col:1,y:-30,t:'Task 3'},{col:2,y:-30,t:'Task 4'},{col:2,y:10,t:'Task 5'}]
     return [
-      _T(cx-30,cy-135,'Kanban Board',{fontSize:14,color:'#0f172a'}),
+      _tT(cx-30,cy-135,'Kanban Board',{fontSize:14,color:'#0f172a'}),
       ...cols.map(c=>[
-        _R(cx+c.x-55,cy-110,110,210,{color:'#e2e8f0',sw:0.5,fill:true,fillColor:'#f8fafc'}),
-        _R(cx+c.x-50,cy-105,100,28,{fill:true,fillColor:c.col,sw:0,..._lbl(c.label,11)}),
+        _tR(cx+c.x-55,cy-110,110,210,{color:'#e2e8f0',sw:0.5,fill:true,fillColor:'#f8fafc'}),
+        _tR(cx+c.x-50,cy-105,100,28,{fill:true,fillColor:c.col,sw:0,..._tLbl(c.label,11)}),
       ]).flat(),
-      ...tasks.map(t=>_R(cx+cols[t.col].x-48,cy+t.y-10,96,28,{fill:true,fillColor:'#fff',sw:1,color:'#e2e8f0',..._lbl(t.t,10)})),
+      ...tasks.map(t=>_tR(cx+cols[t.col].x-48,cy+t.y-10,96,28,{fill:true,fillColor:'#fff',sw:1,color:'#e2e8f0',..._tLbl(t.t,10)})),
     ]
   }},
   { id:'research-flow', name:'Research Flow', icon:'⟶', gen(cx,cy) {
     const boxes=[{y:-90,t:'Research\nQuestion',col:'#e0e7ff'},{y:-30,t:'Hypothesis',col:'#fef9c3'},{y:30,t:'Methodology',col:'#dcfce7'},{y:90,t:'Results &\nAnalysis',col:'#fce7f3'}]
     return [
-      _T(cx-55,cy-135,'Research Framework',{fontSize:14,color:'#0f172a'}),
+      _tT(cx-55,cy-135,'Research Framework',{fontSize:14,color:'#0f172a'}),
       ...boxes.map((b,i)=>[
-        _R(cx-65,cy+b.y-20,130,40,{fill:true,fillColor:b.col,sw:0,..._lbl(b.t,11)}),
-        ...(i<boxes.length-1?[_A(cx,cy+b.y+20,cx,cy+boxes[i+1].y-20,{color:'#6366f1',sw:2})]:[] ),
+        _tR(cx-65,cy+b.y-20,130,40,{fill:true,fillColor:b.col,sw:0,..._tLbl(b.t,11)}),
+        ...(i<boxes.length-1?[_tA(cx,cy+b.y+20,cx,cy+boxes[i+1].y-20,{color:'#6366f1',sw:2})]:[] ),
       ]).flat(),
     ]
   }},
   { id:'funnel', name:'Funnel', icon:'▽', gen(cx,cy) {
     const layers=[{w:220,label:'Awareness',col:'#dbeafe'},{w:170,label:'Interest',col:'#bfdbfe'},{w:120,label:'Decision',col:'#93c5fd'},{w:70,label:'Action',col:'#60a5fa'}]
     return [
-      _T(cx-25,cy-130,'Funnel',{fontSize:14,color:'#0f172a'}),
-      ...layers.map((l,i)=>_S('triangle',{x1:cx,y1:cy-80+i*50,x2:cx-l.w/2,y2:cy-80+i*50+50,x3:cx+l.w/2,y3:cy-80+i*50+50,color:'#6366f1',sw:1,fill:true,fillColor:l.col,..._lbl(l.label,11)})),
+      _tT(cx-25,cy-130,'Funnel',{fontSize:14,color:'#0f172a'}),
+      ...layers.map((l,i)=>_tS('triangle',{x1:cx,y1:cy-80+i*50,x2:cx-l.w/2,y2:cy-80+i*50+50,x3:cx+l.w/2,y3:cy-80+i*50+50,color:'#6366f1',sw:1,fill:true,fillColor:l.col,..._tLbl(l.label,11)})),
     ]
   }},
   { id:'cycle', name:'Cycle Diagram', icon:'↻', gen(cx,cy) {
     const items=[{a:-90,t:'Plan'},{a:0,t:'Do'},{a:90,t:'Check'},{a:180,t:'Act'}]
     const r=75
     return [
-      _T(cx-35,cy-130,'Cycle Diagram',{fontSize:14,color:'#0f172a'}),
+      _tT(cx-35,cy-130,'Cycle Diagram',{fontSize:14,color:'#0f172a'}),
       ...items.map(({a,t})=>{
         const rad=a*Math.PI/180, rx=cx+Math.cos(rad)*r, ry=cy+Math.sin(rad)*r
         return [
-          _R(rx-35,ry-18,70,36,{fill:true,fillColor:'#e0e7ff',sw:1,..._lbl(t,12)}),
-          _A(rx+Math.cos((a+15)*Math.PI/180)*50,ry+Math.sin((a+15)*Math.PI/180)*50,
+          _tR(rx-35,ry-18,70,36,{fill:true,fillColor:'#e0e7ff',sw:1,..._tLbl(t,12)}),
+          _tA(rx+Math.cos((a+15)*Math.PI/180)*50,ry+Math.sin((a+15)*Math.PI/180)*50,
              rx+Math.cos((a+75)*Math.PI/180)*50,ry+Math.sin((a+75)*Math.PI/180)*50,
              {color:'#6366f1',sw:1.5}),
         ]
@@ -1759,22 +1759,22 @@ const _WB_FIGURES = [
   }},
   { id:'t-chart', name:'T-Chart', icon:'⊢', gen(cx,cy) {
     return [
-      _T(cx-30,cy-130,'T-Chart',{fontSize:14,color:'#0f172a'}),
-      _R(cx-140,cy-100,280,200,{color:'#e2e8f0',sw:0.5}),
-      _L(cx,cy-100,cx,cy+100), _L(cx-140,cy-70,cx+140,cy-70),
-      _R(cx-135,cy-95,130,30,{fill:true,fillColor:'#e0e7ff',sw:0,..._lbl('Pros / For',11)}),
-      _R(cx+5,cy-95,130,30,{fill:true,fillColor:'#fee2e2',sw:0,..._lbl('Cons / Against',11)}),
+      _tT(cx-30,cy-130,'T-Chart',{fontSize:14,color:'#0f172a'}),
+      _tR(cx-140,cy-100,280,200,{color:'#e2e8f0',sw:0.5}),
+      _tL(cx,cy-100,cx,cy+100), _tL(cx-140,cy-70,cx+140,cy-70),
+      _tR(cx-135,cy-95,130,30,{fill:true,fillColor:'#e0e7ff',sw:0,..._lbl('Pros / For',11)}),
+      _tR(cx+5,cy-95,130,30,{fill:true,fillColor:'#fee2e2',sw:0,..._lbl('Cons / Against',11)}),
       ...[0,1,2,3].map(i=>[
-        _T(cx-130,cy-55+i*35,`•`,{fontSize:16,color:'#22c55e'}),
-        _T(cx+10,cy-55+i*35,`•`,{fontSize:16,color:'#ef4444'}),
+        _tT(cx-130,cy-55+i*35,`•`,{fontSize:16,color:'#22c55e'}),
+        _tT(cx+10,cy-55+i*35,`•`,{fontSize:16,color:'#ef4444'}),
       ]).flat(),
     ]
   }},
   { id:'pyramid', name:'Pyramid', icon:'△', gen(cx,cy) {
     const layers=[{w:240,h:40,label:'Base Level',col:'#dbeafe'},{w:180,h:40,label:'Level 2',col:'#93c5fd'},{w:120,h:40,label:'Level 3',col:'#3b82f6'},{w:60,h:40,label:'Top',col:'#1d4ed8'}]
     return [
-      _T(cx-25,cy-135,'Pyramid',{fontSize:14,color:'#0f172a'}),
-      ...layers.map((l,i)=>_R(cx-l.w/2,cy-80+i*l.h,l.w,l.h,{fill:true,fillColor:l.col,sw:0.5,..._lbl(l.label,11)})),
+      _tT(cx-25,cy-135,'Pyramid',{fontSize:14,color:'#0f172a'}),
+      ...layers.map((l,i)=>_tR(cx-l.w/2,cy-80+i*l.h,l.w,l.h,{fill:true,fillColor:l.col,sw:0.5,..._tLbl(l.label,11)})),
     ]
   }},
 ]
