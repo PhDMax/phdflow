@@ -36,7 +36,7 @@ function render_utilities() {
     </div>
 
     <!-- Tab content -->
-    <div class="flex-1 overflow-y-auto p-6">
+    <div class="flex-1 overflow-y-auto p-3 lg:p-6">
       ${_utilTab==='pdf'   ? _utilRenderPdf()   : ''}
       ${_utilTab==='text'  ? _utilRenderText()  : ''}
       ${_utilTab==='units' ? _utilRenderUnits() : ''}

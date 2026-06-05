@@ -5,7 +5,7 @@ function render_feedback() {
   const vc = document.getElementById('view-content')
   vc.innerHTML = `
   ${pageHeader('💬 Feedback', '')}
-  <div class="flex-1 overflow-y-auto p-6">
+  <div class="flex-1 overflow-y-auto p-3 lg:p-6">
     <div class="max-w-xl mx-auto space-y-5">
 
       <!-- Send feedback card -->

@@ -7,7 +7,7 @@ function render_support() {
   const vc = document.getElementById('view-content')
   vc.innerHTML = `
   ${pageHeader('☕ Support PhDFlow', '')}
-  <div class="flex-1 overflow-y-auto p-6">
+  <div class="flex-1 overflow-y-auto p-3 lg:p-6">
     <div class="max-w-xl mx-auto space-y-5">
 
       <!-- Hero card -->

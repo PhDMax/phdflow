@@ -65,7 +65,7 @@ function render_discover() {
     </div>
 
     <!-- Content -->
-    <div class="flex-1 overflow-y-auto p-6">
+    <div class="flex-1 overflow-y-auto p-3 lg:p-6">
       ${_discTab === 'find' ? _discAkinatorPanel() : _discFollowingPanel()}
     </div>
   </div>`
@@ -917,8 +917,8 @@ function render_contacts() {
       oninput="renderContacts()"
       class="w-full px-4 py-2 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"/>
   </div>
-  <div class="flex-1 overflow-y-auto p-6">
-    <div id="contacts-grid" class="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4 max-w-5xl"></div>
+  <div class="flex-1 overflow-y-auto p-3 lg:p-6">
+    <div id="contacts-grid" class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 max-w-5xl"></div>
   </div>`
   renderContacts()
 }

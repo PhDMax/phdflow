@@ -206,16 +206,16 @@ function render_calendar() {
   `)}
   <div class="flex-1 overflow-y-auto">
     <!-- Event type legend (compact, always visible) -->
-    <div class="px-6 pt-2 flex gap-1.5 flex-wrap">
+    <div class="px-3 lg:px-6 pt-2 flex gap-1.5 flex-wrap">
       ${Object.entries(_calTypeConf()).map(([k,v]) => `
       <span class="text-[10px] px-2 py-0.5 rounded-full font-medium ${v.bg} ${v.text}">${v.label}</span>`).join('')}
     </div>
     <!-- Connected feeds strip -->
-    <div id="cal-feeds-strip" class="px-6 pt-2"></div>
+    <div id="cal-feeds-strip" class="px-3 lg:px-6 pt-2"></div>
     <!-- Countdown strip -->
-    <div id="cal-countdown" class="px-6 pt-2"></div>
+    <div id="cal-countdown" class="px-3 lg:px-6 pt-2"></div>
     <!-- Nav bar + calendar body -->
-    <div class="px-6 pb-4">
+    <div class="px-3 lg:px-6 pb-4">
       <div class="flex items-center justify-between mb-3">
         <button onclick="calNav(-1)"
           class="text-slate-500 hover:text-slate-900 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 transition-colors text-xl">

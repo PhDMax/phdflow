@@ -121,7 +121,7 @@ function render_dashboard() {
     </div>` : ''}
 
     <!-- ── Main Grid ────────────────────────────────────────────────────────── -->
-    <div class="p-6 grid grid-cols-2 gap-5">
+    <div class="p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-2 gap-5">
 
       <!-- LEFT COLUMN -->
       <div class="space-y-5">

@@ -9,7 +9,7 @@ function render_discover() {
   const vc = document.getElementById('view-content')
   vc.innerHTML = `
   ${pageHeader('🔍 Discover Researchers', '')}
-  <div class="flex-1 overflow-y-auto p-6">
+  <div class="flex-1 overflow-y-auto p-3 lg:p-6">
     <div class="max-w-3xl mx-auto space-y-5">
 
       <!-- Search bar -->

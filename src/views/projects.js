@@ -91,7 +91,7 @@ function render_projects() {
   const vc = document.getElementById('view-content')
   vc.innerHTML = `
   ${pageHeader('📋 Projects', `<button onclick="openProjectModal()" class="btn-primary text-xs py-2">+ New Project</button>`)}
-  <div class="flex-1 overflow-y-auto p-6">
+  <div class="flex-1 overflow-y-auto p-3 lg:p-6">
     <div class="flex gap-2 mb-3 items-center">
       <input id="projects-search" type="text" placeholder="Search projects…"
         oninput="renderProjectCards(_pFilter)"

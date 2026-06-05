@@ -59,7 +59,7 @@ function settingsTab(tab) {
 function renderProfileTab(body) {
   const p = state.profile || {}
   body.innerHTML = `
-  <div class="p-6 max-w-2xl space-y-5">
+  <div class="p-3 lg:p-6 max-w-2xl space-y-5">
 
     <!-- Identity -->
     <div class="bg-white rounded-2xl border border-slate-200 p-5">
@@ -217,7 +217,7 @@ async function renderPersonalizeTab(body) {
   ]
 
   body.innerHTML = `
-  <div class="p-6 max-w-2xl space-y-5">
+  <div class="p-3 lg:p-6 max-w-2xl space-y-5">
 
     <!-- Accent colour -->
     <div class="bg-white rounded-2xl border border-slate-200 p-5">
@@ -323,7 +323,7 @@ function renderAppTab(body) {
   const currentTheme = document.documentElement.dataset.theme || 'light'
 
   body.innerHTML = `
-  <div class="p-6 max-w-2xl space-y-5">
+  <div class="p-3 lg:p-6 max-w-2xl space-y-5">
 
     <!-- Appearance -->
     <div class="bg-white rounded-2xl border border-slate-200 p-5">
@@ -974,7 +974,7 @@ const _DATA_KEYS = ['profile','projects','papers','contacts','notes','whiteboard
 function renderBackupTab(body) {
   const ab = state.profile?.autoBackup || {}
   body.innerHTML = `
-  <div class="p-6 max-w-2xl space-y-5">
+  <div class="p-3 lg:p-6 max-w-2xl space-y-5">
 
     <!-- Scheduled auto-backup -->
     <div class="bg-white rounded-2xl border border-slate-200 p-5">

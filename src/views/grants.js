@@ -399,7 +399,7 @@ function render_grants() {
     </div>`)}
 
   <!-- Tabs -->
-  <div class="bg-white border-b border-slate-200 px-5 flex gap-1 flex-shrink-0">
+  <div class="bg-white border-b border-slate-200 px-2 lg:px-5 flex gap-1 flex-shrink-0 overflow-x-auto">
     ${tabs.map(t => `
     <button onclick="switchGrantTab('${t.id}')" data-gtab="${t.id}"
       class="px-4 py-3 text-sm font-medium border-b-2 transition-colors ${_grantTab===t.id?'border-indigo-600 text-indigo-700':'border-transparent text-slate-500 hover:text-slate-700'}">
@@ -536,7 +536,7 @@ function buildForYouHTML() {
   const hasResults = tiers.perfect.length || tiers.strong.length || tiers.explore.length
 
   return `
-  <div class="p-5 max-w-5xl">
+  <div class="p-3 lg:p-5 max-w-5xl">
     ${setupCard}
     ${profilePill}
     ${!stage ? '' : !hasResults ? `
@@ -743,7 +743,7 @@ function buildMyGrantsHTML() {
   </div>
 
   <!-- Grant cards -->
-  <div class="p-5 space-y-3 max-w-3xl">
+  <div class="p-3 lg:p-5 space-y-3 max-w-3xl">
     ${sorted.map(g => {
       let deadlineBanner = ''
       if (g.deadline) {
@@ -880,7 +880,7 @@ function buildSearchHTML(el) {
   </div>
 
   <!-- Results -->
-  <div class="p-5 max-w-5xl">
+  <div class="p-3 lg:p-5 max-w-5xl">
 
     <!-- Built-in DB -->
     ${_liveSourceEnabled.builtin ? `

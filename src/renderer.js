@@ -21,23 +21,27 @@ const state = {
   darkModeSchedule: null,
   paperCollections: [],
   sidebarTools: null,
+  _sidebarCollapsed: false,
 }
 
-const VIEWS = ['dashboard','projects','library','grants','news','notes','whiteboard','utilities','discover','contacts','calendar','todos','feedback','settings','support']
+const VIEWS = ['dashboard','projects','notes','whiteboard','library','calendar','todos','contacts','utilities','news','grants','discover','feedback','settings','support']
 
 // ── Tool registry — single source of truth for sidebar & picker ───────────────
 const ALL_TOOLS = [
-  { id:'projects',   label:'Projects',        icon:'📋', section:'Research',  desc:'Manage research projects and work threads' },
-  { id:'library',    label:'Paper Library',   icon:'📚', section:'Research',  desc:'Store, annotate and cite your papers' },
-  { id:'grants',     label:'Grant Scan',      icon:'💰', section:'Research',  desc:'Discover and track funding opportunities' },
-  { id:'news',       label:'Literature Feed', icon:'📡', section:'Research',  desc:'Daily paper feed from arXiv & OpenAlex' },
+  // ── Workspace — persistent spaces where your work lives ───────────────────
+  { id:'projects',   label:'Projects',        icon:'📋', section:'Workspace', desc:'Manage research projects and work threads' },
   { id:'notes',      label:'Notes',           icon:'📝', section:'Workspace', desc:'Linked markdown notes and lab logs' },
   { id:'whiteboard', label:'Whiteboard',      icon:'🎨', section:'Workspace', desc:'Visual brainstorming canvas with smart pen' },
-  { id:'utilities',  label:'Utilities',       icon:'🔧', section:'Workspace', desc:'PDF tools, citations, unit converter, R assistant' },
-  { id:'discover',   label:'Discover',        icon:'🔍', section:'Network',   desc:'Find researchers by name or research area' },
-  { id:'contacts',   label:'Contacts',        icon:'👥', section:'Network',   desc:'Your academic network and collaborators' },
-  { id:'calendar',   label:'Calendar',        icon:'📅', section:'Planning',  desc:'Deadlines, milestones and iCal sync' },
-  { id:'todos',      label:'To-Do List',      icon:'✅', section:'Planning',  desc:'Tasks with time estimates and daily focus mode' },
+  { id:'library',    label:'Paper Library',   icon:'📚', section:'Workspace', desc:'Store, annotate and cite your papers' },
+  { id:'calendar',   label:'Calendar',        icon:'📅', section:'Workspace', desc:'Deadlines, milestones and iCal sync' },
+  { id:'todos',      label:'To-Do List',      icon:'✅', section:'Workspace', desc:'Tasks with time estimates and daily focus mode' },
+  { id:'contacts',   label:'Contacts',        icon:'👥', section:'Workspace', desc:'Your academic network and collaborators' },
+  // ── Tools — task-specific helpers ─────────────────────────────────────────
+  { id:'utilities',  label:'Utilities',        icon:'🔧', section:'Tools',     desc:'PDF tools, citations, unit converter, R assistant, chemistry' },
+  // ── Feeds — the world coming to you ──────────────────────────────────────
+  { id:'news',       label:'Literature Feed', icon:'📡', section:'Feeds',     desc:'Daily paper feed from arXiv & OpenAlex' },
+  { id:'grants',     label:'Grant Scan',      icon:'💰', section:'Feeds',     desc:'Discover and track funding opportunities' },
+  { id:'discover',   label:'Discover',        icon:'🔍', section:'Feeds',     desc:'Find researchers by name or research area' },
 ]
 const _ALWAYS_SHOWN = ['dashboard','settings','feedback','support']
 const _DEFAULT_TOOLS = ALL_TOOLS.map(t => t.id)  // all on by default
@@ -57,36 +61,68 @@ function renderSidebar() {
   const enabled = _enabledTools()
   const current = state.currentView
 
+  const collapsed = state._sidebarCollapsed
   const btn = (id, label, icon) => {
     const badge = id === 'news' && window._newsNavBadge > 0
-      ? `<span class="ml-auto bg-indigo-500 text-white text-[9px] font-bold rounded-full px-1 min-w-[16px] text-center leading-4">
+      ? `<span class="${collapsed ? 'hidden' : ''} ml-auto bg-indigo-500 text-white text-[9px] font-bold rounded-full px-1 min-w-[16px] text-center leading-4">
            ${window._newsNavBadge > 99 ? '99+' : window._newsNavBadge}
          </span>`
       : ''
-    return `<button id="nav-${id}" onclick="showView('${id}')"
-      class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors text-left ${id === current ? 'active' : ''}">
-      ${icon} <span class="flex-1">${label}</span>${badge}
+    return `<button id="nav-${id}" onclick="showView('${id}')" title="${label}"
+      class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors ${collapsed ? 'justify-center' : 'text-left'} ${id === current ? 'active' : ''}">
+      ${icon}${collapsed ? '' : ` <span class="flex-1">${label}</span>${badge}`}
     </button>`
+  }
+
+  // Apply collapsed state to aside
+  const aside = document.getElementById('app-sidebar')
+  if (aside) {
+    aside.style.width = collapsed ? '52px' : ''
+    const logoTxt  = document.getElementById('sidebar-logo-text')
+    const search   = document.getElementById('sidebar-search')
+    const support  = document.getElementById('sidebar-support-btn')
+    const profName = document.getElementById('profile-name')
+    const odyDot   = document.getElementById('ody-status-dot')
+    if (logoTxt)  logoTxt.style.display  = collapsed ? 'none' : ''
+    if (search)   search.style.display   = collapsed ? 'none' : ''
+    if (support)  support.style.display  = collapsed ? 'none' : ''
+    if (profName) profName.style.display = collapsed ? 'none' : ''
+    if (odyDot)   odyDot.style.display   = collapsed ? 'none' : ''
   }
 
   // Always-visible top item
   let html = btn('dashboard', 'Dashboard', '🏠') + '<div class="mb-1"></div>'
 
   // Grouped sections
-  const sections = ['Research','Workspace','Network','Planning']
+  const sections = ['Workspace','Tools','Feeds']
   for (const section of sections) {
     const tools = ALL_TOOLS.filter(t => t.section === section && enabled.includes(t.id))
     if (!tools.length) continue
-    html += `<div class="nav-section mt-2">${section}</div>`
+    if (!collapsed) html += `<div class="nav-section mt-2">${section}</div>`
+    else html += `<div class="my-1 mx-2 border-t border-slate-700/40"></div>`
     html += tools.map(t => btn(t.id, t.label, t.icon)).join('')
   }
 
   // Always-visible bottom items
-  html += `<div class="nav-section mt-2">Other</div>`
+  html += `<div class="my-1 mx-2 border-t border-slate-700/40"></div>`
   html += btn('feedback', 'Feedback', '💬')
   html += btn('settings', 'Settings', '⚙️')
 
+  // Collapse toggle at the bottom of nav
+  html += `<div class="mt-2 mx-1">
+    <button onclick="toggleSidebar()" title="${collapsed ? 'Expand sidebar' : 'Collapse sidebar'}"
+      class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-600 hover:text-slate-300 text-xs transition-colors ${collapsed ? 'justify-center' : 'text-left'}">
+      ${collapsed ? '→' : '← Collapse'}
+    </button>
+  </div>`
+
   nav.innerHTML = html
+}
+
+function toggleSidebar() {
+  state._sidebarCollapsed = !state._sidebarCollapsed
+  try { localStorage.setItem('ph_sidebar_collapsed', state._sidebarCollapsed ? '1' : '0') } catch(_) {}
+  renderSidebar()
 }
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
@@ -222,7 +258,7 @@ function onboardNext() {
 // ── Onboarding — Step 2: Tool Picker ─────────────────────────────────────────
 function showToolPicker(fromSettings = false) {
   const enabled = fromSettings ? _enabledTools() : _DEFAULT_TOOLS
-  const sections = ['Research','Workspace','Network','Planning']
+  const sections = ['Workspace','Tools','Feeds']
 
   const toolCard = (t) => {
     const on = enabled.includes(t.id)
@@ -591,8 +627,8 @@ function statusBadge(s, map) {
   return `<span class="text-xs px-2.5 py-0.5 rounded-full font-medium ${cls}">${esc(s||'—')}</span>`
 }
 function pageHeader(title, btn='') {
-  return `<div class="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between flex-shrink-0">
-    <h2 class="text-base font-bold text-slate-900">${title}</h2>${btn}</div>`
+  return `<div class="bg-white border-b border-slate-200 px-4 lg:px-6 py-3 lg:py-4 flex items-center justify-between flex-shrink-0 gap-2 flex-wrap">
+    <h2 class="text-base font-bold text-slate-900 flex-shrink-0">${title}</h2>${btn}</div>`
 }
 function emptyState(icon, title, sub) {
   return `<div class="flex flex-col items-center justify-center h-full text-center py-20">
@@ -936,6 +972,7 @@ async function loadAndShowApp() {
     window.api.storeGet('fontFamily').then(f => applyFont(f || 'system')),
     ...keys.map(async k => { const val = await window.api.storeGet(k); if (val !== null) state[k] = val })
   ])
+  try { state._sidebarCollapsed = localStorage.getItem('ph_sidebar_collapsed') === '1' } catch(_) {}
   updateSidebarProfile()
   renderSidebar()
   if (!state.profile) {
