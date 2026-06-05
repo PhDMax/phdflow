@@ -6,6 +6,7 @@ const fs    = require('fs')
 const dgram = require('dgram')
 const http  = require('http')
 const os    = require('os')
+const xlsx  = require('xlsx')
 
 // ─── Auto-updater setup ───────────────────────────────────────────────────────
 autoUpdater.autoDownload         = true
@@ -453,6 +454,95 @@ ipcMain.handle('store-set', (_, key, value) => { const d = readStore(); d[key]=v
 ipcMain.handle('open-external', (_, url) => shell.openExternal(url))
 ipcMain.handle('open-folder',   (_, p)   => shell.openPath(p))
 ipcMain.handle('get-app-version', () => app.getVersion())
+
+// ── Spreadsheet / PDF data reading ───────────────────────────────────────────
+
+ipcMain.handle('open-spreadsheet-dialog', async () => {
+  const r = await dialog.showOpenDialog(mainWindow, {
+    title: 'Open data file',
+    filters: [
+      { name: 'Spreadsheets & CSV', extensions: ['xlsx','xls','csv','ods'] },
+      { name: 'PDF', extensions: ['pdf'] },
+      { name: 'All files', extensions: ['*'] },
+    ],
+    properties: ['openFile'],
+  })
+  return r.canceled ? null : r.filePaths[0]
+})
+
+ipcMain.handle('read-spreadsheet', (_, filepath) => {
+  try {
+    const ext = path.extname(filepath).toLowerCase()
+    if (ext === '.csv') {
+      const text = fs.readFileSync(filepath, 'utf-8')
+      const rows = text.trim().split(/\r?\n/).map(l => l.split(',').map(c => {
+        c = c.trim().replace(/^"|"$/g,'')
+        const n = parseFloat(c); return isNaN(n) ? c : n
+      }))
+      const headers = rows.shift() || []
+      return { ok:true, sheets:[{ name:'Sheet1', headers, rows }] }
+    }
+    const wb  = xlsx.readFile(filepath, { cellDates:true, dense:true })
+    const sheets = wb.SheetNames.map(name => {
+      const ws   = wb.Sheets[name]
+      const data = xlsx.utils.sheet_to_json(ws, { header:1, defval:'' })
+      const headers = (data[0] || []).map(String)
+      const rows = data.slice(1).map(row =>
+        row.map(c => { const n = parseFloat(c); return (c !== '' && !isNaN(n)) ? n : String(c ?? '') })
+      ).filter(r => r.some(v => v !== ''))
+      return { name, headers, rows }
+    })
+    return { ok:true, sheets }
+  } catch(e) { return { ok:false, error:e.message } }
+})
+
+ipcMain.handle('read-pdf-table', async (_, filepath) => {
+  try {
+    const pdfParse = require('pdf-parse')
+    const buf = fs.readFileSync(filepath)
+    const pdf = await pdfParse(buf)
+    // Heuristic table extraction: look for lines with multiple whitespace-delimited columns
+    const lines = pdf.text.split('\n').map(l => l.trim()).filter(Boolean)
+    const tableLines = lines.filter(l => /(\S+\s{2,}\S+)/.test(l))
+    if (!tableLines.length) return { ok:true, sheets:[{ name:'PDF', headers:['Text'], rows: lines.map(l=>[l]) }] }
+    // Parse columns by splitting on 2+ spaces
+    const rows = tableLines.map(l => {
+      const cols = l.split(/\s{2,}/).map(c => { const n = parseFloat(c.replace(/,/g,'')); return isNaN(n) ? c : n })
+      return cols
+    })
+    // Detect header row: first row is header if it has mostly strings
+    const firstRow = rows[0] || []
+    const isHeader = firstRow.every(c => typeof c === 'string')
+    const headers = isHeader ? firstRow.map(String) : firstRow.map((_,i)=>`Col ${i+1}`)
+    const dataRows = isHeader ? rows.slice(1) : rows
+    return { ok:true, sheets:[{ name:'PDF Extract', headers, rows:dataRows }] }
+  } catch(e) { return { ok:false, error:e.message } }
+})
+
+// ── Data file watcher (for live-linked charts) ────────────────────────────────
+const _dataWatchers = new Map()  // filepath → FSWatcher
+
+ipcMain.handle('watch-data-file', (_, filepath) => {
+  if (_dataWatchers.has(filepath)) return true
+  let debounce = null
+  try {
+    const watcher = fs.watch(filepath, () => {
+      clearTimeout(debounce)
+      debounce = setTimeout(() => {
+        if (mainWindow?.webContents && !mainWindow.webContents.isDestroyed())
+          mainWindow.webContents.send('data-file-changed', filepath)
+      }, 600)
+    })
+    _dataWatchers.set(filepath, watcher)
+    return true
+  } catch { return false }
+})
+
+ipcMain.handle('unwatch-data-file', (_, filepath) => {
+  const w = _dataWatchers.get(filepath)
+  if (w) { try { w.close() } catch {} _dataWatchers.delete(filepath) }
+  return true
+})
 
 // ── PhDFlow workspace folder (Documents/PhDFlow) ──────────────────────────────
 function _getWorkspaceDir() {

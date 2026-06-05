@@ -6,7 +6,13 @@ contextBridge.exposeInMainWorld('api', {
   storeSet:          (key, value)        => ipcRenderer.invoke('store-set', key, value),
   openExternal:      (url)               => ipcRenderer.invoke('open-external', url),
   openFolder:        (p)                 => ipcRenderer.invoke('open-folder',   p),
-  getWorkspaceDir:   ()                  => ipcRenderer.invoke('get-workspace-dir'),
+  getWorkspaceDir:       ()         => ipcRenderer.invoke('get-workspace-dir'),
+  openSpreadsheetDialog: ()         => ipcRenderer.invoke('open-spreadsheet-dialog'),
+  readSpreadsheet:       (fp)       => ipcRenderer.invoke('read-spreadsheet', fp),
+  readPdfTable:          (fp)       => ipcRenderer.invoke('read-pdf-table', fp),
+  watchDataFile:         (fp)       => ipcRenderer.invoke('watch-data-file', fp),
+  unwatchDataFile:       (fp)       => ipcRenderer.invoke('unwatch-data-file', fp),
+  onDataFileChanged:     (cb)       => ipcRenderer.on('data-file-changed', (_, fp) => cb(fp)),
   getAppVersion:     ()                  => ipcRenderer.invoke('get-app-version'),
 
   // ── Dialogs ───────────────────────────────────────────────────────────────

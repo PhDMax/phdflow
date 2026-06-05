@@ -211,6 +211,10 @@ function render_whiteboard() {
           ${_wbTplPanel ? 'bg-indigo-100 text-indigo-700' : 'text-slate-400 hover:bg-slate-100'}">
         📐 Templates
       </button>
+      <!-- Quick chart insert -->
+      <button onclick="wbInsertChart('bar')"   title="Insert data bar chart"  class="w-8 h-8 flex items-center justify-center rounded text-sm text-slate-500 hover:bg-slate-100 transition-colors flex-shrink-0">📊</button>
+      <button onclick="wbInsertChart('line')"  title="Insert data line chart" class="w-8 h-8 flex items-center justify-center rounded text-sm text-slate-500 hover:bg-slate-100 transition-colors flex-shrink-0">📈</button>
+      <button onclick="wbInsertChart('pie')"   title="Insert data pie chart"  class="w-8 h-8 flex items-center justify-center rounded text-sm text-slate-500 hover:bg-slate-100 transition-colors flex-shrink-0">🥧</button>
 
       <div class="ml-auto flex items-center gap-1 flex-shrink-0 pl-2">
         <button onclick="wbUndo()" title="Undo Ctrl+Z" class="w-8 h-8 flex items-center justify-center rounded text-slate-500 hover:bg-slate-100 transition-colors">↩</button>
@@ -265,6 +269,13 @@ function render_whiteboard() {
       <button onclick="wbSelZOrder('back')"  title="Send to back"  class="text-slate-500 hover:text-indigo-700 font-medium">↓ Back</button>
       <button onclick="wbSelDuplicate()" class="text-indigo-600 hover:text-indigo-800 font-medium">⎘ Duplicate</button>
       <button onclick="_wbDeleteSelected()" class="text-rose-500 hover:text-rose-700 font-medium ml-1">✕ Delete</button>
+      <!-- Chart-specific controls -->
+      <div id="wb-sel-chart-btns" class="hidden items-center gap-2 ml-1">
+        <div class="w-px h-4 bg-indigo-200"></div>
+        <button onclick="wbEditChartData(_wbSelId)" class="px-2 py-0.5 bg-indigo-600 text-white rounded text-xs hover:bg-indigo-700 transition-colors">📊 Edit Data</button>
+        <button onclick="wbImportChartFile(_wbSelId)" class="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs hover:bg-slate-200 transition-colors">📂 Import File</button>
+        <span id="wb-sel-chart-source" class="text-[10px] text-slate-400 truncate max-w-[140px]"></span>
+      </div>
     </div>
 
     <!-- Canvas row: template panel + canvas -->
@@ -952,6 +963,10 @@ function _wbDrawShape(ctx, s) {
       lines.forEach((l,i) => ctx.fillText(l, s.x, s.y + i*lh))
       break
     }
+    case 'chart': {
+      _wbDrawChart(ctx, s)
+      break
+    }
   }
 
   ctx.restore()
@@ -1099,7 +1114,8 @@ function _wbBBox(s) {
     case 'triangle': return { x:Math.min(s.x1,s.x2,s.x3)-4, y:Math.min(s.y1,s.y2,s.y3)-4,
                               w:Math.max(s.x1,s.x2,s.x3)-Math.min(s.x1,s.x2,s.x3)+8,
                               h:Math.max(s.y1,s.y2,s.y3)-Math.min(s.y1,s.y2,s.y3)+8 }
-    case 'image':    return { x:s.x, y:s.y, w:s.w, h:s.h }
+    case 'image':
+    case 'chart':    return { x:s.x, y:s.y, w:s.w, h:s.h }
     case 'text':     return { x:s.x, y:s.y-(s.fontSize||14),
                               w:(s.text||'').split('\n').reduce((m,l)=>Math.max(m,l.length),0)*(s.fontSize||14)*0.55,
                               h:(s.text||'').split('\n').length*(s.fontSize||14)*1.4 }
@@ -1134,6 +1150,7 @@ function _wbMoveShape(id, dx, dy, origShapes) {
     case 'arrow':    cur.x1=orig.x1+dx; cur.y1=orig.y1+dy; cur.x2=orig.x2+dx; cur.y2=orig.y2+dy; break
     case 'triangle': cur.x1=orig.x1+dx; cur.y1=orig.y1+dy; cur.x2=orig.x2+dx; cur.y2=orig.y2+dy; cur.x3=orig.x3+dx; cur.y3=orig.y3+dy; break
     case 'image':
+    case 'chart':
     case 'text':     cur.x=orig.x+dx; cur.y=orig.y+dy; break
     case 'freehand': cur.points=orig.points.map(p=>({x:p.x+dx, y:p.y+dy})); break
   }
@@ -1864,6 +1881,481 @@ async function wbSaveTemplateConfirm() {
   showToast(`"${name}" saved as template ✓`)
 }
 
+// ══ Chart Shape — Data-driven charts ══════════════════════════════════════════
+
+const _WB_CHART_PALETTE = ['#6366f1','#22d3ee','#a3e635','#fb923c','#f472b6','#34d399','#fbbf24','#f87171']
+
+function _wbNiceTicks(min, max, n) {
+  if (max === 0) return [0, 1, 2, 3, 4, 5]
+  const raw = (max - min) / (n - 1)
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)))
+  const step = [1,2,2.5,5,10].map(f=>f*mag).find(s=>s>=raw) || mag*10
+  const lo = Math.floor(min/step)*step
+  const ticks = []
+  for (let t=lo; t<=max+step*0.01; t+=step) ticks.push(Math.round(t*1e9)/1e9)
+  return ticks
+}
+
+function _wbFmtN(n) {
+  if (Math.abs(n) >= 1e6) return (n/1e6).toFixed(1).replace(/\.0$/,'')+'M'
+  if (Math.abs(n) >= 1e3) return (n/1e3).toFixed(1).replace(/\.0$/,'')+'k'
+  return String(Number.isInteger(n) ? n : n.toFixed(2).replace(/\.?0+$/,''))
+}
+
+function _wbChartNums(data) {
+  const rows = data?.rows || []
+  const headers = data?.headers || []
+  const seriesCols = headers.slice(1).map((_,i) => rows.map(r => parseFloat(r[i+1]) || 0))
+  return seriesCols
+}
+
+function _wbDrawChart(ctx, s) {
+  const { x, y, w, h, chartType = 'bar', data, title } = s
+  ctx.save()
+  // White background + border
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(x, y, w, h)
+  ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 1; ctx.strokeRect(x, y, w, h)
+
+  if (!data?.rows?.length || !data?.headers?.length) {
+    // Empty state
+    ctx.fillStyle = '#94a3b8'; ctx.font = '11px system-ui, sans-serif'
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.fillText('No data — click "Edit Data"', x+w/2, y+h/2)
+    ctx.restore(); return
+  }
+
+  if (title) {
+    ctx.fillStyle = '#1e293b'; ctx.font = 'bold 11px system-ui, sans-serif'
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top'
+    ctx.fillText(title.slice(0,50), x+w/2, y+6)
+  }
+
+  try {
+    switch(chartType) {
+      case 'bar':     _wbRenderBar(ctx, s);     break
+      case 'line':    _wbRenderLine(ctx, s);    break
+      case 'scatter': _wbRenderScatter(ctx, s); break
+      case 'pie':     _wbRenderPie(ctx, s);     break
+      default:        _wbRenderBar(ctx, s)
+    }
+  } catch {}
+  ctx.restore()
+}
+
+function _wbChartMargins(s) {
+  const MT = (s.title ? 26 : 10), MB = 32, ML = 46, MR = 14
+  const cw = s.w - ML - MR, ch = s.h - MT - MB
+  return { MT, MB, ML, MR, cw, ch, ox: s.x+ML, oy: s.y+MT+ch }
+}
+
+function _wbRenderBar(ctx, s) {
+  const { MT, ML, cw, ch, ox, oy } = _wbChartMargins(s)
+  const { data } = s
+  const headers = data.headers || []
+  const rows = data.rows || []
+  const sc = Math.max(1, headers.length - 1)
+  const allVals = rows.flatMap(r => Array.from({length:sc},(_,i)=>parseFloat(r[i+1])||0))
+  const maxV = Math.max(...allVals, 0) || 1
+  const ticks = _wbNiceTicks(0, maxV, 5)
+  const axMax = ticks[ticks.length-1]
+
+  // Grid + Y axis labels
+  ctx.strokeStyle = '#f1f5f9'; ctx.lineWidth = 0.5
+  ctx.fillStyle = '#64748b'; ctx.font = '9px system-ui'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle'
+  ticks.forEach(t => {
+    const ty = oy - (t/axMax)*ch
+    ctx.beginPath(); ctx.moveTo(ox,ty); ctx.lineTo(ox+cw,ty); ctx.stroke()
+    ctx.fillText(_wbFmtN(t), ox-3, ty)
+  })
+  ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 1
+  ctx.beginPath(); ctx.moveTo(ox,s.y+MT); ctx.lineTo(ox,oy); ctx.stroke()
+  ctx.beginPath(); ctx.moveTo(ox,oy); ctx.lineTo(ox+cw,oy); ctx.stroke()
+
+  // Bars
+  const gw = cw / rows.length
+  const pad = Math.max(2, gw*0.12), bw = (gw - pad*2) / sc
+  rows.forEach((row, gi) => {
+    for (let si=0; si<sc; si++) {
+      const v = parseFloat(row[si+1])||0
+      const bh = (v/axMax)*ch
+      const bx = ox + gi*gw + pad + si*bw
+      ctx.fillStyle = _WB_CHART_PALETTE[si % _WB_CHART_PALETTE.length]
+      ctx.fillRect(bx, oy-bh, Math.max(1,bw-1), bh)
+    }
+    ctx.fillStyle = '#64748b'; ctx.font = '9px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'top'
+    ctx.fillText(String(row[0]||'').slice(0,8), ox+gi*gw+gw/2, oy+4)
+  })
+  _wbChartLegend(ctx, s, headers.slice(1), { x:s.x+ML, y:s.y+MT-12 })
+}
+
+function _wbRenderLine(ctx, s) {
+  const { MT, ML, cw, ch, ox, oy } = _wbChartMargins(s)
+  const { data } = s
+  const headers = data.headers || []
+  const rows = data.rows || []
+  const sc = Math.max(1, headers.length - 1)
+  const allVals = rows.flatMap(r => Array.from({length:sc},(_,i)=>parseFloat(r[i+1])||0))
+  const maxV = Math.max(...allVals, 0) || 1; const minV = Math.min(0, ...allVals)
+  const ticks = _wbNiceTicks(minV, maxV, 5)
+  const axMax = ticks[ticks.length-1]; const axMin = ticks[0]
+  const range = axMax - axMin || 1
+
+  ctx.strokeStyle = '#f1f5f9'; ctx.lineWidth = 0.5
+  ctx.fillStyle = '#64748b'; ctx.font = '9px system-ui'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle'
+  ticks.forEach(t => {
+    const ty = oy - ((t-axMin)/range)*ch
+    ctx.beginPath(); ctx.moveTo(ox,ty); ctx.lineTo(ox+cw,ty); ctx.stroke()
+    ctx.fillText(_wbFmtN(t), ox-3, ty)
+  })
+  ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 1
+  ctx.beginPath(); ctx.moveTo(ox,s.y+MT); ctx.lineTo(ox,oy); ctx.stroke()
+  ctx.beginPath(); ctx.moveTo(ox,oy); ctx.lineTo(ox+cw,oy); ctx.stroke()
+
+  const xStep = rows.length > 1 ? cw/(rows.length-1) : cw
+  for (let si=0; si<sc; si++) {
+    const col = _WB_CHART_PALETTE[si % _WB_CHART_PALETTE.length]
+    ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath()
+    rows.forEach((row,ri) => {
+      const v = parseFloat(row[si+1])||0
+      const px = ox + ri*xStep, py = oy - ((v-axMin)/range)*ch
+      ri===0 ? ctx.moveTo(px,py) : ctx.lineTo(px,py)
+    })
+    ctx.stroke()
+    rows.forEach((row,ri) => {
+      const v = parseFloat(row[si+1])||0
+      const px = ox + ri*xStep, py = oy - ((v-axMin)/range)*ch
+      ctx.fillStyle = col; ctx.beginPath(); ctx.arc(px,py,3,0,Math.PI*2); ctx.fill()
+    })
+  }
+  rows.forEach((row,ri) => {
+    ctx.fillStyle = '#64748b'; ctx.font = '9px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'top'
+    ctx.fillText(String(row[0]||'').slice(0,8), ox+ri*xStep, oy+4)
+  })
+  _wbChartLegend(ctx, s, headers.slice(1), { x:s.x+ML, y:s.y+MT-12 })
+}
+
+function _wbRenderScatter(ctx, s) {
+  const { MT, ML, cw, ch, ox, oy } = _wbChartMargins(s)
+  const { data } = s
+  const rows = (data?.rows||[]).map(r=>[parseFloat(r[0])||0, parseFloat(r[1])||0])
+  if (!rows.length) return
+  const xs = rows.map(r=>r[0]), ys = rows.map(r=>r[1])
+  const xMax=Math.max(...xs)||1, yMax=Math.max(...ys)||1
+  const xMin=Math.min(...xs), yMin=Math.min(0,...ys)
+  const xRange=xMax-xMin||1, yRange=yMax-yMin||1
+
+  ctx.strokeStyle='#cbd5e1'; ctx.lineWidth=1
+  ctx.beginPath(); ctx.moveTo(ox,s.y+MT); ctx.lineTo(ox,oy); ctx.stroke()
+  ctx.beginPath(); ctx.moveTo(ox,oy); ctx.lineTo(ox+cw,oy); ctx.stroke()
+
+  ctx.fillStyle = _WB_CHART_PALETTE[0]
+  rows.forEach(([x0,y0]) => {
+    const px = ox+(x0-xMin)/xRange*cw, py = oy-(y0-yMin)/yRange*ch
+    ctx.beginPath(); ctx.arc(px,py,4,0,Math.PI*2); ctx.fill()
+  })
+  ctx.fillStyle='#64748b'; ctx.font='9px system-ui'; ctx.textAlign='center'; ctx.textBaseline='top'
+  const xLabel=(data?.headers||[])[0]||'X'
+  const yLabel=(data?.headers||[])[1]||'Y'
+  ctx.fillText(xLabel, ox+cw/2, oy+4)
+  ctx.save(); ctx.translate(ox-30, s.y+MT+ch/2); ctx.rotate(-Math.PI/2)
+  ctx.fillText(yLabel, 0, 0); ctx.restore()
+}
+
+function _wbRenderPie(ctx, s) {
+  const { data } = s
+  const rows = data?.rows || []
+  if (!rows.length) return
+  const labels = rows.map(r=>String(r[0]||''))
+  const vals   = rows.map(r=>Math.abs(parseFloat(r[1])||0))
+  const total  = vals.reduce((a,b)=>a+b,0) || 1
+
+  const legW = Math.min(90, s.w*0.28)
+  const cx = s.x + (s.w - legW)/2, cy = s.y + s.h/2
+  const r  = Math.min((s.w - legW)/2 - 16, s.h/2 - 20)
+  if (r < 10) return
+
+  let angle = -Math.PI/2
+  vals.forEach((v,i) => {
+    const slice = (v/total) * Math.PI*2
+    const col = _WB_CHART_PALETTE[i % _WB_CHART_PALETTE.length]
+    ctx.fillStyle = col; ctx.beginPath()
+    ctx.moveTo(cx,cy); ctx.arc(cx,cy,r,angle,angle+slice); ctx.closePath(); ctx.fill()
+    ctx.strokeStyle='#fff'; ctx.lineWidth=1; ctx.stroke()
+    // Percentage label inside slice
+    const mid = angle + slice/2
+    if (slice > 0.3) {
+      ctx.fillStyle='#fff'; ctx.font='bold 9px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'
+      ctx.fillText(Math.round(v/total*100)+'%', cx+Math.cos(mid)*r*0.65, cy+Math.sin(mid)*r*0.65)
+    }
+    angle += slice
+  })
+
+  // Legend
+  const lx = s.x + s.w - legW + 4, ly0 = s.y + s.h/2 - (labels.length*14)/2
+  labels.forEach((lbl,i) => {
+    const col = _WB_CHART_PALETTE[i % _WB_CHART_PALETTE.length]
+    ctx.fillStyle=col; ctx.fillRect(lx, ly0+i*14, 8, 8)
+    ctx.fillStyle='#475569'; ctx.font='9px system-ui'; ctx.textAlign='left'; ctx.textBaseline='top'
+    ctx.fillText(lbl.slice(0,12), lx+10, ly0+i*14)
+  })
+}
+
+function _wbChartLegend(ctx, s, labels, pos) {
+  if (labels.length <= 1) return
+  let lx = pos.x
+  ctx.font = '9px system-ui'; ctx.textBaseline = 'top'
+  labels.forEach((lbl,i) => {
+    const col = _WB_CHART_PALETTE[i % _WB_CHART_PALETTE.length]
+    ctx.fillStyle=col; ctx.fillRect(lx, pos.y, 7, 7)
+    ctx.fillStyle='#475569'; ctx.textAlign='left'
+    ctx.fillText((lbl||'').slice(0,12), lx+9, pos.y)
+    lx += 9 + Math.min(80, (lbl||'').length*5.5) + 8
+    if (lx > s.x + s.w - 20) return
+  })
+}
+
+// ── Chart insertion ──────────────────────────────────────────────────────────
+function wbInsertChart(chartType) {
+  if (!_wb) return
+  const cx = (_wbCanvas.offsetWidth  / 2 - _wbPanX) / _wbZoom
+  const cy = (_wbCanvas.offsetHeight / 2 - _wbPanY) / _wbZoom
+  const w = 380, h = 260
+  _wbPushUndo()
+  const shape = {
+    id: 'ws-' + uid(), type:'chart', chartType,
+    x: cx-w/2, y: cy-h/2, w, h,
+    title: chartType.charAt(0).toUpperCase()+chartType.slice(1)+' Chart',
+    data: { headers:['Category','Value'], rows:[['A',10],['B',20],['C',15],['D',25]] },
+    sourceFile: null, sourceSheet: 0,
+  }
+  _wb.shapes.push(shape)
+  _wbSelId = shape.id
+  saveWb(); _wbRender()
+  // Open data editor immediately
+  wbEditChartData(shape.id)
+}
+
+// ── Data editor (modal spreadsheet) ──────────────────────────────────────────
+function wbEditChartData(id) {
+  const shape = (_wb?.shapes||[]).find(s=>s.id===id)
+  if (!shape || shape.type !== 'chart') return
+
+  const renderGrid = (data) => {
+    const h = data.headers || []
+    const r = data.rows || []
+    const colCount = Math.max(h.length, r.reduce((m,rr)=>Math.max(m,rr.length),0))
+    const extCols = Math.max(colCount, 3)  // always show at least 3 columns
+
+    const headerRow = Array.from({length:extCols},(_,i)=>`
+      <td class="p-0"><input type="text" value="${esc(String(h[i]||''))}"
+        oninput="wbChartHeaderEdit('${id}',${i},this.value)"
+        class="w-full h-7 px-1.5 text-xs font-semibold bg-slate-50 border-b border-r border-slate-200 outline-none focus:bg-indigo-50 text-slate-700"/></td>`).join('')
+
+    const dataRows = [...r, ...Array(Math.max(0, 5-r.length)).fill(null)].map((row,ri)=>{
+      const cells = Array.from({length:extCols},(_,ci)=>`
+        <td class="p-0"><input type="text" value="${esc(String(row?.[ci]??''))}"
+          oninput="wbChartCellEdit('${id}',${ri},${ci},this.value)"
+          class="w-full h-7 px-1.5 text-xs border-b border-r border-slate-200 outline-none focus:bg-indigo-50 text-slate-700"/></td>`).join('')
+      return `<tr>${cells}</tr>`
+    }).join('')
+
+    return `<table class="border-collapse w-full text-xs" style="min-width:320px">
+      <thead><tr>${headerRow}</tr></thead>
+      <tbody>${dataRows}</tbody>
+    </table>`
+  }
+
+  const d = shape.data || { headers:['Category','Value'], rows:[] }
+  openModal(`
+  <div class="flex items-center justify-between mb-3">
+    <h3 class="text-sm font-bold text-slate-900">📊 Chart Data — ${esc(shape.title||'')}</h3>
+    <div class="flex gap-2">
+      <select id="wbed-type" onchange="wbChartChangeType('${id}',this.value)" class="text-xs border border-slate-200 rounded px-2 py-1 bg-white">
+        ${['bar','line','scatter','pie'].map(t=>`<option value="${t}" ${shape.chartType===t?'selected':''}>${t.charAt(0).toUpperCase()+t.slice(1)}</option>`).join('')}
+      </select>
+      <input id="wbed-title" type="text" value="${esc(shape.title||'')}" placeholder="Chart title"
+        oninput="wbChartChangeTitle('${id}',this.value)"
+        class="text-xs border border-slate-200 rounded px-2 py-1 w-36"/>
+    </div>
+  </div>
+
+  <div class="overflow-auto mb-3" style="max-height:260px" id="wbed-grid">
+    ${renderGrid(d)}
+  </div>
+
+  <div class="flex items-center gap-2 mb-3">
+    <button onclick="wbChartAddRow('${id}')" class="text-xs px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded">+ Row</button>
+    <button onclick="wbChartAddCol('${id}')" class="text-xs px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded">+ Column</button>
+    <button onclick="wbChartRemoveLastRow('${id}')" class="text-xs px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded text-rose-500">− Row</button>
+    <div class="flex-1"></div>
+    <button onclick="wbImportChartFile('${id}')" class="text-xs px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium">📂 Import Excel / CSV / PDF</button>
+  </div>
+
+  ${shape.sourceFile ? `
+  <div class="flex items-center gap-2 text-xs text-slate-500 bg-slate-50 rounded p-2 mb-2">
+    <span>🔗 Linked: <strong>${esc(shape.sourceFile.split(/[\\/]/).pop())}</strong></span>
+    <button onclick="wbUnlinkChartFile('${id}')" class="ml-auto text-rose-400 hover:text-rose-600">Unlink</button>
+  </div>` : ''}
+
+  <div class="flex justify-end gap-2">
+    <button onclick="closeModal()" class="btn-secondary text-xs py-2 px-4">Close</button>
+  </div>`)
+}
+
+// Chart data edit helpers — live-update while modal is open
+function wbChartHeaderEdit(id, col, val) {
+  const s = (_wb?.shapes||[]).find(s=>s.id===id); if(!s) return
+  if (!s.data) s.data = { headers:[], rows:[] }
+  while (s.data.headers.length <= col) s.data.headers.push('')
+  s.data.headers[col] = val
+  saveWb(); _wbRender()
+}
+
+function wbChartCellEdit(id, row, col, val) {
+  const s = (_wb?.shapes||[]).find(s=>s.id===id); if(!s) return
+  if (!s.data) s.data = { headers:[], rows:[] }
+  while (s.data.rows.length <= row) s.data.rows.push([])
+  while (s.data.rows[row].length <= col) s.data.rows[row].push('')
+  s.data.rows[row][col] = val.trim() === '' ? '' : (isNaN(parseFloat(val)) ? val : parseFloat(val))
+  // Strip trailing empty rows
+  while (s.data.rows.length && s.data.rows[s.data.rows.length-1].every(c=>c===''||c===undefined)) s.data.rows.pop()
+  saveWb(); _wbRender()
+}
+
+function wbChartChangeType(id, type) {
+  const s = (_wb?.shapes||[]).find(s=>s.id===id); if(!s) return
+  s.chartType = type; saveWb(); _wbRender()
+}
+
+function wbChartChangeTitle(id, val) {
+  const s = (_wb?.shapes||[]).find(s=>s.id===id); if(!s) return
+  s.title = val; saveWb(); _wbRender()
+}
+
+function wbChartAddRow(id) {
+  const s = (_wb?.shapes||[]).find(s=>s.id===id); if(!s) return
+  const cols = (s.data?.headers||[]).length || 2
+  s.data.rows.push(Array(cols).fill(''))
+  // Re-render modal grid
+  const grid = document.getElementById('wbed-grid')
+  if (grid) grid.innerHTML = (()=>{ const f=wbEditChartData; return '' })()
+  saveWb(); _wbRender()
+  // Refresh modal grid
+  const gridEl = document.getElementById('wbed-grid')
+  if (gridEl) {
+    const d = s.data || { headers:[], rows:[] }
+    const cols2 = Math.max((d.headers||[]).length, d.rows.reduce((m,r)=>Math.max(m,r.length),0), 3)
+    const extCols = cols2
+    const headerRow = Array.from({length:extCols},(_,i)=>`<td class="p-0"><input type="text" value="${esc(String((d.headers||[])[i]||''))}" oninput="wbChartHeaderEdit('${id}',${i},this.value)" class="w-full h-7 px-1.5 text-xs font-semibold bg-slate-50 border-b border-r border-slate-200 outline-none focus:bg-indigo-50 text-slate-700"/></td>`).join('')
+    const dataRows = [...(d.rows||[]),...Array(Math.max(0,5-(d.rows||[]).length)).fill(null)].map((row,ri)=>{
+      const cells = Array.from({length:extCols},(_,ci)=>`<td class="p-0"><input type="text" value="${esc(String(row?.[ci]??''))}" oninput="wbChartCellEdit('${id}',${ri},${ci},this.value)" class="w-full h-7 px-1.5 text-xs border-b border-r border-slate-200 outline-none focus:bg-indigo-50 text-slate-700"/></td>`).join('')
+      return `<tr>${cells}</tr>`
+    }).join('')
+    gridEl.innerHTML = `<table class="border-collapse w-full text-xs" style="min-width:320px"><thead><tr>${headerRow}</tr></thead><tbody>${dataRows}</tbody></table>`
+  }
+}
+
+function wbChartAddCol(id) {
+  const s = (_wb?.shapes||[]).find(s=>s.id===id); if(!s) return
+  s.data.headers.push(`Col ${s.data.headers.length+1}`)
+  s.data.rows.forEach(r=>r.push(''))
+  saveWb(); _wbRender(); wbEditChartData(id)
+}
+
+function wbChartRemoveLastRow(id) {
+  const s = (_wb?.shapes||[]).find(s=>s.id===id); if(!s||!s.data?.rows?.length) return
+  s.data.rows.pop(); saveWb(); _wbRender(); wbEditChartData(id)
+}
+
+// ── File import for charts ─────────────────────────────────────────────────────
+async function wbImportChartFile(id) {
+  const shape = (_wb?.shapes||[]).find(s=>s.id===id)
+  if (!shape) return
+  const fp = await api.openSpreadsheetDialog()
+  if (!fp) return
+
+  const ext = fp.split('.').pop().toLowerCase()
+  let res
+  if (ext === 'pdf') {
+    res = await api.readPdfTable(fp)
+  } else {
+    res = await api.readSpreadsheet(fp)
+  }
+
+  if (!res?.ok) { showToast('Could not read file: '+(res?.error||'unknown error'), 'error'); return }
+
+  // If multiple sheets, pick the first; show sheet picker if multiple
+  const sheets = res.sheets || []
+  if (!sheets.length) { showToast('No data found in file', 'error'); return }
+
+  if (sheets.length > 1) {
+    // Show sheet selector
+    openModal(`
+    <h3 class="text-sm font-bold text-slate-900 mb-3">Choose Sheet</h3>
+    <div class="space-y-2">
+      ${sheets.map((sh,i)=>`
+      <button onclick="wbApplyChartSheet('${id}','${fp}',${i});closeModal()"
+        class="w-full text-left px-3 py-2 rounded-lg border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 text-sm transition-colors">
+        ${esc(sh.name)} <span class="text-xs text-slate-400 ml-2">${sh.rows?.length||0} rows × ${sh.headers?.length||0} cols</span>
+      </button>`).join('')}
+    </div>`)
+    window._wbPendingSheets = { id, fp, sheets }
+  } else {
+    _wbApplySheet(id, fp, sheets[0])
+    showToast(`Loaded ${sheets[0].rows.length} rows from ${fp.split(/[\\/]/).pop()} ✓`)
+  }
+}
+
+function wbApplyChartSheet(id, fp, sheetIdx) {
+  const pending = window._wbPendingSheets
+  if (!pending) return
+  _wbApplySheet(id, fp, pending.sheets[sheetIdx])
+  showToast(`Loaded ${pending.sheets[sheetIdx].rows.length} rows ✓`)
+}
+
+function _wbApplySheet(id, fp, sheet) {
+  const shape = (_wb?.shapes||[]).find(s=>s.id===id)
+  if (!shape) return
+  shape.data = { headers: sheet.headers, rows: sheet.rows }
+  shape.sourceFile = fp
+  shape.sourceSheet = 0
+  saveWb(); _wbRender()
+  // Start file watcher
+  api.watchDataFile(fp)
+  // Refresh modal if open
+  if (document.getElementById('wbed-grid')) wbEditChartData(id)
+  // Update selection bar
+  _wbUpdateSelBar()
+}
+
+function wbUnlinkChartFile(id) {
+  const shape = (_wb?.shapes||[]).find(s=>s.id===id)
+  if (!shape) return
+  if (shape.sourceFile) api.unwatchDataFile(shape.sourceFile)
+  shape.sourceFile = null; shape.sourceSheet = null
+  saveWb(); _wbRender(); _wbUpdateSelBar()
+  if (document.getElementById('wbed-grid')) wbEditChartData(id)
+  showToast('File link removed')
+}
+
+// ── Live file watcher — update charts when linked file changes ───────────────
+;(function _wbInitDataWatcher() {
+  if (window._wbDataWatcherInited) return
+  window._wbDataWatcherInited = true
+  api.onDataFileChanged && api.onDataFileChanged(async (fp) => {
+    const charts = (_wb?.shapes||[]).filter(s=>s.type==='chart' && s.sourceFile===fp)
+    if (!charts.length) return
+    const ext = fp.split('.').pop().toLowerCase()
+    const res = ext==='pdf' ? await api.readPdfTable(fp) : await api.readSpreadsheet(fp)
+    if (!res?.ok) return
+    const sheet = res.sheets?.[0]
+    if (!sheet) return
+    charts.forEach(s => { s.data = { headers:sheet.headers, rows:sheet.rows } })
+    saveWb(); _wbRender()
+    showToast('Chart data updated from file ✓')
+  })
+})()
+
 // ── Image insertion ───────────────────────────────────────────────────────────
 
 function _wbInsertImageFile(file, screenX, screenY) {
@@ -1906,7 +2398,18 @@ function _wbUpdateSelBar() {
   document.getElementById('wb-sel-sticky-colors')?.classList.toggle('hidden', !isSticky)
   document.getElementById('wb-sel-shape-props')?.classList.toggle('hidden',   isSticky)
 
-  if (!isSticky) {
+  const isChart = sel.type === 'chart'
+  const chartBtns = document.getElementById('wb-sel-chart-btns')
+  if (chartBtns) {
+    chartBtns.classList.toggle('hidden', !isChart)
+    chartBtns.style.display = isChart ? 'flex' : 'none'
+    if (isChart) {
+      const srcEl = document.getElementById('wb-sel-chart-source')
+      if (srcEl) srcEl.textContent = sel.sourceFile ? '🔗 ' + sel.sourceFile.split(/[\\/]/).pop() : ''
+    }
+  }
+
+  if (!isSticky && !isChart) {
     const strokeInp = document.getElementById('wb-sel-stroke')
     if (strokeInp) strokeInp.value = sel.color || '#1e293b'
 
