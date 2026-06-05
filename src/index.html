@@ -120,6 +120,87 @@
     .nav-btn[draggable]{cursor:grab}
     .nav-btn[draggable]:active{cursor:grabbing;opacity:.6}
     [data-widget]{transition:border-top .08s,border-bottom .08s}
+
+    /* ════════════════════════════════════════════════════════════════════════
+       Paper View Mode — warm cream aesthetic + optional ruled lines
+       Only applies inside #view-content so sidebar/modals stay unchanged.
+       ════════════════════════════════════════════════════════════════════════ */
+
+    /* ── Shared base for all paper modes ─────────────────────────────────── */
+    body.pm-paper  #view-content,
+    body.pm-ruled  #view-content,
+    body.pm-vintage #view-content {
+      background: #f0ebe0 !important;
+      /* Subtle paper grain via SVG noise */
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E") !important;
+    }
+    body.pm-vintage #view-content { background: #e8d8b4 !important }
+
+    /* ── Cards ───────────────────────────────────────────────────────────── */
+    body.pm-paper  #view-content .bg-white,
+    body.pm-ruled  #view-content .bg-white {
+      background: #fdfaf3 !important;
+      box-shadow: 0 2px 18px rgba(100,80,40,.09), 0 1px 4px rgba(0,0,0,.05) !important;
+    }
+    body.pm-vintage #view-content .bg-white {
+      background: #f9edd8 !important;
+      box-shadow: 0 2px 18px rgba(100,70,20,.14), 0 1px 4px rgba(0,0,0,.08) !important;
+    }
+
+    /* ── Secondary backgrounds ───────────────────────────────────────────── */
+    body.pm-paper  #view-content .bg-slate-50,
+    body.pm-ruled  #view-content .bg-slate-50  { background: #ede8dd !important }
+    body.pm-vintage #view-content .bg-slate-50  { background: #ddc89e !important }
+    body.pm-paper  #view-content .bg-slate-100,
+    body.pm-ruled  #view-content .bg-slate-100 { background: #e5dfd2 !important }
+    body.pm-vintage #view-content .bg-slate-100 { background: #d4b882 !important }
+
+    /* ── Borders ─────────────────────────────────────────────────────────── */
+    body.pm-paper  #view-content .border-slate-200,
+    body.pm-ruled  #view-content .border-slate-200  { border-color: #d4c8b0 !important }
+    body.pm-paper  #view-content .border-slate-100,
+    body.pm-ruled  #view-content .border-slate-100  { border-color: #e0d8c8 !important }
+    body.pm-vintage #view-content .border-slate-200 { border-color: #c4a060 !important }
+
+    /* ── Vintage text tones ──────────────────────────────────────────────── */
+    body.pm-vintage #view-content .text-slate-900 { color: #2c1a08 !important }
+    body.pm-vintage #view-content .text-slate-800 { color: #3c2510 !important }
+    body.pm-vintage #view-content .text-slate-700 { color: #5a3818 !important }
+    body.pm-vintage #view-content .text-slate-600 { color: #7a5228 !important }
+    body.pm-vintage #view-content .text-slate-500 { color: #9a6e3a !important }
+    body.pm-vintage #view-content .text-slate-400 { color: #b8884e !important }
+
+    /* ── Ruled lines utility class (applied via JS in notes/todos) ────────── */
+    .pm-ruled-bg {
+      background-image: repeating-linear-gradient(
+        to bottom,
+        transparent,
+        transparent 27px,
+        #b8c8d8 27px,
+        #b8c8d8 28px
+      ) !important;
+      background-color: #fdfaf3 !important;
+      background-attachment: local !important;
+    }
+    body.pm-vintage .pm-ruled-bg {
+      background-image: repeating-linear-gradient(
+        to bottom,
+        transparent,
+        transparent 27px,
+        #b8903a 27px,
+        #b8903a 28px
+      ) !important;
+      background-color: #f9edd8 !important;
+    }
+    .pm-ruled-bg textarea, .pm-ruled-bg [contenteditable] {
+      background: transparent !important;
+      line-height: 28px !important;
+    }
+
+    /* ── Indigo chips/tags soften in paper modes ─────────────────────────── */
+    body.pm-paper  #view-content .bg-indigo-50,
+    body.pm-ruled  #view-content .bg-indigo-50  { background: #e8e4f4 !important }
+    body.pm-vintage #view-content .bg-indigo-50 { background: #e0d4a0 !important }
   </style>
 </head>
 <body class="flex h-screen overflow-hidden bg-slate-900">

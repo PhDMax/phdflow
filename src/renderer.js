@@ -225,6 +225,12 @@ function applyFont(font) {
   document.body.style.fontFamily = _FONT_STACKS[font] || _FONT_STACKS.system
 }
 
+// ── Paper Mode ─────────────────────────────────────────────────────────────────
+function applyPaperMode(mode) {
+  document.body.classList.remove('pm-paper','pm-ruled','pm-vintage')
+  if (mode && mode !== 'off') document.body.classList.add('pm-' + mode)
+}
+
 // ── Onboarding + view init are called after login via loadAndShowApp() ─────────
 
 // ── Onboarding — Step 1: Identity & Theme ────────────────────────────────────
@@ -1033,6 +1039,7 @@ async function loadAndShowApp() {
     window.api.storeGet('theme').then(t => applyTheme(t || 'light')),
     window.api.storeGet('accentColor').then(c => applyAccent(c || 'indigo')),
     window.api.storeGet('fontFamily').then(f => applyFont(f || 'system')),
+    window.api.storeGet('paperMode').then(m => applyPaperMode(m || 'off')),
     ...keys.map(async k => { const val = await window.api.storeGet(k); if (val !== null) state[k] = val })
   ])
   try { state._sidebarCollapsed = localStorage.getItem('ph_sidebar_collapsed') === '1' } catch(_) {}

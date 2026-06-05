@@ -87,7 +87,7 @@ function render_todos() {
       <button onclick="openTodoModal()" class="btn-primary text-xs py-1.5 px-3">+ Task</button>
     </div>
   `)}
-  <div id="todo-body" class="flex-1 overflow-y-auto"></div>`
+  <div id="todo-body" class="flex-1 overflow-y-auto ${(document.body.classList.contains('pm-ruled')||document.body.classList.contains('pm-vintage'))?'pm-ruled-bg':''}"></div>`
   todoSetTab(_todoTab)
 }
 

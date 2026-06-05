@@ -1,6 +1,12 @@
 // ══ Dashboard View ════════════════════════════════════════════════════════════
 
-function render_dashboard() {
+// Dashboard background — cached, updated when settings change
+let _dashBg = null
+async function _dashBgLoad() { _dashBg = await api.storeGet('dashBg').catch(()=>null) }
+_dashBgLoad()
+
+async function render_dashboard() {
+  await _dashBgLoad()  // always fresh from store
   const vc = document.getElementById('view-content')
   const now   = new Date()
   const today = now.toISOString().split('T')[0]
@@ -72,14 +78,16 @@ function render_dashboard() {
   <div class="flex-1 overflow-y-auto bg-slate-50">
 
     <!-- ── Header ──────────────────────────────────────────────────────────── -->
-    <div class="bg-white border-b border-slate-200 px-6 py-5">
-      <div class="flex items-end justify-between gap-6">
+    <div id="dash-header" class="border-b border-slate-200 px-6 py-5 relative overflow-hidden
+      ${_dashBg ? '' : 'bg-white'}"
+      style="${_dashBg ? `background:linear-gradient(rgba(0,0,0,.45),rgba(0,0,0,.55)),url(${_dashBg}) center/cover no-repeat;` : ''}">
+      <div class="flex items-end justify-between gap-6 relative z-10">
         <div class="flex-1 min-w-0">
-          <p class="text-xs text-slate-400 mb-0.5">${dateStr}</p>
-          <h1 class="text-xl font-bold text-slate-900">${greeting}, ${esc(name)} 👋</h1>
+          <p class="text-xs ${_dashBg ? 'text-white/70' : 'text-slate-400'} mb-0.5">${dateStr}</p>
+          <h1 class="text-xl font-bold ${_dashBg ? 'text-white' : 'text-slate-900'}">${greeting}, ${esc(name)} 👋</h1>
           ${overdueCount > 0
-            ? `<p class="text-xs text-red-600 mt-1 font-medium">⚠️ You have ${overdueCount} overdue task${overdueCount>1?'s':''}</p>`
-            : `<p class="text-xs text-slate-400 mt-1">Here's your research overview for today</p>`}
+            ? `<p class="text-xs ${_dashBg?'text-red-300':'text-red-600'} mt-1 font-medium">⚠️ You have ${overdueCount} overdue task${overdueCount>1?'s':''}</p>`
+            : `<p class="text-xs ${_dashBg?'text-white/60':'text-slate-400'} mt-1">Here's your research overview for today</p>`}
           ${(() => {
             const p = state.profile || {}
             if (!p.phdStart || !p.phdEnd) return ''
@@ -88,17 +96,17 @@ function render_dashboard() {
             const days = Math.round((end-now)/86400000)
             const col  = pct >= 75 ? '#f59e0b' : '#6366f1'
             return `<div class="flex items-center gap-2 mt-1.5">
-              <div class="w-24 bg-slate-100 rounded-full h-1.5 overflow-hidden flex-shrink-0">
+              <div class="w-24 bg-slate-100/40 rounded-full h-1.5 overflow-hidden flex-shrink-0">
                 <div class="h-1.5 rounded-full" style="width:${pct}%;background:${col}"></div>
               </div>
-              <span class="text-xs text-slate-400">PhD ${pct}%${days>0?' · '+days+'d left':' · submitted!'}</span>
+              <span class="text-xs ${_dashBg?'text-white/70':'text-slate-400'}">PhD ${pct}%${days>0?' · '+days+'d left':' · submitted!'}</span>
             </div>`
           })()}
         </div>
         ${totalTodayCount > 0 ? `
         <div class="flex-shrink-0 min-w-[160px] cursor-pointer" onclick="showView('todos')">
           <div class="flex items-center justify-between mb-1.5">
-            <span class="text-xs font-semibold text-slate-700">Today's Tasks</span>
+            <span class="text-xs font-semibold ${_dashBg?'text-white/90':'text-slate-700'}">Today's Tasks</span>
             <span class="text-xs font-bold" style="color:${progressColor}">${completedTodayTasks.length}/${totalTodayCount}</span>
           </div>
           <div class="w-full bg-slate-100 rounded-full h-2">

@@ -165,7 +165,7 @@ function render_notes() {
   </div>
 
   <!-- ── MAIN ────────────────────────────────────────────────────────────── -->
-  <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;background:${document.documentElement.dataset.theme==='dark'?'#1e293b':'#fff'}">
+  <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;background:${document.documentElement.dataset.theme==='dark'?'#1e293b':'#fff'}" class="${document.body.classList.contains('pm-ruled')||document.body.classList.contains('pm-vintage')?'pm-ruled-bg':''}">
     ${active ? _notesEditorPanel(active) : `
     <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:3rem">
       <div style="font-size:3rem;margin-bottom:1.25rem;opacity:.25">📄</div>
@@ -329,7 +329,9 @@ function _notesEditorPanel(note) {
   </div>
 
   <!-- ══ THE PAGE ══════════════════════════════════════════════════════════ -->
-  <div style="flex:1;overflow-y:auto;background:${_bg}" id="notes-scroll-area">
+  <div style="flex:1;overflow-y:auto;background:${_bg}"
+    id="notes-scroll-area"
+    class="${(document.body.classList.contains('pm-ruled')||document.body.classList.contains('pm-vintage'))?'pm-ruled-bg':''}">
     <div style="max-width:720px;margin:0 auto;padding:3.5rem 4rem 8rem;box-sizing:border-box">
 
       <!-- Page icon -->
