@@ -1,49 +1,180 @@
-// ══ Utilities ═════════════════════════════════════════════════════════════════
+// ══ Tools — persistent workspaces ════════════════════════════════════════════
 
-let _utilTab    = 'pdf'
-let _utilPdfOp  = 'merge'
-let _utilCitPaper = null    // paper object from DOI lookup
+let _utilPdfOp    = 'merge'
+let _utilCitPaper = null
 let _utilUnitCat  = 'length'
-let _rStep      = []        // current path through R decision tree [{q,a}, ...]
-let _rResult    = null      // current terminal result
+let _rStep        = []
+let _rResult      = null
 
-// ── Main Render ───────────────────────────────────────────────────────────────
+// ── Shared history engine ─────────────────────────────────────────────────────
+const _toolHist = { pdf: null, cit: null, units: null, r: null }
 
-function render_utilities() {
+async function _loadToolHist(key) {
+  if (_toolHist[key] === null)
+    _toolHist[key] = (await api.storeGet('toolHist_' + key)) || []
+  return _toolHist[key]
+}
+
+async function _pushToolHist(key, entry) {
+  const hist = await _loadToolHist(key)
+  hist.unshift({ id: uid(), date: new Date().toISOString(), ...entry })
+  if (hist.length > 60) hist.splice(60)
+  await api.storeSet('toolHist_' + key, hist)
+  _refreshHistPanel(key)
+}
+
+function _refreshHistPanel(key) {
+  const el = document.getElementById('tool-hist-list-' + key)
+  if (el && _toolHist[key]) el.innerHTML = _histListHTML(key, _toolHist[key])
+}
+
+function _histListHTML(key, items) {
+  if (!items.length) return `<p class="text-xs text-slate-500 px-3 py-4 text-center">No history yet</p>`
+  return items.map(e => {
+    const d  = new Date(e.date)
+    const ds = d.toLocaleDateString('en-GB',{day:'numeric',month:'short'}) + ' ' + d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})
+    return `<button onclick="_loadHistEntry('${key}','${e.id}')"
+      class="w-full text-left px-3 py-2 hover:bg-slate-800 transition-colors border-b border-slate-700/40 group">
+      <div class="text-xs font-medium text-slate-200 truncate">${esc(e.label||'Session')}</div>
+      <div class="text-[10px] text-slate-500 mt-0.5">${ds}</div>
+    </button>`
+  }).join('')
+}
+
+function _loadHistEntry(key, id) {
+  const hist  = _toolHist[key] || []
+  const entry = hist.find(e => e.id === id)
+  if (!entry) return
+  if (key === 'pdf')   { _utilPdfOp = entry.op || 'merge'; _refreshHistPanel('pdf') }
+  if (key === 'cit')   { _utilCitPaper = entry.paper || null; _refreshHistPanel('cit'); _rerenderCitTool() }
+  if (key === 'units') { _utilUnitCat = entry.cat || 'length'; _unitFrom = entry.from||''; _unitTo = entry.to||''; _unitVal = entry.val||''; _refreshHistPanel('units'); _rerenderUnitTool() }
+  if (key === 'r')     { _rStep = []; _rResult = null; _refreshHistPanel('r'); _rerenderRTool() }
+  showToast('Session loaded')
+}
+
+async function _utilAiSearch(key) {
+  const q = document.getElementById('hist-search-' + key)?.value?.trim()
+  if (!q) return
+  if (!window._aiAvailable || !_aiAvailable()) { showToast('Start Odysseus in Settings to use AI search', 'error'); return }
+  const hist = _toolHist[key] || []
+  const ctx  = hist.slice(0,20).map(e => `[${e.date?.slice(0,10)||'?'}] ${e.label||'Session'}`).join('\n')
+  const prompt = `The user is searching their tool history for: "${q}"\n\nHistory entries:\n${ctx}\n\nWhich entries are most relevant? Reply with a short list of entry labels only.`
+  try {
+    const res = await api.odysseusChat({ messages:[{ role:'user', content: prompt }] })
+    showToast(res?.content || 'No match found')
+  } catch { showToast('AI search failed','error') }
+}
+
+// ── Shared history sidebar panel ──────────────────────────────────────────────
+function _histSidebar(key, folderSub) {
+  return `
+  <div class="w-52 flex-shrink-0 bg-slate-900 flex flex-col overflow-hidden border-r border-slate-700/60">
+    <div class="px-3 py-2.5 border-b border-slate-700/60 flex items-center justify-between flex-shrink-0">
+      <span class="text-xs font-bold text-slate-300 uppercase tracking-wider">History</span>
+      <button onclick="openPhDFlowFolder('${folderSub}')" title="Open folder" class="text-slate-500 hover:text-slate-200 text-sm">📁</button>
+    </div>
+    <div class="px-2 py-1.5 border-b border-slate-700/60 flex-shrink-0 flex gap-1">
+      <input id="hist-search-${key}" type="text" placeholder="Filter…"
+        class="flex-1 bg-slate-800 border border-slate-700 rounded text-xs text-slate-200 px-2 py-1 outline-none focus:border-indigo-500"
+        oninput="this.value ? _filterHistPanel('${key}',this.value) : _refreshHistPanel('${key}')"/>
+      <button onclick="_utilAiSearch('${key}')" title="AI search (requires Odysseus)"
+        class="text-slate-500 hover:text-indigo-400 text-sm px-1">✦</button>
+    </div>
+    <div id="tool-hist-list-${key}" class="flex-1 overflow-y-auto">
+      <p class="text-xs text-slate-500 px-3 py-4 text-center">Loading…</p>
+    </div>
+    <div class="px-3 py-2 border-t border-slate-700/60 flex-shrink-0">
+      <button onclick="_clearToolHist('${key}')"
+        class="w-full text-xs text-slate-600 hover:text-red-400 transition-colors text-center">Clear history</button>
+    </div>
+  </div>`
+}
+
+function _filterHistPanel(key, q) {
+  const el = document.getElementById('tool-hist-list-' + key)
+  if (!el) return
+  const lq   = q.toLowerCase()
+  const items = (_toolHist[key] || []).filter(e => (e.label||'').toLowerCase().includes(lq))
+  el.innerHTML = _histListHTML(key, items)
+}
+
+async function _clearToolHist(key) {
+  if (!confirm('Clear all history for this tool?')) return
+  _toolHist[key] = []
+  await api.storeSet('toolHist_' + key, [])
+  _refreshHistPanel(key)
+}
+
+// ── 1. PDF Tools ─────────────────────────────────────────────────────────────
+async function render_pdf_tools() {
   const vc = document.getElementById('view-content')
   if (!vc) return
-
-  const tabs = [
-    { id:'pdf',   icon:'📄', label:'PDF Tools'       },
-    { id:'text',  icon:'📝', label:'Text & Citations'},
-    { id:'units', icon:'⚗️',  label:'Unit Converter'  },
-    { id:'r',     icon:'📊', label:'R Assistant'     },
-  ]
-
-  vc.innerHTML = `
-  <div class="flex flex-col h-full overflow-hidden">
-
-    ${pageHeader('🔧 Utilities', '')}
-
-    <!-- Tab bar -->
-    <div class="bg-white border-b border-slate-200 px-6 flex gap-1 flex-shrink-0">
-      ${tabs.map(t => `
-      <button onclick="_utilTab='${t.id}';render_utilities()"
-        class="px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors
-          ${_utilTab===t.id ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}">
-        ${t.icon} ${t.label}
-      </button>`).join('')}
+  await _loadToolHist('pdf')
+  vc.innerHTML = `<div class="flex h-full overflow-hidden">
+    ${_histSidebar('pdf','PDF Tools')}
+    <div class="flex-1 flex flex-col overflow-hidden">
+      ${pageHeader('📄 PDF Tools', _folderBtn('PDF Tools'))}
+      <div id="pdf-tool-area" class="flex-1 overflow-y-auto p-3 lg:p-5">${_utilRenderPdf()}</div>
     </div>
-
-    <!-- Tab content -->
-    <div class="flex-1 overflow-y-auto p-3 lg:p-6">
-      ${_utilTab==='pdf'   ? _utilRenderPdf()   : ''}
-      ${_utilTab==='text'  ? _utilRenderText()  : ''}
-      ${_utilTab==='units' ? _utilRenderUnits() : ''}
-      ${_utilTab==='r'     ? _utilRenderR()     : ''}
-    </div>
-
   </div>`
+  _refreshHistPanel('pdf')
+}
+
+// ── 2. Citations ──────────────────────────────────────────────────────────────
+function _rerenderCitTool() {
+  const el = document.getElementById('cit-tool-area')
+  if (el) el.innerHTML = _utilRenderText()
+}
+async function render_citations() {
+  const vc = document.getElementById('view-content')
+  if (!vc) return
+  await _loadToolHist('cit')
+  vc.innerHTML = `<div class="flex h-full overflow-hidden">
+    ${_histSidebar('cit','Citations')}
+    <div class="flex-1 flex flex-col overflow-hidden">
+      ${pageHeader('✏️ Citations', _folderBtn('Citations'))}
+      <div id="cit-tool-area" class="flex-1 overflow-y-auto p-3 lg:p-5">${_utilRenderText()}</div>
+    </div>
+  </div>`
+  _refreshHistPanel('cit')
+}
+
+// ── 3. Unit Converter ─────────────────────────────────────────────────────────
+function _rerenderUnitTool() {
+  const el = document.getElementById('unit-tool-area')
+  if (el) el.innerHTML = _utilRenderUnits()
+}
+async function render_unit_conv() {
+  const vc = document.getElementById('view-content')
+  if (!vc) return
+  await _loadToolHist('units')
+  vc.innerHTML = `<div class="flex h-full overflow-hidden">
+    ${_histSidebar('units','Unit Converter')}
+    <div class="flex-1 flex flex-col overflow-hidden">
+      ${pageHeader('⚗️ Unit Converter', _folderBtn('Unit Converter'))}
+      <div id="unit-tool-area" class="flex-1 overflow-y-auto p-3 lg:p-5">${_utilRenderUnits()}</div>
+    </div>
+  </div>`
+  _refreshHistPanel('units')
+}
+
+// ── 4. R Assistant ────────────────────────────────────────────────────────────
+function _rerenderRTool() {
+  const el = document.getElementById('r-tool-area')
+  if (el) el.innerHTML = _utilRenderR()
+}
+async function render_r_assist() {
+  const vc = document.getElementById('view-content')
+  if (!vc) return
+  await _loadToolHist('r')
+  vc.innerHTML = `<div class="flex h-full overflow-hidden">
+    ${_histSidebar('r','R Assistant')}
+    <div class="flex-1 flex flex-col overflow-hidden">
+      ${pageHeader('📊 R Assistant', _folderBtn('R Assistant'))}
+      <div id="r-tool-area" class="flex-1 overflow-y-auto p-3 lg:p-5">${_utilRenderR()}</div>
+    </div>
+  </div>`
+  _refreshHistPanel('r')
 }
 
 // ══ PDF TOOLS ═════════════════════════════════════════════════════════════════
@@ -65,7 +196,7 @@ function _utilRenderPdf() {
     <!-- Op selector -->
     <div class="flex gap-2 flex-wrap mb-6">
       ${PDF_OPS.map(op => `
-      <button onclick="_utilPdfOp='${op.id}';render_utilities()"
+      <button onclick="_utilPdfOp='${op.id}';document.getElementById('pdf-tool-area').innerHTML=_utilRenderPdf()"
         class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border transition-colors
           ${_utilPdfOp===op.id
             ? 'bg-indigo-600 text-white border-indigo-600'
@@ -251,7 +382,10 @@ async function utilMergePdfs() {
   const dest = await api.openSaveDialog({ title:'Save merged PDF', defaultPath:'merged.pdf', filters:[{name:'PDF',extensions:['pdf']}] })
   if (!dest) return
   const r = await api.mergePdfs(paths, dest)
-  r.success ? showToast(`Merged ${paths.length} PDFs ✓`) : showToast('Merge failed: '+r.error,'error')
+  if (r.success) {
+    showToast(`Merged ${paths.length} PDFs ✓`)
+    _pushToolHist('pdf', { op:'merge', label:`Merged ${paths.length} PDFs → ${dest.split('\\').pop()}`, files: paths.map(p=>p.split('\\').pop()), dest })
+  } else showToast('Merge failed: '+r.error,'error')
 }
 
 function _parsePageList(str, total) {
@@ -286,7 +420,10 @@ async function utilSplitPdf() {
   const base = destDir.replace(/\.pdf$/i,'')
   const rangeObjs = ranges.map((pages,i) => ({ pages, dest:`${base}_part${i+1}.pdf` }))
   const r = await api.splitPdf(fp, rangeObjs)
-  r.success ? showToast(`Split into ${r.results.length} files ✓`) : showToast('Split failed: '+r.error,'error')
+  if (r.success) {
+    showToast(`Split into ${r.results.length} files ✓`)
+    _pushToolHist('pdf', { op:'split', label:`Split ${fp.split('\\').pop()} → ${r.results.length} parts`, file: fp.split('\\').pop(), ranges: rs })
+  } else showToast('Split failed: '+r.error,'error')
 }
 
 async function utilExtractPages() {
@@ -310,7 +447,10 @@ async function utilRemovePages() {
   const dest = await api.openSaveDialog({ title:'Save modified PDF', defaultPath:'modified.pdf', filters:[{name:'PDF',extensions:['pdf']}] })
   if (!dest) return
   const r = await api.removePages(fp, dest, pages)
-  r.success ? showToast(`Removed ${r.removed} pages → ${r.remaining} remaining ✓`) : showToast('Failed: '+r.error,'error')
+  if (r.success) {
+    showToast(`Removed ${r.removed} pages → ${r.remaining} remaining ✓`)
+    _pushToolHist('pdf', { op:'remove', label:`Removed pages ${pg} from ${fp.split('\\').pop()}`, file: fp.split('\\').pop(), pages: pg })
+  } else showToast('Failed: '+r.error,'error')
 }
 
 async function utilRotatePdf() {
@@ -322,7 +462,10 @@ async function utilRotatePdf() {
   if (!dest) return
   const pages = (!pg || pg.toLowerCase()==='all') ? 'all' : _parsePageList(pg, 9999)
   const r = await api.rotatePdf(fp, dest, deg, pages)
-  r.success ? showToast(`Rotated ${r.rotatedCount} pages ✓`) : showToast('Failed: '+r.error,'error')
+  if (r.success) {
+    showToast(`Rotated ${r.rotatedCount} pages ✓`)
+    _pushToolHist('pdf', { op:'rotate', label:`Rotated ${fp.split('\\').pop()} ${deg}°`, file: fp.split('\\').pop(), deg })
+  } else showToast('Failed: '+r.error,'error')
 }
 
 async function utilAddPageNumbers() {
@@ -465,6 +608,12 @@ function utilRefreshCitation() {
   const info  = document.getElementById('cit-paper-info')
   if (out) out.textContent  = _formatCitation(_utilCitPaper, style)
   if (info) info.innerHTML  = `<strong>${esc(_utilCitPaper.title)}</strong> · ${esc((_utilCitPaper.authors||[]).slice(0,2).join(', '))}${_utilCitPaper.authors?.length>2?' et al.':''}`
+  _pushToolHist('cit', {
+    label: `${style.toUpperCase()} · ${_utilCitPaper.title?.slice(0,50)||'Untitled'}`,
+    paper: _utilCitPaper,
+    style,
+    formatted: _formatCitation(_utilCitPaper, style)
+  })
 }
 
 function _formatCitation(p, style) {
@@ -542,7 +691,7 @@ function _utilRenderUnits() {
       <!-- Category -->
       <div class="flex gap-2 flex-wrap">
         ${Object.entries(UNIT_CATS).map(([k,v])=>`
-        <button onclick="_utilUnitCat='${k}';_unitFrom='';_unitTo='';render_utilities()"
+        <button onclick="_utilUnitCat='${k}';_unitFrom='';_unitTo='';_rerenderUnitTool()"
           class="px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors
             ${_utilUnitCat===k ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'}">
           ${v.label}
@@ -591,8 +740,15 @@ function utilUpdateConversion() {
   _unitVal  = document.getElementById('unit-val')?.value  || ''
   _unitFrom = document.getElementById('unit-from')?.value || _unitFrom
   _unitTo   = document.getElementById('unit-to')?.value   || _unitTo
+  const result = _unitConvert(_unitVal, _unitFrom, _unitTo, _utilUnitCat)
   const el  = document.getElementById('unit-result')
-  if (el) el.textContent = _unitConvert(_unitVal, _unitFrom, _unitTo, _utilUnitCat)
+  if (el) el.textContent = result
+  if (_unitVal && result !== '—') {
+    _pushToolHist('units', {
+      label: `${_unitVal} ${_unitFrom} → ${result} ${_unitTo}`,
+      cat: _utilUnitCat, from: _unitFrom, to: _unitTo, val: _unitVal, result
+    })
+  }
 }
 
 function _unitConvert(val, from, to, catKey) {
@@ -1140,7 +1296,7 @@ function _utilRenderR() {
           <span class="font-medium text-indigo-600">→ ${esc(s.a)}</span>
         </div>`).join('')}
       </div>
-      <button onclick="_rStep=[];_rResult=null;render_utilities()"
+      <button onclick="_rStep=[];_rResult=null;_rerenderRTool()"
         class="text-xs text-slate-400 hover:text-slate-600 mb-3">↩ Start over</button>
       ` : ''}
 
@@ -1150,7 +1306,7 @@ function _utilRenderR() {
         <p class="text-xs font-semibold text-green-700 mb-1">✓ Recommended test:</p>
         <p class="text-sm font-bold text-green-900">${result.name}</p>
         <p class="text-xs text-green-600 mt-1">Package: ${result.pkg}</p>
-        <button onclick="_rStep=[];_rResult=null;render_utilities()"
+        <button onclick="_rStep=[];_rResult=null;_rerenderRTool()"
           class="mt-3 text-xs text-slate-500 hover:text-slate-700">↩ Start over</button>
       </div>
       ` : node ? `
@@ -1197,8 +1353,15 @@ function _rGetCurrentNode() {
 
 function rChoose(question, answer, next, result) {
   _rStep.push({ q: question, a: answer, next })
-  if (result) { _rResult = result }
-  render_utilities()
+  if (result) {
+    _rResult = result
+    _pushToolHist('r', {
+      label: result.name || result.code?.split('\n')[0]?.slice(0,50) || 'R analysis',
+      path:  _rStep.map(s => s.a).join(' → '),
+      result
+    })
+  }
+  _rerenderRTool()
 }
 
 function rCopyCode() {

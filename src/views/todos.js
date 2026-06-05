@@ -77,7 +77,7 @@ function render_todos() {
   const vc = document.getElementById('view-content')
   vc.innerHTML = `
   ${pageHeader('✅ To-Do', `
-    <div class="flex items-center gap-2">
+    <div class="flex items-center gap-2">${_folderBtn('Exports')}
       <div class="flex bg-slate-100 rounded-lg p-0.5">
         ${[['today','📌 Today'],['all','All Tasks'],['groups','Groups']].map(([v,l]) =>
           `<button id="todo-tab-${v}" onclick="todoSetTab('${v}')"

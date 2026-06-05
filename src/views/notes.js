@@ -534,9 +534,11 @@ async function exportNote(noteId) {
   await autoSaveNote()
   const note = state.notes.find(n => n.id === noteId)
   if (!note) return
+  const wsDir  = await api.getWorkspaceDir().catch(() => null)
+  const fname  = (note.title || 'note').replace(/[/\\:*?"<>|]/g,'_') + '.md'
   const dest = await api.openSaveDialog({
     title:       'Export Note as Markdown',
-    defaultPath: (note.title || 'note').replace(/[/\\:*?"<>|]/g,'_') + '.md',
+    defaultPath: wsDir ? wsDir + '\\Notes\\' + fname : fname,
     filters:     [{ name:'Markdown', extensions:['md'] }],
   })
   if (!dest) return

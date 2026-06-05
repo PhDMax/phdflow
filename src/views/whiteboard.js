@@ -225,6 +225,7 @@ function render_whiteboard() {
         <div class="w-px h-5 bg-slate-200 mx-0.5"></div>
         <button onclick="wbClear()" class="px-2.5 h-8 rounded text-xs text-red-400 hover:bg-red-50 transition-colors">Clear</button>
         <button onclick="wbExportPng()" class="px-2.5 h-8 rounded text-xs bg-slate-100 hover:bg-indigo-100 text-slate-600 hover:text-indigo-700 font-medium transition-colors">PNG</button>
+        <button onclick="openPhDFlowFolder('Whiteboard')" title="Open Whiteboard folder" class="px-2 h-8 rounded text-xs text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">📁</button>
       </div>
     </div>
 
@@ -1987,9 +1988,11 @@ function wbSelDuplicate() {
 
 async function wbExportPng() {
   if (!_wbCanvas||!_wb) return
+  const wsDir = await api.getWorkspaceDir().catch(()=>null)
+  const fname  = (_wb.name||'board').replace(/[/\\:*?"<>|]/g,'_')+'.png'
   const dest = await api.openSaveDialog({
     title:'Export Board as PNG',
-    defaultPath:(_wb.name||'board').replace(/[/\\:*?"<>|]/g,'_')+'.png',
+    defaultPath: wsDir ? wsDir+'\\Whiteboard\\'+fname : fname,
     filters:[{name:'PNG Image',extensions:['png']}],
   })
   if (!dest) return

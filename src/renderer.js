@@ -24,7 +24,9 @@ const state = {
   _sidebarCollapsed: false,
 }
 
-const VIEWS = ['dashboard','projects','notes','whiteboard','library','calendar','todos','contacts','utilities','news','grants','discover','feedback','settings','support']
+const VIEWS = ['dashboard','projects','notes','whiteboard','library','calendar','todos','contacts',
+               'pdf_tools','citations','unit_conv','r_assist',
+               'news','grants','discover','feedback','settings','support']
 
 // ── Tool registry — single source of truth for sidebar & picker ───────────────
 const ALL_TOOLS = [
@@ -36,8 +38,11 @@ const ALL_TOOLS = [
   { id:'calendar',   label:'Calendar',        icon:'📅', section:'Workspace', desc:'Deadlines, milestones and iCal sync' },
   { id:'todos',      label:'To-Do List',      icon:'✅', section:'Workspace', desc:'Tasks with time estimates and daily focus mode' },
   { id:'contacts',   label:'Contacts',        icon:'👥', section:'Workspace', desc:'Your academic network and collaborators' },
-  // ── Tools — task-specific helpers ─────────────────────────────────────────
-  { id:'utilities',  label:'Utilities',        icon:'🔧', section:'Tools',     desc:'PDF tools, citations, unit converter, R assistant, chemistry' },
+  // ── Tools — individual persistent workspaces ──────────────────────────────
+  { id:'pdf_tools',  label:'PDF Tools',         icon:'📄', section:'Tools', desc:'Merge, split, rotate and process PDF files' },
+  { id:'citations',  label:'Citations',          icon:'✏️',  section:'Tools', desc:'Format references and count words' },
+  { id:'unit_conv',  label:'Unit Converter',     icon:'⚗️',  section:'Tools', desc:'Convert scientific units with history' },
+  { id:'r_assist',   label:'R Assistant',        icon:'📊', section:'Tools', desc:'Step-by-step guide to R statistical tests' },
   // ── Feeds — the world coming to you ──────────────────────────────────────
   { id:'news',       label:'Literature Feed', icon:'📡', section:'Feeds',     desc:'Daily paper feed from arXiv & OpenAlex' },
   { id:'grants',     label:'Grant Scan',      icon:'💰', section:'Feeds',     desc:'Discover and track funding opportunities' },
@@ -629,6 +634,20 @@ function statusBadge(s, map) {
 function pageHeader(title, btn='') {
   return `<div class="bg-white border-b border-slate-200 px-4 lg:px-6 py-3 lg:py-4 flex items-center justify-between flex-shrink-0 gap-2 flex-wrap">
     <h2 class="text-base font-bold text-slate-900 flex-shrink-0">${title}</h2>${btn}</div>`
+}
+
+// ── PhDFlow workspace folder helpers ──────────────────────────────────────────
+let _phdfWorkspaceDir = null
+async function openPhDFlowFolder(sub) {
+  if (!_phdfWorkspaceDir) _phdfWorkspaceDir = await api.getWorkspaceDir()
+  const target = sub ? _phdfWorkspaceDir + '\\' + sub : _phdfWorkspaceDir
+  api.openFolder(target)
+}
+function _folderBtn(sub = '') {
+  return `<button onclick="openPhDFlowFolder('${sub}')" title="Open folder on your PC  (Documents/PhDFlow${sub?'/'+sub:''})"
+    class="flex items-center gap-1 px-2 py-1 rounded text-xs text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors flex-shrink-0">
+    📁
+  </button>`
 }
 function emptyState(icon, title, sub) {
   return `<div class="flex flex-col items-center justify-center h-full text-center py-20">

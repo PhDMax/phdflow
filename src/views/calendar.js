@@ -190,7 +190,7 @@ function render_calendar() {
   const vc = document.getElementById('view-content')
   vc.innerHTML = `
   ${pageHeader('📅 Calendar', `
-    <div class="flex items-center gap-2">
+    <div class="flex items-center gap-2">${_folderBtn('Exports')}
       <div class="flex bg-slate-100 rounded-lg p-0.5">
         ${['month','week','agenda'].map(v =>
           `<button id="cal-tab-${v}" onclick="calSetView('${v}')"

@@ -15,7 +15,7 @@ function render_library() {
   const vc = document.getElementById('view-content')
   vc.innerHTML = `
   ${pageHeader('📚 Paper Library', `
-    <div class="flex gap-2">
+    <div class="flex gap-2">${_folderBtn('Library')}
       <div class="relative">
         <button onclick="toggleLibMenu('import')" class="btn-secondary text-xs py-2">⬇ Import ▾</button>
         <div id="lib-import-menu" class="hidden absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-20 w-52 py-1">

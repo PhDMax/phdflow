@@ -906,7 +906,7 @@ function render_contacts() {
   const vc = document.getElementById('view-content')
   vc.innerHTML = `
   ${pageHeader('👥 Contacts', `
-    <div class="flex gap-2">
+    <div class="flex gap-2">${_folderBtn('Exports')}
       <button onclick="openLinkedInImport()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5">
         <span class="font-bold">in</span> Import LinkedIn
       </button>

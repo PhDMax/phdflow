@@ -454,6 +454,18 @@ ipcMain.handle('open-external', (_, url) => shell.openExternal(url))
 ipcMain.handle('open-folder',   (_, p)   => shell.openPath(p))
 ipcMain.handle('get-app-version', () => app.getVersion())
 
+// ── PhDFlow workspace folder (Documents/PhDFlow) ──────────────────────────────
+function _getWorkspaceDir() {
+  const base = path.join(app.getPath('documents'), 'PhDFlow')
+  const subs = ['Projects','Notes','Whiteboard','Library',
+                'PDF Tools','Citations','Unit Converter','R Assistant','Exports']
+  ;[base, ...subs.map(s => path.join(base, s))].forEach(d => {
+    if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true })
+  })
+  return base
+}
+ipcMain.handle('get-workspace-dir', () => _getWorkspaceDir())
+
 ipcMain.handle('open-pdf-dialog', async () => {
   const r = await dialog.showOpenDialog(mainWindow, {
     properties: ['openFile','multiSelections'], filters: [{ name:'PDF Files', extensions:['pdf'] }]
