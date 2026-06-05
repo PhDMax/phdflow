@@ -6,6 +6,8 @@ let _todoSearch      = ''
 let _todoFilterPri   = 'all'
 let _todoFilterEff   = 'all'
 let _todoFilterGroup = 'all'
+let _todoSelectMode  = false
+let _todoSelected    = new Set()  // selected task IDs for bulk actions
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -240,6 +242,19 @@ function renderAllTab() {
       <label class="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer select-none">
         <input type="checkbox" id="todo-show-done" class="accent-indigo-600" onchange="renderAllTab()"/> Show done
       </label>
+      <button onclick="todoToggleSelectMode()"
+        class="ml-auto text-xs px-3 py-1.5 rounded-xl border transition-colors
+          ${_todoSelectMode ? 'bg-indigo-100 text-indigo-700 border-indigo-300' : 'border-slate-200 text-slate-500 hover:border-slate-300'}">
+        ${_todoSelectMode ? `✓ ${_todoSelected.size} selected` : 'Select'}
+      </button>
+    </div>
+    <!-- Bulk action bar -->
+    <div id="todo-bulk-bar" class="${_todoSelectMode && _todoSelected.size ? '' : 'hidden'} flex gap-2 items-center mb-3 p-2.5 bg-indigo-50 border border-indigo-200 rounded-xl">
+      <span class="text-xs font-semibold text-indigo-700 flex-1">${_todoSelected.size} task${_todoSelected.size!==1?'s':''} selected</span>
+      <button onclick="todoBulkDone()" class="text-xs px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors">✓ Mark done</button>
+      <button onclick="todoBulkDefer()" class="text-xs px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium transition-colors">→tmr Defer</button>
+      <button onclick="todoBulkDelete()" class="text-xs px-3 py-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded-lg font-medium transition-colors">✕ Delete</button>
+      <button onclick="todoToggleSelectMode()" class="text-xs text-indigo-400 hover:text-indigo-600 font-medium">Cancel</button>
     </div>
     <div id="todo-all-list" class="space-y-6"></div>
   </div>`
@@ -404,10 +419,13 @@ function _todoCard(t, eff, pri, groups, highlightOverdue = false) {
 
   const borderStyle = highlightOverdue ? 'style="border-left:3px solid #f43f5e"' : ''
 
-  return `<div class="bg-white border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3 hover:shadow-sm transition-shadow" ${borderStyle}>
-    <input type="checkbox" ${t.status === 'done' ? 'checked' : ''} onchange="todoToggle('${t.id}')"
-      class="mt-0.5 w-4 h-4 rounded accent-indigo-600 flex-shrink-0 cursor-pointer"/>
-    <div class="flex-1 min-w-0 cursor-pointer" onclick="openTodoModal('${t.id}')">
+  return `<div class="bg-white border ${_todoSelectMode && _todoSelected.has(t.id) ? 'border-indigo-400 bg-indigo-50/30' : 'border-slate-200'} rounded-xl px-4 py-3 flex items-start gap-3 hover:shadow-sm transition-shadow" ${borderStyle}>
+    ${_todoSelectMode
+      ? `<input type="checkbox" ${_todoSelected.has(t.id) ? 'checked' : ''} onchange="todoToggleSelect('${t.id}')"
+          class="mt-0.5 w-4 h-4 rounded accent-indigo-600 flex-shrink-0 cursor-pointer"/>`
+      : `<input type="checkbox" ${t.status === 'done' ? 'checked' : ''} onchange="todoToggle('${t.id}')"
+          class="mt-0.5 w-4 h-4 rounded accent-indigo-600 flex-shrink-0 cursor-pointer"/>`}
+    <div class="flex-1 min-w-0 cursor-pointer" onclick="_todoSelectMode?todoToggleSelect('${t.id}'):openTodoModal('${t.id}')">
       <div class="flex items-center gap-1 flex-wrap mb-0.5">
         <span class="text-sm font-semibold ${t.status === 'done' ? 'line-through text-slate-400' : 'text-slate-800'}">
           ${esc(t.title)}
@@ -522,6 +540,49 @@ function deferTask(id) {
   save('todos')
   todoSetTab(_todoTab)
   showToast(`"${t.title.slice(0,30)}" deferred to tomorrow`)
+}
+
+// ── Bulk actions ──────────────────────────────────────────────────────────────
+
+function todoToggleSelectMode() {
+  _todoSelectMode = !_todoSelectMode
+  _todoSelected.clear()
+  renderAllTab()
+}
+
+function todoToggleSelect(id) {
+  if (_todoSelected.has(id)) _todoSelected.delete(id)
+  else _todoSelected.add(id)
+  renderAllTab()
+}
+
+function todoBulkDone() {
+  state.todos.forEach(t => {
+    if (_todoSelected.has(t.id)) {
+      t.status = 'done'; t.completedAt = new Date().toISOString(); t.updatedAt = new Date().toISOString()
+    }
+  })
+  save('todos')
+  const n = _todoSelected.size; _todoSelected.clear()
+  renderAllTab(); showToast(`${n} task${n!==1?'s':''} marked done ✓`)
+}
+
+function todoBulkDefer() {
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1)
+  const dateStr  = tomorrow.toISOString().split('T')[0]
+  state.todos.forEach(t => {
+    if (_todoSelected.has(t.id)) { t.dueDate = dateStr; t.todayFlag = false; t.updatedAt = new Date().toISOString() }
+  })
+  save('todos')
+  const n = _todoSelected.size; _todoSelected.clear()
+  renderAllTab(); showToast(`${n} task${n!==1?'s':''} deferred to tomorrow`)
+}
+
+function todoBulkDelete() {
+  const ids = new Set(_todoSelected)
+  state.todos = state.todos.filter(t => !ids.has(t.id))
+  save('todos'); _todoSelected.clear(); _todoSelectMode = false
+  renderAllTab(); showToast(`${ids.size} task${ids.size!==1?'s':''} deleted`)
 }
 
 function todoDefer(id, days) {
