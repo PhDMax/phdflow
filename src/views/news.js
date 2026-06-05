@@ -152,14 +152,27 @@ async function render_news() {
         <option value="0"  ${_newsFilter.days===0?'selected':''}>All time</option>
       </select>
 
-      <select onchange="_newsFilter.topicId=this.value;render_news()"
-        class="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700
-          focus:outline-none focus:ring-2 focus:ring-indigo-400">
-        <option value="all">All Topics</option>
-        ${state.newsTopics.map(t =>
-          `<option value="${t.id}" ${_newsFilter.topicId===t.id?'selected':''}>${esc(t.label)}</option>`
-        ).join('')}
-      </select>
+      ${state.newsTopics.length > 4
+        ? `<select onchange="_newsFilter.topicId=this.value;render_news()"
+            class="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700
+              focus:outline-none focus:ring-2 focus:ring-indigo-400">
+            <option value="all">All Topics</option>
+            ${state.newsTopics.map(t =>
+              `<option value="${t.id}" ${_newsFilter.topicId===t.id?'selected':''}>${esc(t.label)}</option>`
+            ).join('')}
+          </select>`
+        : `<div class="flex gap-1 flex-wrap">
+            <button onclick="_newsFilter.topicId='all';render_news()"
+              class="text-xs px-2.5 py-1 rounded-full border transition-colors ${_newsFilter.topicId==='all'?'bg-indigo-600 text-white border-indigo-600':'border-slate-200 text-slate-500 hover:border-indigo-300'}">
+              All
+            </button>
+            ${state.newsTopics.map(t => `
+            <button onclick="_newsFilter.topicId='${t.id}';render_news()"
+              class="text-xs px-2.5 py-1 rounded-full border transition-colors ${_newsFilter.topicId===t.id?'bg-indigo-600 text-white border-indigo-600':'border-slate-200 text-slate-500 hover:border-indigo-300'}">
+              ${esc(t.label)}
+            </button>`).join('')}
+          </div>`
+      }
 
       <div class="ml-auto flex items-center gap-2">
         <span class="text-xs text-slate-400">

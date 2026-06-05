@@ -204,8 +204,13 @@ function render_calendar() {
     </div>
   `)}
   <div class="flex-1 overflow-y-auto">
+    <!-- Event type legend (compact, always visible) -->
+    <div class="px-6 pt-2 flex gap-1.5 flex-wrap">
+      ${Object.entries(_calTypeConf()).map(([k,v]) => `
+      <span class="text-[10px] px-2 py-0.5 rounded-full font-medium ${v.bg} ${v.text}">${v.label}</span>`).join('')}
+    </div>
     <!-- Connected feeds strip -->
-    <div id="cal-feeds-strip" class="px-6 pt-3"></div>
+    <div id="cal-feeds-strip" class="px-6 pt-2"></div>
     <!-- Countdown strip -->
     <div id="cal-countdown" class="px-6 pt-2"></div>
     <!-- Nav bar + calendar body -->
@@ -355,7 +360,7 @@ function renderMonthView() {
           const dateStr  = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`
           const events   = _allEventsForDate(dateStr)
           return `<div class="min-h-[88px] border-b border-r border-slate-100 p-1 cursor-pointer hover:bg-indigo-50/30 transition-colors group"
-                       onclick="openEventModal(null,'${dateStr}')">
+                       onclick="window._calClickEvt=event;quickAddEvent('${dateStr}')">
             <div class="flex justify-end mb-0.5">
               <span class="text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full transition-colors
                 ${isToday ? 'bg-indigo-600 text-white' : 'text-slate-500 group-hover:bg-indigo-100 group-hover:text-indigo-700'}">
@@ -438,7 +443,7 @@ function renderWeekView() {
           const ds   = d.toISOString().slice(0,10)
           const slot = timed[i].filter(e => parseInt((e.startTime||'00:00').split(':')[0]) === h)
           return `<div class="border-r border-slate-100 px-0.5 py-0.5 min-h-[40px] cursor-pointer hover:bg-indigo-50/20 transition-colors"
-                      onclick="openEventModal(null,'${ds}')">
+                      onclick="window._calClickEvt=event;quickAddEvent('${ds}')">
             ${slot.map(e => _calEventChip(e, 'mb-0.5')).join('')}
           </div>`
         }).join('')}
@@ -666,6 +671,80 @@ function saveGoal(id) {
   closeModal()
   renderGoals()
   showToast(id ? 'Goal updated' : 'Goal added ✓')
+}
+
+// ── Quick event creation (mini inline form on date click) ────────────────────
+
+function quickAddEvent(dateStr) {
+  // Close any other open quick-add
+  document.getElementById('cal-quick-add')?.remove()
+  const tc = _calTypeConf()
+  const div = document.createElement('div')
+  div.id = 'cal-quick-add'
+  div.style.cssText = 'position:fixed;z-index:300;background:#fff;border:1px solid #e2e8f0;border-radius:.875rem;box-shadow:0 8px 32px rgba(0,0,0,.14);padding:1rem;width:260px'
+  div.innerHTML = `
+  <p class="text-xs font-semibold text-slate-600 mb-2">New event — ${new Date(dateStr+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'})}</p>
+  <input id="cal-qa-title" type="text" placeholder="Event title…"
+    class="w-full px-3 py-1.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-2"/>
+  <div class="flex gap-1 flex-wrap mb-2">
+    ${['deadline','milestone','meeting','course','exam','focus'].map(t => `
+    <button id="cal-qa-type-${t}" onclick="calQaSetType('${t}')"
+      class="text-xs px-2 py-0.5 rounded-full border transition-colors border-slate-200 text-slate-500 hover:border-indigo-300">
+      ${tc[t]?.label||t}
+    </button>`).join('')}
+  </div>
+  <div class="flex gap-2">
+    <button onclick="calQaSubmit('${dateStr}')" class="flex-1 btn-primary text-xs py-1.5">Add</button>
+    <button onclick="document.getElementById('cal-quick-add')?.remove()" class="btn-secondary text-xs py-1.5 px-3">✕</button>
+  </div>
+  <button onclick="document.getElementById('cal-quick-add')?.remove();openEventModal(null,'${dateStr}')"
+    class="mt-2 text-xs text-slate-400 hover:text-indigo-600 w-full text-center">More options →</button>`
+  document.body.appendChild(div)
+  // Position near the clicked cell
+  const evt = window._calClickEvt
+  if (evt) {
+    const x = Math.min(evt.clientX, window.innerWidth  - 280)
+    const y = Math.min(evt.clientY + 8, window.innerHeight - 200)
+    div.style.left = x + 'px'
+    div.style.top  = y + 'px'
+  }
+  setTimeout(() => document.getElementById('cal-qa-title')?.focus(), 40)
+  // Close on outside click
+  setTimeout(() => document.addEventListener('click', e => {
+    if (!e.target.closest('#cal-quick-add')) document.getElementById('cal-quick-add')?.remove()
+  }, { once: true }), 100)
+}
+
+window._calQaType = 'meeting'
+function calQaSetType(t) {
+  window._calQaType = t
+  document.querySelectorAll('[id^="cal-qa-type-"]').forEach(b => {
+    b.className = `text-xs px-2 py-0.5 rounded-full border transition-colors ${
+      b.id === `cal-qa-type-${t}`
+        ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+        : 'border-slate-200 text-slate-500 hover:border-indigo-300'}`
+  })
+}
+
+function calQaSubmit(dateStr) {
+  const title = document.getElementById('cal-qa-title')?.value.trim()
+  if (!title) { document.getElementById('cal-qa-title')?.focus(); return }
+  state.events.push({
+    id:          uid(),
+    title,
+    date:        dateStr,
+    type:        window._calQaType || 'meeting',
+    priority:    'medium',
+    startTime:   '', endTime: '', location: '', description: '',
+    recurrence:  'none', reminder: '',
+    createdAt:   new Date().toISOString(),
+  })
+  save('events')
+  document.getElementById('cal-quick-add')?.remove()
+  calSetView(_calView)
+  renderCountdown()
+  if (typeof scheduleEventReminders === 'function') scheduleEventReminders()
+  showToast(`"${title}" added to calendar ✓`)
 }
 
 // ── Event modal ───────────────────────────────────────────────────────────────

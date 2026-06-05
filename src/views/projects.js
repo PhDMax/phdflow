@@ -91,6 +91,11 @@ function render_projects() {
   vc.innerHTML = `
   ${pageHeader('📋 Projects', `<button onclick="openProjectModal()" class="btn-primary text-xs py-2">+ New Project</button>`)}
   <div class="flex-1 overflow-y-auto p-6">
+    <div class="flex gap-2 mb-3 items-center">
+      <input id="projects-search" type="text" placeholder="Search projects…"
+        oninput="renderProjectCards(_pFilter)"
+        class="px-3 py-1.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 flex-1 max-w-xs"/>
+    </div>
     <div id="projects-filters" class="flex gap-2 mb-5 flex-wrap">
       ${['all','active','planning','on-hold','completed','archived'].map(s=>`
       <button onclick="filterProjects('${s}')" data-pf="${s}"
@@ -116,9 +121,15 @@ function filterProjects(f) {
 
 function renderProjectCards(filter) {
   const grid = document.getElementById('projects-grid')
+  const q    = (document.getElementById('projects-search')?.value || '').toLowerCase().trim()
   let projects = filter === 'all'
     ? state.projects.filter(p => p.status !== 'archived')
     : state.projects.filter(p => p.status === filter)
+  if (q) projects = projects.filter(p =>
+    p.name?.toLowerCase().includes(q) ||
+    p.description?.toLowerCase().includes(q) ||
+    (p.tags||[]).some(t => t.toLowerCase().includes(q))
+  )
 
   // Sort by attention level (most urgent first)
   projects.sort((a,b) => _projectAttention(a) - _projectAttention(b))

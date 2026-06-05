@@ -74,6 +74,20 @@ function render_dashboard() {
           ${overdueCount > 0
             ? `<p class="text-xs text-red-600 mt-1 font-medium">⚠️ You have ${overdueCount} overdue task${overdueCount>1?'s':''}</p>`
             : `<p class="text-xs text-slate-400 mt-1">Here's your research overview for today</p>`}
+          ${(() => {
+            const p = state.profile || {}
+            if (!p.phdStart || !p.phdEnd) return ''
+            const start = new Date(p.phdStart), end = new Date(p.phdEnd), now = new Date()
+            const pct  = Math.round(Math.max(0, Math.min(1, (now-start)/(end-start))) * 100)
+            const days = Math.round((end-now)/86400000)
+            const col  = pct >= 75 ? '#f59e0b' : '#6366f1'
+            return `<div class="flex items-center gap-2 mt-1.5">
+              <div class="w-24 bg-slate-100 rounded-full h-1.5 overflow-hidden flex-shrink-0">
+                <div class="h-1.5 rounded-full" style="width:${pct}%;background:${col}"></div>
+              </div>
+              <span class="text-xs text-slate-400">PhD ${pct}%${days>0?' · '+days+'d left':' · submitted!'}</span>
+            </div>`
+          })()}
         </div>
         ${totalTodayCount > 0 ? `
         <div class="flex-shrink-0 min-w-[160px] cursor-pointer" onclick="showView('todos')">
