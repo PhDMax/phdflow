@@ -57,7 +57,7 @@ const WB_TOOLS = [
   { id:'triangle',icon:'△',  title:'Triangle  G' },
   { id:'sticky',  icon:'🗒', title:'Sticky Note  N' },
   { id:'text',    icon:'T',  title:'Text  T' },
-  { id:'erase',   icon:'⌫',  title:'Eraser  X' },
+  { id:'erase',   icon:'◯',  title:'Rubber / Eraser  X' },
 ]
 
 const WB_STICKY_COLORS = [
@@ -150,14 +150,14 @@ function render_whiteboard() {
 
       <div class="w-px h-5 bg-slate-200 mx-1.5 flex-shrink-0"></div>
 
-      <!-- Stroke width -->
-      <div class="flex items-center gap-px flex-shrink-0">
-        ${[[1,'thin','—'],[2,'medium','━'],[5,'thick','▬']].map(([w,label,icon]) => `
-        <button data-wb-sw="${w}" onclick="wbSetSW(${w})" title="Stroke ${label}"
-          class="px-2 h-8 rounded text-xs font-bold transition-colors flex-shrink-0
-            ${_wbSW===w ? 'bg-indigo-100 text-indigo-700' : 'text-slate-500 hover:bg-slate-100'}">
-          ${icon}
-        </button>`).join('')}
+      <!-- Stroke width — numerical input -->
+      <div class="flex items-center gap-1 flex-shrink-0">
+        <span class="text-[10px] text-slate-400">px</span>
+        <input type="number" min="1" max="40" step="1" value="${_wbSW}"
+          oninput="wbSetSW(Math.max(1,Math.min(40,+this.value||1)))"
+          title="Stroke width in pixels"
+          class="w-12 h-7 text-xs text-center rounded-lg border border-slate-200
+            focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white text-slate-700"/>
       </div>
 
       <div class="w-px h-5 bg-slate-200 mx-1.5 flex-shrink-0"></div>
@@ -176,14 +176,14 @@ function render_whiteboard() {
 
       <div class="w-px h-5 bg-slate-200 mx-1.5 flex-shrink-0"></div>
 
-      <!-- Font size -->
-      <div class="flex items-center gap-px flex-shrink-0">
-        ${[[11,'S'],[14,'M'],[20,'L'],[28,'XL']].map(([sz,lbl]) => `
-        <button data-wb-fs="${sz}" onclick="wbSetFontSize(${sz})" title="Font size ${sz}px"
-          class="px-1.5 h-8 rounded text-xs font-semibold transition-colors flex-shrink-0
-            ${_wbFontSize===sz ? 'bg-indigo-100 text-indigo-700' : 'text-slate-500 hover:bg-slate-100'}">
-          ${lbl}
-        </button>`).join('')}
+      <!-- Font size — numerical input -->
+      <div class="flex items-center gap-1 flex-shrink-0">
+        <span class="text-[10px] text-slate-400">T</span>
+        <input type="number" min="8" max="96" step="1" value="${_wbFontSize}"
+          oninput="wbSetFontSize(Math.max(8,Math.min(96,+this.value||14)))"
+          title="Font size in pixels"
+          class="w-12 h-7 text-xs text-center rounded-lg border border-slate-200
+            focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white text-slate-700"/>
       </div>
 
       <div class="w-px h-5 bg-slate-200 mx-1.5 flex-shrink-0"></div>
@@ -260,7 +260,7 @@ function render_whiteboard() {
     <!-- Canvas area -->
     <div id="wb-container" class="flex-1 relative overflow-hidden select-none" style="${WB_BG[_wbBg]||WB_BG.dots}">
       <canvas id="wb-canvas" class="absolute inset-0"
-        style="cursor:${_wbTool==='text'?'text':_wbTool==='select'?'default':_wbTool==='erase'?'crosshair':'crosshair'}"></canvas>
+        style="cursor:${_wbTool==='text'?'text':_wbTool==='select'?'default':_wbTool==='erase'?'none':'crosshair'}"></canvas>
       <div id="wb-hint" class="absolute bottom-3 left-1/2 -translate-x-1/2 text-xs text-slate-400 pointer-events-none select-none">
         Double-click a shape to label it · G=triangle · Del=delete · press <kbd style="background:#1e293b;border:1px solid #334155;padding:0 3px;border-radius:3px">?</kbd> for all shortcuts
       </div>
@@ -456,9 +456,10 @@ function _wbBindCanvas() {
 // ── Mouse Down ────────────────────────────────────────────────────────────────
 
 function _wbDown(e) {
-  if (e.button !== 0) return
+  // Allow middle-mouse (button 1) through for panning; block right-click (button 2+)
+  if (e.button > 1) return
 
-  // Space+drag pan or middle-mouse pan
+  // Middle-mouse drag or Space+drag → pan
   if (_wbSpaceHeld || e.button === 1) {
     _wbPanning  = true
     _wbPanStart = { x: e.clientX, y: e.clientY, panX: _wbPanX, panY: _wbPanY }
@@ -551,6 +552,21 @@ function _wbMove(e) {
     const ids = _wbSelIds.length > 1 ? _wbSelIds : [_wbSelId]
     for (const id of ids) _wbMoveShape(id, dx, dy, _wbDragStart.shapes)
     _wbRender()
+    return
+  }
+
+  // Eraser: show live rubber circle cursor
+  if (_wbTool === 'erase' && !_wbDrawing) {
+    _wbRender()
+    const ctx = _wbCtx
+    ctx.save()
+    ctx.translate(_wbPanX, _wbPanY)
+    ctx.scale(_wbZoom, _wbZoom)
+    const R = 18
+    ctx.beginPath(); ctx.arc(pt.x, pt.y, R, 0, Math.PI*2)
+    ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 1.5 / _wbZoom; ctx.setLineDash([3/  _wbZoom, 3/_wbZoom])
+    ctx.stroke()
+    ctx.restore()
     return
   }
 
@@ -1318,14 +1334,9 @@ function _wbUpdateToolbar() {
     btn.style.outline = _wbColor===c ? '2px solid #6366f1' : (c==='#ffffff'?'1px solid #e2e8f0':'none')
     btn.style.outlineOffset = '1px'
   })
-  document.querySelectorAll('[data-wb-sw]').forEach(btn => {
-    const w = parseInt(btn.dataset.wbSw)
-    btn.className = `px-2 h-8 rounded text-xs font-bold transition-colors flex-shrink-0 ${_wbSW===w?'bg-indigo-100 text-indigo-700':'text-slate-500 hover:bg-slate-100'}`
-  })
-  document.querySelectorAll('[data-wb-fs]').forEach(btn => {
-    const sz = parseInt(btn.dataset.wbFs)
-    btn.className = `px-1.5 h-8 rounded text-xs font-semibold transition-colors flex-shrink-0 ${_wbFontSize===sz?'bg-indigo-100 text-indigo-700':'text-slate-500 hover:bg-slate-100'}`
-  })
+  // Sync numerical inputs (stroke width + font size)
+  document.querySelectorAll('input[title="Stroke width in pixels"]').forEach(inp => { inp.value = _wbSW })
+  document.querySelectorAll('input[title="Font size in pixels"]').forEach(inp  => { inp.value = _wbFontSize })
   const fillBtn = document.getElementById('wb-fill-btn')
   if (fillBtn) {
     fillBtn.textContent = _wbFill ? 'Fill ✓' : 'Fill'
@@ -1341,7 +1352,7 @@ function _wbUpdateToolbar() {
     smartBtn.className = `px-2 h-8 rounded text-xs font-medium transition-colors flex-shrink-0 ml-1 ${_wbSmartOn?'bg-amber-100 text-amber-700':'text-slate-400 hover:bg-slate-100'}`
   }
   if (_wbCanvas) {
-    _wbCanvas.style.cursor = _wbTool==='text'?'text':_wbTool==='select'?'default':_wbTool==='erase'?'crosshair':'crosshair'
+    _wbCanvas.style.cursor = _wbTool==='text'?'text':_wbTool==='select'?'default':_wbTool==='erase'?'none':'crosshair'
   }
   const container = document.getElementById('wb-container')
   if (container) container.setAttribute('style', WB_BG[_wbBg]||WB_BG.dots)

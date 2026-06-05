@@ -390,7 +390,7 @@ function openShortcutsModal() {
       ['G', 'Triangle'],
       ['N', 'Sticky note'],
       ['T', 'Text'],
-      ['X', 'Eraser'],
+      ['X', 'Rubber / Eraser'],
       ['Space+drag', 'Pan canvas'],
       ['Scroll', 'Zoom in/out'],
       ['+/−/0', 'Zoom in/out/reset'],
