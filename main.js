@@ -751,6 +751,111 @@ async function _searchPubmed(name) {
   } catch { return { count: 0, meshTerms: [], affiliation: null } }
 }
 
+// ─── DuckDuckGo web search ────────────────────────────────────────────────────
+
+// Domain quality scores — higher = more trustworthy academic source
+const _DDG_SCORES = [
+  [/\.edu$/,                                                  100],
+  [/\.ac\.uk$/,                                                95],
+  [/\.edu\.(au|cn|br|mx|sg|nz|hk|tw|za|ar|co|pe|ec)$/,       88],
+  [/\.(uni|tu|fh|hs|kit|rwth)[-.].*\.(de|at|ch|nl)$/,         86],
+  [/uni[a-z-]+\.(de|fr|nl|be|at|ch|se|no|dk|fi|it|es|pt)$/,  85],
+  [/\.(cnrs|inria|inserm|cea|csic|nwo|dfg)\.(fr|es|de|nl)$/,  83],
+  [/mpg\.de$|fraunhofer\.de$|helmholtz\.de$/,                  82],
+  [/epfl\.ch$|ethz\.ch$/,                                      90],
+  [/\.ac\.(jp|nz|za|in|il|kr|th|id)$/,                        80],
+  [/orcid\.org$/,                                               78],
+  [/scholar\.google\.(com|[a-z]{2})$/,                         74],
+  [/researchgate\.net$/,                                        68],
+  [/academia\.edu$/,                                            63],
+  [/dblp\.org$/,                                                60],
+  [/pubmed\.ncbi\.nlm\.nih\.gov$|ncbi\.nlm\.nih\.gov$/,        55],
+  [/semanticscholar\.org$/,                                     50],
+  [/arxiv\.org$/,                                               48],
+  [/openalex\.org$/,                                            46],
+  [/\.gov$/,                                                    44],
+  [/\.org$/,                                                    28],
+  [/linkedin\.com$/,                                            18],
+  [/twitter\.com$|x\.com$|instagram\.com$|facebook\.com$/,      4],
+]
+
+function _ddgDomainScore(url) {
+  try {
+    const host = new URL(url).hostname.toLowerCase()
+    for (const [re, score] of _DDG_SCORES) if (re.test(host)) return score
+    return 10
+  } catch { return 0 }
+}
+
+// Best-effort: hostname → readable institution name
+const _DDG_KNOWN = {
+  mit:'MIT', stanford:'Stanford University', harvard:'Harvard University',
+  caltech:'Caltech', columbia:'Columbia University', cornell:'Cornell University',
+  yale:'Yale University', princeton:'Princeton University', duke:'Duke University',
+  jhu:'Johns Hopkins University', nyu:'New York University', upenn:'University of Pennsylvania',
+  usc:'University of Southern California', umn:'University of Minnesota',
+  umich:'University of Michigan', uchicago:'University of Chicago',
+  ucla:'UCLA', ucsd:'UC San Diego', ucsb:'UC Santa Barbara', ucberkeley:'UC Berkeley',
+  cmu:'Carnegie Mellon University', gatech:'Georgia Tech', purdue:'Purdue University',
+  ox:'University of Oxford', cam:'University of Cambridge',
+  ucl:'University College London', imperial:'Imperial College London',
+  ethz:'ETH Zurich', epfl:'EPFL',
+}
+
+function _ddgHostToInst(url) {
+  try {
+    let host = new URL(url).hostname.toLowerCase().replace(/^www\d*\./, '')
+    // strip dept prefixes: cs.mit.edu → mit.edu
+    const parts = host.split('.')
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (_DDG_KNOWN[parts[i]]) return _DDG_KNOWN[parts[i]]
+    }
+    const sld = parts[Math.max(0, parts.length - 2)]
+    const cap = sld.charAt(0).toUpperCase() + sld.slice(1)
+    if (host.endsWith('.edu'))   return cap
+    if (host.endsWith('.ac.uk')) return cap
+    return null
+  } catch { return null }
+}
+
+async function _searchDdg(name) {
+  try {
+    const q = `"${name}" researcher OR professor OR scientist`
+    const res = await fetch('https://html.duckduckgo.com/html/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+        'Accept': 'text/html,application/xhtml+xml',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+      body: `q=${encodeURIComponent(q)}&kl=us-en&df=`,
+      signal: AbortSignal.timeout(9000),
+    })
+    if (!res.ok) return []
+    const html = await res.text()
+
+    // Extract all uddg= encoded URLs from redirect links
+    const seen = new Set()
+    const hits = []
+    const re   = /uddg=([^&"'\s]+)/g
+    let m
+    while ((m = re.exec(html)) !== null) {
+      try {
+        const url = decodeURIComponent(m[1])
+        if (!url.startsWith('http')) continue
+        if (seen.has(url)) continue
+        seen.add(url)
+        const score = _ddgDomainScore(url)
+        if (score < 15) continue               // skip noise & social
+        hits.push({ url, score, institution: _ddgHostToInst(url) })
+      } catch {}
+    }
+
+    return hits.sort((a, b) => b.score - a.score).slice(0, 6)
+  } catch { return [] }
+}
+
 // ─── IPC: Researcher Search ───────────────────────────────────────────────────
 
 // Normalise a name for fuzzy matching: lowercase, strip punctuation, sort words
@@ -788,7 +893,7 @@ ipcMain.handle('search-researchers', async (_, queryOrOpts) => {
     }
     const oaFilterParam = oaFilters.length ? `&filter=${oaFilters.join(',')}` : ''
 
-    const [s2Res, oaRes, dblpRes, pubmedRes] = await Promise.allSettled([
+    const [s2Res, oaRes, dblpRes, pubmedRes, ddgRes] = await Promise.allSettled([
       fetch(
         `https://api.semanticscholar.org/graph/v1/author/search?query=${encodeURIComponent(s2Query)}&fields=${s2Fields}&limit=10`,
         { headers: { 'User-Agent': 'PhDFlow/0.11 (open-source)' }, signal: sig }
@@ -799,12 +904,14 @@ ipcMain.handle('search-researchers', async (_, queryOrOpts) => {
       ).then(r => r.json()),
       _searchDblp(nameOnly),
       _searchPubmed(nameOnly),
+      _searchDdg(nameOnly),
     ])
 
     const s2Authors  = s2Res.status     === 'fulfilled' ? (s2Res.value.data || [])     : []
     const oaAuthors  = oaRes.status     === 'fulfilled' ? (oaRes.value.results || [])  : []
     const dblpHits   = dblpRes.status   === 'fulfilled' ? (dblpRes.value || [])        : []
     const pubmedData = pubmedRes.status === 'fulfilled' ? (pubmedRes.value || {})      : {}
+    const ddgHits    = ddgRes.status    === 'fulfilled' ? (ddgRes.value  || [])        : []
 
     // Build DBLP lookup: normalised name → dblpUrl (validates CS presence)
     const dblpMap = {}
@@ -926,6 +1033,46 @@ ipcMain.handle('search-researchers', async (_, queryOrOpts) => {
       })
     }
 
+    // ── Merge DuckDuckGo web results ─────────────────────────────────────────
+    // Best hit enriches existing candidates with a homepage; unmatched hits
+    // become new web-sourced candidates so people not in any academic DB still show up.
+    for (const hit of ddgHits) {
+      const normQ = _normName(nameOnly)
+      // Try to match to an existing candidate by institution overlap
+      const existing = merged.find(r => {
+        if (_normName(r.name) === normQ) return true
+        if (hit.institution && r.institution) {
+          const hi = hit.institution.toLowerCase()
+          const ri = r.institution.toLowerCase()
+          return ri.includes(hi) || hi.includes(ri)
+        }
+        return false
+      })
+      if (existing) {
+        // Enrich: attach homepage if none or this one scores higher
+        if (!existing.homepage || _ddgDomainScore(hit.url) > _ddgDomainScore(existing.homepage || '')) {
+          existing.homepage = hit.url
+        }
+        existing.webScore = Math.max(existing.webScore || 0, hit.score)
+      } else {
+        // New web-only candidate
+        merged.push({
+          id:           'ddg-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+          name:         nameOnly,
+          institution:  hit.institution || null,
+          affiliations: hit.institution ? [hit.institution] : [],
+          topics:       [],
+          homepage:     hit.url,
+          hIndex:       0, i10Index: null, paperCount: 0, citationCount: 0,
+          orcid: null, s2Url: null, oaUrl: null, dblpUrl: null, pubmedCount: 0,
+          worksApiUrl:  null,
+          webScore:     hit.score,
+          webSource:    true,
+          email: null, emailSource: 'none',
+        })
+      }
+    }
+
     // Tag active researchers: has been cited in the last 2 years (from OA)
     // We'll also check recentPapers later to refine this.
     for (const r of merged) {
@@ -938,12 +1085,11 @@ ipcMain.handle('search-researchers', async (_, queryOrOpts) => {
       r.isActive = oaEntry ? (oaEntry.summary_stats?.['2yr_cited_by_count'] || 0) > 0 : null
     }
 
-    // Scoring: h-index base, boosted when institution matches the filter
+    // Scoring: h-index base + web presence bonus, institution filter boost
     const instLower = institution.toLowerCase()
     merged.sort((a, b) => {
-      let scoreA = a.hIndex || 0
-      let scoreB = b.hIndex || 0
-      // Boost by 1000 if institution matches (ensures institution-filtered results stay on top)
+      let scoreA = (a.hIndex || 0) + Math.round((a.webScore || 0) / 10)
+      let scoreB = (b.hIndex || 0) + Math.round((b.webScore || 0) / 10)
       if (institution) {
         const affsA = (a.affiliations || []).join(' ').toLowerCase()
         const affsB = (b.affiliations || []).join(' ').toLowerCase()

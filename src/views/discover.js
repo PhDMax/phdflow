@@ -28,8 +28,11 @@ function render_discover() {
             class="btn-primary px-5 flex-shrink-0">Search</button>
         </div>
         <p class="text-xs text-slate-400 mt-2">
-          Sources: <span class="font-medium text-slate-500">Semantic Scholar</span> &amp;
-          <span class="font-medium text-slate-500">OpenAlex</span> — free, no API key needed
+          Sources: <span class="font-medium text-slate-500">Semantic Scholar</span>,
+          <span class="font-medium text-slate-500">OpenAlex</span>,
+          <span class="font-medium text-slate-500">DBLP</span>,
+          <span class="font-medium text-slate-500">PubMed</span> &amp;
+          <span class="font-medium text-slate-500">🌐 Web</span> — free, no API key needed
         </p>
       </div>
 
@@ -55,7 +58,7 @@ function _renderDiscoverResults() {
   if (_discoverLoading) return `
     <div class="flex items-center justify-center py-16 gap-3 text-slate-500">
       <div style="width:1.25rem;height:1.25rem;border:2px solid #6366f1;border-top-color:transparent;border-radius:9999px;animation:spin .7s linear infinite"></div>
-      <span class="text-sm">Searching Semantic Scholar &amp; OpenAlex…</span>
+      <span class="text-sm">Searching Semantic Scholar, OpenAlex &amp; the web…</span>
     </div>`
 
   if (_discoverQuery && _discoverResults.length === 0) return `
@@ -73,29 +76,41 @@ function _renderDiscoverResults() {
 }
 
 function _discoverCard(r, i) {
-  const h    = r.hIndex || 0
-  const pubs = r.paperCount || 0
-  const cits = r.citationCount || 0
-  const insts = (r.affiliations || []).slice(0,2).join(' · ')
+  const h      = r.hIndex || 0
+  const pubs   = r.paperCount || 0
+  const cits   = r.citationCount || 0
+  const insts  = (r.affiliations || []).slice(0,2).join(' · ')
   const topics = (r.topics || []).slice(0,4)
+  const isWebOnly = r.webSource && !r.s2Url && !r.oaUrl && !r.dblpUrl
+
+  // Source chips
+  const sources = [
+    r.s2Url   && `<span class="text-[10px] bg-slate-100 text-slate-500 border border-slate-200 rounded px-1.5 py-0.5">S2</span>`,
+    r.oaUrl   && `<span class="text-[10px] bg-slate-100 text-slate-500 border border-slate-200 rounded px-1.5 py-0.5">OA</span>`,
+    r.dblpUrl && `<span class="text-[10px] bg-slate-100 text-slate-500 border border-slate-200 rounded px-1.5 py-0.5">DBLP</span>`,
+    r.orcid   && `<span class="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 rounded px-1.5 py-0.5 font-mono">ORCID ✓</span>`,
+    isWebOnly && `<span class="text-[10px] bg-amber-50 text-amber-700 border border-amber-200 rounded px-1.5 py-0.5">🌐 Web</span>`,
+  ].filter(Boolean)
 
   return `
-  <div class="bg-white rounded-2xl border border-slate-200 p-5 hover:border-indigo-200 transition-colors">
+  <div class="bg-white rounded-2xl border ${isWebOnly ? 'border-amber-200' : 'border-slate-200'} p-5 hover:border-indigo-200 transition-colors">
     <div class="flex items-start justify-between gap-4">
       <div class="flex-1 min-w-0">
-        <!-- Name + institution -->
-        <div class="flex items-center gap-2 flex-wrap">
+        <!-- Name + badges -->
+        <div class="flex items-center gap-1.5 flex-wrap">
           <h3 class="text-sm font-bold text-slate-900">${esc(r.name)}</h3>
-          ${r.orcid ? `<span class="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 rounded px-1.5 py-0.5 font-mono">ORCID ✓</span>` : ''}
+          ${sources.join('')}
         </div>
         ${insts ? `<p class="text-xs text-slate-500 mt-0.5 truncate">${esc(insts)}</p>` : ''}
 
-        <!-- Metrics -->
+        <!-- Metrics (hide if web-only with no data) -->
+        ${!isWebOnly ? `
         <div class="flex gap-3 mt-2 flex-wrap">
-          ${h ? `<span class="text-xs text-slate-600"><span class="font-semibold text-slate-800">h=${h}</span> index</span>` : ''}
+          ${h    ? `<span class="text-xs text-slate-600"><span class="font-semibold text-slate-800">h=${h}</span> index</span>` : ''}
           ${pubs ? `<span class="text-xs text-slate-600"><span class="font-semibold text-slate-800">${pubs.toLocaleString()}</span> papers</span>` : ''}
           ${cits ? `<span class="text-xs text-slate-600"><span class="font-semibold text-slate-800">${cits.toLocaleString()}</span> citations</span>` : ''}
-        </div>
+        </div>` : `
+        <p class="text-xs text-amber-600 mt-1.5">Found via web search — no publication database match yet</p>`}
 
         <!-- Topics -->
         ${topics.length ? `
@@ -115,12 +130,14 @@ function _discoverCard(r, i) {
       <div class="flex flex-col gap-1.5 flex-shrink-0">
         <button onclick="discoverAddContact(${i})"
           class="btn-primary text-xs py-1.5 px-3 whitespace-nowrap">+ Add to Contacts</button>
+        ${r.homepage ? `<button onclick="api.openExternal('${esc(r.homepage)}')"
+          class="btn-secondary text-xs py-1.5 px-3 whitespace-nowrap">Homepage ↗</button>` : ''}
         ${r.s2Url ? `<button onclick="api.openExternal('${esc(r.s2Url)}')"
           class="btn-secondary text-xs py-1.5 px-3 whitespace-nowrap">Semantic Scholar ↗</button>` : ''}
         ${r.oaUrl ? `<button onclick="api.openExternal('${esc(r.oaUrl)}')"
           class="btn-secondary text-xs py-1.5 px-3 whitespace-nowrap">OpenAlex ↗</button>` : ''}
-        ${r.homepage ? `<button onclick="api.openExternal('${esc(r.homepage)}')"
-          class="btn-secondary text-xs py-1.5 px-3 whitespace-nowrap">Homepage ↗</button>` : ''}
+        ${r.dblpUrl ? `<button onclick="api.openExternal('${esc(r.dblpUrl)}')"
+          class="btn-secondary text-xs py-1.5 px-3 whitespace-nowrap">DBLP ↗</button>` : ''}
       </div>
     </div>
   </div>`
