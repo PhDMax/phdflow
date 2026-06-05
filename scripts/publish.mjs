@@ -40,7 +40,7 @@ ${changelog}
 
 ### Installation
 1. Download **PhDFlow Setup ${version}.exe** and run it
-2. No API keys, no account required
+2. Create your account on first launch — everything stays on your device
 
 > Windows SmartScreen may warn on first run — click **More info → Run anyway**
 
