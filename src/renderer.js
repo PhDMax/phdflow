@@ -24,14 +24,15 @@ const state = {
   _sidebarCollapsed: false,
 }
 
-const VIEWS = ['dashboard','projects','notes','whiteboard','library','calendar','todos','contacts',
+const VIEWS = ['dashboard','pipeline','projects','notes','whiteboard','library','calendar','todos','contacts',
                'pdf_tools','citations','unit_conv','r_assist',
                'news','grants','discover','feedback','settings','support']
 
 // ── Tool registry — single source of truth for sidebar & picker ───────────────
 const ALL_TOOLS = [
   // ── Workspace — persistent spaces where your work lives ───────────────────
-  { id:'projects',   label:'Projects',        icon:'📋', section:'Workspace', desc:'Manage research projects and work threads' },
+  { id:'pipeline',   label:'Pipeline',         icon:'🔗', section:'Workspace', desc:'See how papers, notes and boards connect per project' },
+  { id:'projects',   label:'Projects',         icon:'📋', section:'Workspace', desc:'Manage research projects and work threads' },
   { id:'notes',      label:'Notes',           icon:'📝', section:'Workspace', desc:'Linked markdown notes and lab logs' },
   { id:'whiteboard', label:'Whiteboard',      icon:'🎨', section:'Workspace', desc:'Visual brainstorming canvas with smart pen' },
   { id:'library',    label:'Paper Library',   icon:'📚', section:'Workspace', desc:'Store, annotate and cite your papers' },

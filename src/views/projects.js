@@ -162,6 +162,11 @@ function renderProjectCards(filter) {
         </div>
         <div class="flex items-center gap-1.5 flex-shrink-0">
           ${statusBadge(p.status)}
+          <button title="View in Pipeline"
+            onclick="event.stopPropagation();showView('pipeline')"
+            class="w-6 h-6 flex items-center justify-center rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors text-xs">
+            🔗
+          </button>
           <button title="Share this project"
             onclick="event.stopPropagation();openProjectShareModal('${p.id}')"
             class="w-6 h-6 flex items-center justify-center rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors text-xs">
