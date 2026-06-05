@@ -116,6 +116,10 @@
     html[data-theme="dark"] #dash-ai-banner-desc{color:#94a3b8 !important}
     /* ── Sidebar collapse transition ─────────────────────────────────────── */
     #app-sidebar{transition:width .15s ease}
+    /* ── DnD cursors & indicators ──────────────────────────────────────────── */
+    .nav-btn[draggable]{cursor:grab}
+    .nav-btn[draggable]:active{cursor:grabbing;opacity:.6}
+    [data-widget]{transition:border-top .08s,border-bottom .08s}
   </style>
 </head>
 <body class="flex h-screen overflow-hidden bg-slate-900">

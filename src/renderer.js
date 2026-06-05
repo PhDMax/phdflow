@@ -74,6 +74,12 @@ function renderSidebar() {
          </span>`
       : ''
     return `<button id="nav-${id}" onclick="showView('${id}')" title="${label}"
+      draggable="true"
+      ondragstart="_sbDragStart('${id}')"
+      ondragover="_sbDragOver(event,'${id}')"
+      ondragleave="_sbDragLeave('${id}')"
+      ondrop="_sbDrop(event,'${id}')"
+      ondragend="_sbDragEnd()"
       class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors ${collapsed ? 'justify-center' : 'text-left'} ${id === current ? 'active' : ''}">
       ${icon}${collapsed ? '' : ` <span class="flex-1">${label}</span>${badge}`}
     </button>`
@@ -128,6 +134,44 @@ function toggleSidebar() {
   state._sidebarCollapsed = !state._sidebarCollapsed
   try { localStorage.setItem('ph_sidebar_collapsed', state._sidebarCollapsed ? '1' : '0') } catch(_) {}
   renderSidebar()
+}
+
+// ── Sidebar drag-and-drop ──────────────────────────────────────────────────────
+let _sbDragId = null
+
+function _sbDragStart(id) {
+  _sbDragId = id
+}
+function _sbDragOver(e, id) {
+  e.preventDefault()
+  e.dataTransfer && (e.dataTransfer.dropEffect = 'move')
+  if (id === _sbDragId) return
+  document.querySelectorAll('.nav-btn').forEach(b => b.style.borderTop = '')
+  const el = document.getElementById('nav-' + id)
+  if (el) el.style.borderTop = '2px solid #6366f1'
+}
+function _sbDragLeave(id) {
+  const el = document.getElementById('nav-' + id)
+  if (el) el.style.borderTop = ''
+}
+async function _sbDrop(e, targetId) {
+  e.preventDefault()
+  document.querySelectorAll('.nav-btn').forEach(b => b.style.borderTop = '')
+  if (!_sbDragId || _sbDragId === targetId) { _sbDragId = null; return }
+  const tools = [..._enabledTools()]
+  const from  = tools.indexOf(_sbDragId)
+  const to    = tools.indexOf(targetId)
+  if (from === -1 || to === -1) { _sbDragId = null; return }
+  tools.splice(from, 1)
+  tools.splice(to, 0, _sbDragId)
+  state.sidebarTools = tools
+  await window.api.storeSet('sidebarTools', tools)
+  _sbDragId = null
+  renderSidebar()
+}
+function _sbDragEnd() {
+  document.querySelectorAll('.nav-btn').forEach(b => b.style.borderTop = '')
+  _sbDragId = null
 }
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
