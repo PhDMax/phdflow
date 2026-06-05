@@ -262,11 +262,11 @@ function renderLibrary() {
         ${linkedProj ? `<div class="mt-1"><span class="text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600">${esc(linkedProj.name)}</span></div>` : ''}
       </div>
       ${p.filepath ? `
-      <button onclick="event.stopPropagation();api.openExternal('file:///${p.filepath.replace(/\\/g,'/')}')"
-        title="Open PDF"
-        class="text-[10px] px-1.5 py-0.5 rounded border border-slate-200 text-slate-400
-          hover:border-rose-300 hover:text-rose-600 transition-colors flex-shrink-0 mt-0.5">
-        PDF
+      <button onclick="event.stopPropagation();openPdfReader('${p.id}')"
+        title="Read & annotate PDF in PhDFlow"
+        class="text-[10px] px-1.5 py-0.5 rounded border border-indigo-200 text-indigo-600
+          hover:bg-indigo-50 transition-colors flex-shrink-0 mt-0.5 font-semibold">
+        📖 Read
       </button>` : ''}
       <button onclick="event.stopPropagation();copyPaperBib('${p.id}')"
         title="Copy BibTeX to clipboard"
@@ -548,6 +548,15 @@ function openPaperDetail(id) {
       </div>
     </div>`
   })()}
+
+  ${p.filepath ? `
+  <div class="flex items-center gap-2 bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 mb-3">
+    <span class="text-xs text-indigo-600 flex-1 truncate">📎 ${esc(p.filepath.split(/[\\/]/).pop())}</span>
+    <button onclick="closeModal();openPdfReader('${id}')"
+      class="text-xs font-semibold px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors flex-shrink-0">
+      📖 Read &amp; Annotate
+    </button>
+  </div>` : ''}
 
   <div class="flex gap-3 border-t border-slate-100 pt-4">
     <button onclick="closeModal()" class="flex-1 btn-secondary">Close</button>
