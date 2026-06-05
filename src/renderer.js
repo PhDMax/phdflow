@@ -75,11 +75,11 @@ function renderSidebar() {
       : ''
     return `<button id="nav-${id}" onclick="showView('${id}')" title="${label}"
       draggable="true"
-      ondragstart="_sbDragStart('${id}')"
+      ondragstart="_sbDragStart(event,'${id}')"
       ondragover="_sbDragOver(event,'${id}')"
       ondragleave="_sbDragLeave('${id}')"
       ondrop="_sbDrop(event,'${id}')"
-      ondragend="_sbDragEnd()"
+      ondragend="_sbDragEnd(event)"
       class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors ${collapsed ? 'justify-center' : 'text-left'} ${id === current ? 'active' : ''}">
       ${icon}${collapsed ? '' : ` <span class="flex-1">${label}</span>${badge}`}
     </button>`
@@ -139,12 +139,20 @@ function toggleSidebar() {
 // ── Sidebar drag-and-drop ──────────────────────────────────────────────────────
 let _sbDragId = null
 
-function _sbDragStart(id) {
+function _sbDragStart(e, id) {
   _sbDragId = id
+  e.dataTransfer.effectAllowed = 'move'
+  e.dataTransfer.setData('text/plain', id)
+  // Slight delay so the ghost image renders before opacity change
+  setTimeout(() => {
+    const el = document.getElementById('nav-' + id)
+    if (el) el.style.opacity = '0.4'
+  }, 0)
 }
 function _sbDragOver(e, id) {
   e.preventDefault()
-  e.dataTransfer && (e.dataTransfer.dropEffect = 'move')
+  e.stopPropagation()
+  e.dataTransfer.dropEffect = 'move'
   if (id === _sbDragId) return
   document.querySelectorAll('.nav-btn').forEach(b => b.style.borderTop = '')
   const el = document.getElementById('nav-' + id)
@@ -156,7 +164,8 @@ function _sbDragLeave(id) {
 }
 async function _sbDrop(e, targetId) {
   e.preventDefault()
-  document.querySelectorAll('.nav-btn').forEach(b => b.style.borderTop = '')
+  e.stopPropagation()
+  document.querySelectorAll('.nav-btn').forEach(b => { b.style.borderTop = ''; b.style.opacity = '' })
   if (!_sbDragId || _sbDragId === targetId) { _sbDragId = null; return }
   const tools = [..._enabledTools()]
   const from  = tools.indexOf(_sbDragId)
@@ -169,8 +178,8 @@ async function _sbDrop(e, targetId) {
   _sbDragId = null
   renderSidebar()
 }
-function _sbDragEnd() {
-  document.querySelectorAll('.nav-btn').forEach(b => b.style.borderTop = '')
+function _sbDragEnd(e) {
+  document.querySelectorAll('.nav-btn').forEach(b => { b.style.borderTop = ''; b.style.opacity = '' })
   _sbDragId = null
 }
 

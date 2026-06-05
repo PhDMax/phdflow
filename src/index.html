@@ -227,7 +227,9 @@
   </div>
 
   <!-- Nav — built dynamically by renderSidebar() in renderer.js -->
-  <nav id="sidebar-nav" class="flex-1 p-1.5 overflow-y-auto min-h-0"></nav>
+  <nav id="sidebar-nav" class="flex-1 p-1.5 overflow-y-auto min-h-0"
+    ondragover="event.preventDefault()"
+    ondrop="event.preventDefault()"></nav>
 
   <!-- Support button -->
   <div class="px-2 pb-2 flex-shrink-0">
