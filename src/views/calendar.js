@@ -126,16 +126,22 @@ function _calEventChip(e, extra = '') {
 
 function _calTypeConf() {
   return {
-    deadline:   { bg:'bg-rose-100',    text:'text-rose-700',    dot:'#f43f5e', label:'Deadline'       },
-    milestone:  { bg:'bg-violet-100',  text:'text-violet-700',  dot:'#7c3aed', label:'Milestone'      },
-    meeting:    { bg:'bg-sky-100',     text:'text-sky-700',     dot:'#0284c7', label:'Meeting'        },
-    seminar:    { bg:'bg-teal-100',    text:'text-teal-700',    dot:'#0d9488', label:'Seminar'        },
-    course:     { bg:'bg-amber-100',   text:'text-amber-700',   dot:'#d97706', label:'Course'         },
-    exam:       { bg:'bg-orange-100',  text:'text-orange-700',  dot:'#ea580c', label:'Exam'           },
-    conference: { bg:'bg-emerald-100', text:'text-emerald-700', dot:'#059669', label:'Conference'     },
-    focus:      { bg:'bg-indigo-100',  text:'text-indigo-700',  dot:'#6366f1', label:'Focus Block'    },
-    busy:       { bg:'bg-slate-200',   text:'text-slate-700',   dot:'#94a3b8', label:'Busy'           },
-    personal:   { bg:'bg-slate-100',   text:'text-slate-600',   dot:'#64748b', label:'Personal'       },
+    deadline:    { bg:'bg-rose-100',    text:'text-rose-700',    dot:'#f43f5e', label:'Deadline'        },
+    milestone:   { bg:'bg-violet-100',  text:'text-violet-700',  dot:'#7c3aed', label:'Milestone'       },
+    meeting:     { bg:'bg-sky-100',     text:'text-sky-700',     dot:'#0284c7', label:'Meeting'         },
+    supervision: { bg:'bg-blue-100',    text:'text-blue-700',    dot:'#2563eb', label:'Supervision'     },
+    seminar:     { bg:'bg-teal-100',    text:'text-teal-700',    dot:'#0d9488', label:'Seminar'         },
+    workshop:    { bg:'bg-cyan-100',    text:'text-cyan-700',    dot:'#0891b2', label:'Workshop'        },
+    course:      { bg:'bg-amber-100',   text:'text-amber-700',   dot:'#d97706', label:'Course'          },
+    exam:        { bg:'bg-orange-100',  text:'text-orange-700',  dot:'#ea580c', label:'Exam'            },
+    defense:     { bg:'bg-red-100',     text:'text-red-700',     dot:'#dc2626', label:'Defense / Viva'  },
+    conference:  { bg:'bg-emerald-100', text:'text-emerald-700', dot:'#059669', label:'Conference'      },
+    travel:      { bg:'bg-lime-100',    text:'text-lime-700',    dot:'#65a30d', label:'Travel'          },
+    focus:       { bg:'bg-indigo-100',  text:'text-indigo-700',  dot:'#6366f1', label:'Focus Block'     },
+    social:      { bg:'bg-pink-100',    text:'text-pink-700',    dot:'#db2777', label:'Social'          },
+    holiday:     { bg:'bg-green-100',   text:'text-green-700',   dot:'#16a34a', label:'Holiday / Leave' },
+    busy:        { bg:'bg-slate-200',   text:'text-slate-700',   dot:'#94a3b8', label:'Busy'            },
+    personal:    { bg:'bg-slate-100',   text:'text-slate-600',   dot:'#64748b', label:'Personal'        },
   }
 }
 
