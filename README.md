@@ -1,47 +1,46 @@
 # ⚗️ PhDFlow
 
-> **Open Alpha — v0.4.0**  
-> This is an early access build shared with trusted testers. Features are incomplete and things will break. Feedback is welcome and extremely valuable.
+**Your all-in-one research workspace — open source, local-first, free to use.**
 
-**Your all-in-one research workspace — open source, local-first. All data stays on your device.**
+All data stays on your device. No account required. No API keys needed.
 
 ---
 
 ## ✨ Features
 
-### Research
-- 📋 **Projects** — Track research projects with status, milestones, and notes
-- 📚 **Paper Library** — Import, annotate, and organise PDFs and citations (BibTeX/RIS)
-- ✍️ **Grant Writing** — Draft, version, and manage grant applications
-- 📡 **Literature Feed** — Automated paper discovery via arXiv & OpenAlex by topic
-
 ### Workspace
-- 📝 **Notes** — Rich markdown notes with full formatting
-- 🎨 **Whiteboard** — Freehand brainstorming, sticky notes, and argument maps
-- 🔧 **Utilities** — PDF toolkit: merge, split, rotate, page numbers, export
+- 🔗 **Pipeline** — See how papers, notes and boards connect per project
+- ✍️ **Writing** — Academic writing assistant with grant, journal, and thesis templates
+- 📋 **Projects** — Manage research projects and work threads
+- 📝 **Notes** — Linked markdown notes and lab logs
+- 🎨 **Whiteboard** — Visual brainstorming canvas with smart pen
+- 📚 **Paper Library** — Store, annotate and cite your papers
+- 📅 **Calendar** — Deadlines, milestones and iCal sync
+- ✅ **To-Do List** — Tasks with time estimates and daily focus mode
+- 👥 **Contacts** — Your academic network and collaborators
 
-### Network
-- 🔍 **Discover** — Find researchers by name across Semantic Scholar & OpenAlex
-- 👥 **Contacts** — Research network with affiliation tracking
+### Tools
+- 📄 **PDF Tools** — Merge, split, rotate and process PDF files
+- ✏️ **Citations** — Format references and count words
+- ⚗️ **Unit Converter** — Convert scientific units with history
+- 📊 **R Assistant** — Step-by-step guide to R statistical tests
 
-### Planning
-- 📅 **Calendar** — Month/week/agenda views, deadline countdowns, PhD goals & milestones
-- ✅ **To-Do List** — Today focus mode, effort levels, grouped tasks
-
-### Security
-- 🔐 **Vault** — 3-factor encrypted password storage (master password + TOTP + email OTP)
-- 🔒 **App Login** — Password-protected startup; hides to system tray on close
+### Feeds
+- 📡 **Literature Feed** — Daily paper feed from arXiv & OpenAlex
+- 💰 **Grant Scan** — Discover and track funding opportunities
+- 🔍 **Discover** — Find researchers by name or research area
 
 ---
 
-## 📥 Installation (Alpha Testers)
+## 📥 Installation
 
-1. Download `PhDFlow-Setup-0.4.0.exe` from the [Releases page](../../releases)
-2. Run the installer — you can choose any installation directory
-3. Launch **PhDFlow** from the desktop shortcut or Start Menu
-4. Create your account (name + password) on first launch
+1. Download **PhDFlow Setup 0.23.0.exe** from the [latest release](../../releases/latest) and run it
+2. Create your account on first launch — everything stays on your device
 
-> **No account required. No data leaves your device. No API keys needed.**
+> Windows SmartScreen may warn on first run — click **More info → Run anyway**
+
+### Portable version
+**PhDFlow-Portable-0.23.0.exe** — runs without installing, useful for USB drives or restricted machines.
 
 ---
 
@@ -66,38 +65,114 @@ npm start              # Run in development
 npm run build          # Produces dist/PhDFlow-Setup-x.x.x.exe
 ```
 
-> **Note:** Code signing is disabled for alpha builds. Windows Defender SmartScreen may show a warning — click "More info → Run anyway" to proceed.
-
 ---
 
-## 🐛 Known Alpha Issues
+## 📋 Changelog
 
-- Whiteboard: large canvases may slow down on older machines
-- Literature Feed: rate limits on arXiv can delay results  
-- Vault SMTP: some providers (e.g. Outlook) require app-specific passwords
-- Update check requires an internet connection on login
+### v0.23.0
+- chore: session updates
+- chore: session notes
+- chore: add push/release/wiki-push automation scripts
+- chore: bump to v0.22.0
+- feat: Writing Assistant — expert academic writing workspace
+- chore: bump to v0.21.0
+- feat: Research Pipeline view
+- chore: bump to v0.20.0
+- feat: in-app PDF reader with annotation support
+- chore: bump to v0.19.2
+- fix: async render functions break router + dead code cleanup
+- chore: bump to v0.19.1
+- fix: sidebar drag-and-drop not working
+- chore: bump to v0.19.0
+- feat: paper view modes + dashboard background images
+- chore: bump to v0.18.0
+- feat: drag-and-drop reordering for dashboard and sidebar
+- chore: bump to v0.17.0
+- feat: data-linked charts in whiteboard with Excel/CSV/PDF import
+- chore: bump to v0.16.0
+- feat: DuckDuckGo web search in Researcher Finder
+- chore: bump to v0.15.1
+- fix: rename template shape factories to avoid collision with notes.js _S
+- chore: bump to v0.15.0
+- feat: persistent tool workspaces, folder access, sidebar split
+- chore: bump to v0.14.0
+- feat: whiteboard templates, responsive design, sidebar redesign
+- feat(whiteboard): rubber cursor, middle-mouse pan, numerical stroke/font sizes
+- chore: bump to v0.13.5
+- feat: QoL batch 4 — event times, PDF open, notes sort/trash, Ctrl+A, project progress
+- chore: bump to v0.13.4
+- fix: remove 'No API keys required' from installation steps — not an install step
+- chore: bump to v0.13.3
+- feat: QoL batch 3 — bulk task actions, calendar mini quick-add
+- feat: QoL batch 2 — projects search, PhD progress bar, topic pills, calendar quick-add, event legend
+- chore: bump to v0.13.2
+- feat: QoL batch — BibTeX copy, clear filters, quick-save, defer, shortcuts modal
+- fix: replace ⊕ FAB icon with labeled '+ Quick add' pill button
+- fix: onboarding name pre-fill, 'Researcher' fallback, search focus-steal
+- chore: bump to v0.13.1
+- fix: dashboard AI banner dark mode — use ID-targeted CSS instead of gradient classes
+- chore: bump to v0.13.0
+- feat: in-app AI onboarding — dashboard prompt + improved setup UX
+- feat: bundle Odysseus source inside PhDFlow — fully integrated AI engine
+- feat: Odysseus auto-managed AI Engine — zero-config local AI
+- chore: bump to v0.12.0
+- feat(discover): Akinator learns from past sessions + multi-source candidates
+- feat(discover): ORCID enrichment, DBLP+PubMed sources, profile cache
+- feat(discover): Researcher Akinator — single consolidated finder
+- fix(discover): institution filter + active researcher filter
+- chore: bump to v0.11.0
+- feat(ai): Odysseus-powered paper relevance scoring + natural language researcher search
+- feat: Odysseus AI assistant integration
+- fix(discover): researcher search accuracy + complete profiles
+- feat(grants): comprehensive discovery overhaul — 173 grants, NIH/NSF live, relevance scoring
+- chore: bump to v0.10.6
+- fix: Discover hallucination, whiteboard cursor/paste, news filter, grant search
+- chore: bump to v0.10.5
+- fix: Endnote setup crash — backslashes in Windows paths inside onclick
+- chore: bump to v0.10.4
+- feat: Endnote auto-sync — folder setup, export script, in-app guide
+- chore: bump to v0.10.3
+- chore: remove bib parse test file
+- fix: parseBib regex — remove /m flag causing empty entry bodies
+- fix: Zotero BBT — use pull-export URL /better-bibtex/library?/[id]/library.bib
+- fix: Zotero BBT — use named params object, omit citationKeys for full library export
+- fix: Zotero — use BBT HTTP export endpoint instead of JSON-RPC
+- fix: Zotero Better BibTeX — use item.export not item.exportLibrary
+- chore: bump to v0.10.2
+- fix: Zotero import — use Better BibTeX JSON-RPC instead of non-existent local REST API
+- chore: bump to v0.10.1
+- feat(grants): live multi-source search — Grants.gov, EU Horizon, UKRI
+- chore: bump to v0.10.0
+- feat(whiteboard): link boards to projects
+- feat(whiteboard): z-order control, image drop/paste
+- feat(whiteboard): multi-select — drag box and Ctrl+click
+- feat(whiteboard): zoom + pan (infinite canvas)
+- feat(whiteboard): Bezier pen smoothing, sticky colour palette
+- fix(whiteboard): fill colour picker, triangle tool, selection property bar
+- chore: bump to v0.9.1
+- fix: dark mode flashbang on Notes and Support pages
+- fix: release scripts — token length validation and graceful existing-release handling
 
 ---
 
 ## 💬 Feedback
 
-Use the **Feedback** tab inside the app to send bug reports and feature ideas directly to Discord. Or open an issue here on GitHub.
+Use the **Feedback** tab inside the app to send bug reports and feature ideas. Or [open an issue](https://github.com/PhDMax/phdflow/issues) on GitHub.
 
 ---
 
 ## 📄 License
 
-MIT © 2025 PhDFlow  
+MIT © PhDFlow
 Free to use, modify, and distribute. No warranty expressed or implied.
 
 ---
 
 ## 🔒 Privacy
 
-PhDFlow has **no servers, no telemetry, no accounts**.  
-Your data is stored locally in `%APPDATA%\phdflow\`.  
+PhDFlow has **no servers, no telemetry, no accounts**.
+Your data is stored locally in `%APPDATA%\phdflow\`.
 The only outbound connections are:
 - arXiv, OpenAlex, Semantic Scholar, CrossRef — paper/author search (open APIs)
-- Discord webhook — only when you click "Send" in Feedback
-- SMTP server — only for Vault OTP emails
+- SMTP server — only for Vault OTP emails (configured by you)
 - GitHub API — only for the update version check (no auth, no data sent)
