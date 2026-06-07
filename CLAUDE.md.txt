@@ -1,0 +1,43 @@
+## Session summary — v0.22.0 (June 2026)
+
+### Released
+PhDFlow v0.22.0 — pushed, built, and released on GitHub with all artifacts (Setup.exe, Portable.exe, latest.yml).
+
+### The last thing that was built
+Writing Assistant (✍️ sidebar) — academic writing tool informed by Swales' CARS model, PRISMA checklist, NIH reviewer criteria, CONSORT standards, hedging language taxonomy, reporting verbs, and transition phrases.
+
+### 9 document types implemented
+- Journal Article — IMRAD structure, CARS intro model, tense guide, statistical reporting
+- NIH R01 — Specific Aims anatomy, reviewer criteria, disease burden hook templates
+- NSF Proposal — 3-paragraph Project Summary (Overview + Intellectual Merit + Broader Impacts)
+- EU Horizon — Excellence/Impact/Implementation structure, WP/milestone/deliverable distinction
+- PhD Thesis Chapter — Examiner expectations, argument-based structure, chapter linking
+- Systematic Review — PRISMA checklist, PICO framing, heterogeneity reporting
+- Conference Abstract — Competitive submission format, leading with findings
+- Journal Cover Letter — Editor-focused language, journal fit framing
+- Response to Reviewers — Point-by-point format, professional disagreement protocol
+
+### Features per document
+Each section has expert guidance, word count target, and clickable sentence starters from real academic writing patterns.
+
+### Writing Aids panel (✦ Writing Aids)
+- Transition Phrases — 6 rhetorical functions, 50+ phrases, click to insert
+- Hedging Language — 5 certainty levels with examples
+- Reporting Verbs — strong/moderate/tentative/method categories
+- Tense Guide — which tense, which section, why
+- Statistical Phrases — templates for t-test, ANOVA, regression, correlation
+
+### AI Assist (requires Odysseus running)
+5 review modes per section: improve clarity, strengthen academic tone, check structure (CARS compliance for intros), suggest stronger verbs, improve first sentences
+
+### Wiki
+Full accuracy audit completed this session. All pages verified against source code and corrected:
+- Pipeline.md created (view existed since v0.21.0, no wiki page)
+- Projects.md: milestones → Work Threads; all 5 statuses documented
+- Paper-Library.md: added .ris import, DOI paste, drag & drop, Watch file, nav link fixed
+- Literature-Feed.md: removed RSS (feature gone); rewritten for topic-keyword search (arXiv + OpenAlex); 30-day default
+- Dashboard.md: grant deadline colour corrected (amber ≤14 days, red = past)
+- Utilities.md: added Citations tool and R Assistant tool
+- Calendar.md: "List" → "Agenda"; ICS sync rewritten for subscription-based live feeds
+- Settings-and-Vault.md: complete rewrite covering all 7 tabs (Profile, App, Personalize, Diagnostics, Backup, Share & Sync, Vault)
+- Home.md: Pipeline added, Utilities row corrected, Literature-Feed description fixed
