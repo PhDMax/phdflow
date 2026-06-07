@@ -1,7 +1,15 @@
 // One-command release script
-// Usage:  node scripts/release.mjs patch   → 0.4.1 → 0.4.2
-//         node scripts/release.mjs minor   → 0.4.x → 0.5.0
-//         node scripts/release.mjs major   → 0.x.x → 1.0.0
+// Usage:  node scripts/release.mjs [patch|minor|major]
+//
+// Steps:
+//  1. Bump version in package.json + src/index.html
+//  2. Regenerate README.md
+//  3. Commit "chore: bump to vX.X.X"
+//  4. Build (npm run build)
+//  5. Create source archives (zip + tar.gz via git archive)
+//  6. Push to GitHub
+//  7. Create GitHub release with auto-generated notes
+//  8. Upload: Setup.exe · Portable.exe · latest.yml · source.zip · source.tar.gz · README.md
 //
 // Requires GITHUB_TOKEN in .env (see .env.example)
 
@@ -72,12 +80,16 @@ async function uploadAsset(uploadUrl, filePath, token) {
   const name = filePath.split(/[\\/]/).pop()
   const data = readFileSync(filePath)
   const url  = uploadUrl.replace('{?name,label}', `?name=${encodeURIComponent(name)}`)
+  const mime = name.endsWith('.yml') ? 'text/yaml'
+    : name.endsWith('.md') ? 'text/markdown'
+    : name.endsWith('.zip') ? 'application/zip'
+    : name.endsWith('.gz') ? 'application/gzip'
+    : 'application/octet-stream'
   console.log(`  ⬆  Uploading ${name} (${(data.length / 1024 / 1024).toFixed(1)} MB)…`)
   const r = await fetch(url, {
     method: 'POST',
-    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/octet-stream' },
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': mime },
     body: data,
-    // Node 18 fetch: no built-in timeout, but uploads are local→GitHub so should be fast
   })
   if (!r.ok) throw new Error(`Upload ${name} failed: ${r.status} ${await r.text()}`)
   console.log(`  ✓  ${name} uploaded`)
@@ -91,6 +103,118 @@ function gitLogSinceLastTag() {
   } catch {
     return '- Initial release'
   }
+}
+
+// ── README generator ──────────────────────────────────────────────────────────
+
+function generateReadme(version, changelog) {
+  // Parse ALL_TOOLS from renderer.js
+  const rendererSrc = readFileSync(join(ROOT, 'src', 'renderer.js'), 'utf-8')
+  const toolsMatch  = rendererSrc.match(/const ALL_TOOLS\s*=\s*\[([\s\S]*?)\]/)
+  let featuresMd = ''
+
+  if (toolsMatch) {
+    const toolEntries = []
+    const rx = /\{\s*id:'[^']+',\s*label:'([^']+)',\s*icon:'([^']+)',\s*section:'([^']+)',\s*desc:'([^']+)'/g
+    let m
+    while ((m = rx.exec(toolsMatch[1])) !== null) {
+      toolEntries.push({ label: m[1], icon: m[2], section: m[3], desc: m[4] })
+    }
+
+    // Group by section
+    const sections = {}
+    for (const t of toolEntries) {
+      if (!sections[t.section]) sections[t.section] = []
+      sections[t.section].push(t)
+    }
+
+    for (const [section, tools] of Object.entries(sections)) {
+      featuresMd += `### ${section}\n`
+      for (const t of tools) {
+        featuresMd += `- ${t.icon} **${t.label}** — ${t.desc}\n`
+      }
+      featuresMd += '\n'
+    }
+  }
+
+  return `# ⚗️ PhDFlow
+
+**Your all-in-one research workspace — open source, local-first, free to use.**
+
+All data stays on your device. No account required. No API keys needed.
+
+---
+
+## ✨ Features
+
+${featuresMd.trim()}
+
+---
+
+## 📥 Installation
+
+1. Download **PhDFlow Setup ${version}.exe** from the [latest release](../../releases/latest) and run it
+2. Create your account on first launch — everything stays on your device
+
+> Windows SmartScreen may warn on first run — click **More info → Run anyway**
+
+### Portable version
+**PhDFlow-Portable-${version}.exe** — runs without installing, useful for USB drives or restricted machines.
+
+---
+
+## 🛠️ Build from Source
+
+### Prerequisites
+- [Node.js](https://nodejs.org/) 18+
+- [Git](https://git-scm.com/)
+
+### Steps
+
+\`\`\`bash
+git clone https://github.com/PhDMax/phdflow.git
+cd phdflow
+npm install
+npm run build:css      # Compile Tailwind CSS
+npm start              # Run in development
+\`\`\`
+
+### Build Windows installer
+\`\`\`bash
+npm run build          # Produces dist/PhDFlow-Setup-x.x.x.exe
+\`\`\`
+
+---
+
+## 📋 Changelog
+
+### v${version}
+${changelog}
+
+---
+
+## 💬 Feedback
+
+Use the **Feedback** tab inside the app to send bug reports and feature ideas. Or [open an issue](https://github.com/${OWNER}/${REPO}/issues) on GitHub.
+
+---
+
+## 📄 License
+
+MIT © PhDFlow
+Free to use, modify, and distribute. No warranty expressed or implied.
+
+---
+
+## 🔒 Privacy
+
+PhDFlow has **no servers, no telemetry, no accounts**.
+Your data is stored locally in \`%APPDATA%\\phdflow\\\`.
+The only outbound connections are:
+- arXiv, OpenAlex, Semantic Scholar, CrossRef — paper/author search (open APIs)
+- SMTP server — only for Vault OTP emails (configured by you)
+- GitHub API — only for the update version check (no auth, no data sent)
+`
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -108,7 +232,7 @@ function gitLogSinceLastTag() {
   // 2. Check working tree (untracked files are fine, only block on modified/staged)
   const dirty = run('git status --porcelain', { silent: true })
     .split('\n').filter(l => l && !l.startsWith('??')).join('\n')
-  if (dirty) { console.error('✗ Working tree has uncommitted changes. Commit or stash first.\n' + dirty); process.exit(1) }
+  if (dirty) { console.error('✗ Working tree has uncommitted changes. Run `node scripts/push.mjs` first.\n' + dirty); process.exit(1) }
 
   // 3. Collect changelog before bumping
   const changelog = gitLogSinceLastTag()
@@ -131,20 +255,34 @@ function gitLogSinceLastTag() {
   )
   writeFileSync(htmlPath, newHtml, 'utf-8')
 
-  // 5. Commit version bump
+  // 5. Regenerate README
+  console.log('\n📄  Regenerating README.md…')
+  const newReadme = generateReadme(newVersion, changelog)
+  writeFileSync(join(ROOT, 'README.md'), newReadme, 'utf-8')
+  console.log('  ✓  README.md updated')
+
+  // 6. Commit version bump + README
   console.log('\n📝  Committing version bump…')
-  run('git add package.json src/index.html')
+  run('git add package.json src/index.html README.md')
   run(`git commit -m "chore: bump to v${newVersion}"`)
 
-  // 6. Build
+  // 7. Build
   console.log('\n🔨  Building…')
   run('npm run build')
 
-  // 7. Push
+  // 8. Create source archives (git archive from HEAD after commit)
+  console.log('\n📦  Creating source archives…')
+  const zipPath = join(ROOT, 'dist', `PhDFlow-Source-${newVersion}.zip`)
+  const tgzPath = join(ROOT, 'dist', `PhDFlow-Source-${newVersion}.tar.gz`)
+  run(`git archive --format=zip HEAD -o "${zipPath}"`)
+  run(`git archive --format=tar.gz HEAD -o "${tgzPath}"`)
+  console.log('  ✓  Source archives created')
+
+  // 9. Push
   console.log('\n🚀  Pushing to GitHub…')
   run('git push origin master')
 
-  // 8. Create release
+  // 10. Create release
   console.log('\n📋  Creating GitHub release…')
   const releaseBody = `## PhDFlow v${newVersion}
 
@@ -164,6 +302,7 @@ ${changelog}
 
 ---
 ☕ If PhDFlow saves you time, [buy me a coffee](https://buymeacoffee.com/phdmax)`
+
   const release = await ghPost('/releases', {
     tag_name:         `v${newVersion}`,
     target_commitish: 'master',
@@ -174,12 +313,15 @@ ${changelog}
   }, token)
   console.log(`  ✓  Release created: ${release.html_url}`)
 
-  // 9. Upload assets
+  // 11. Upload all assets
   console.log('\n📤  Uploading assets…')
   const assets = [
     join(ROOT, 'dist', `PhDFlow-Setup-${newVersion}.exe`),
     join(ROOT, 'dist', `PhDFlow-Portable-${newVersion}.exe`),
     join(ROOT, 'dist', 'latest.yml'),
+    zipPath,
+    tgzPath,
+    join(ROOT, 'README.md'),
   ]
   for (const asset of assets) {
     if (!existsSync(asset)) { console.warn(`  ⚠  Not found, skipping: ${asset}`); continue }
@@ -187,4 +329,5 @@ ${changelog}
   }
 
   console.log(`\n✅  PhDFlow v${newVersion} published!\n   ${release.html_url}\n`)
+  console.log('👉  Next: update the wiki, then run:  node scripts/wiki-push.mjs\n')
 })().catch(e => { console.error('\n✗', e.message); process.exit(1) })
