@@ -551,12 +551,24 @@ function openPaperDetail(id) {
 
   ${p.filepath ? `
   <div class="flex items-center gap-2 bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2 mb-3">
-    <span class="text-xs text-indigo-600 flex-1 truncate">📎 ${esc(p.filepath.split(/[\\/]/).pop())}</span>
+    <span class="text-xs text-indigo-600 flex-1 truncate min-w-0">📎 ${esc(p.filepath.split(/[\\/]/).pop())}</span>
     <button onclick="closeModal();openPdfReader('${id}')"
       class="text-xs font-semibold px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors flex-shrink-0">
       📖 Read &amp; Annotate
     </button>
-  </div>` : ''}
+    <button onclick="libDetachPdf('${id}')" title="Remove PDF link"
+      class="text-slate-400 hover:text-red-500 transition-colors text-sm flex-shrink-0 leading-none">✕</button>
+  </div>` : `
+  <div class="mb-3">
+    <label class="label">PDF</label>
+    <div class="flex gap-2 flex-wrap">
+      <button onclick="libAttachPdf('${id}')"
+        class="btn-secondary text-xs py-1.5 px-3">📎 Attach local PDF</button>
+      ${p.doi ? `<button onclick="libFindPdf('${id}')" id="lib-find-pdf-${id}"
+        class="btn-secondary text-xs py-1.5 px-3">🔍 Find open-access PDF</button>` : ''}
+    </div>
+    <div id="lib-find-status-${id}" class="hidden mt-2 text-xs text-slate-500 leading-relaxed"></div>
+  </div>`}
 
   <div class="flex gap-3 border-t border-slate-100 pt-4">
     <button onclick="closeModal()" class="flex-1 btn-secondary">Close</button>
@@ -590,6 +602,84 @@ async function deletePaper(id) {
     state.paperCollections = snapColls
     save('papers'); save('paperCollections'); renderLibrary(); showToast('Paper restored ✓')
   })
+}
+
+// ── PDF attach / find ─────────────────────────────────────────────────────────
+
+async function libAttachPdf(paperId) {
+  const paths = await window.api.openPdfDialog()
+  if (!paths.length) return
+  const p = state.papers.find(x => x.id === paperId)
+  if (!p) return
+  p.filepath = paths[0]
+  save('papers')
+  renderLibrary()
+  closeModal()
+  openPaperDetail(paperId)
+  showToast('PDF attached ✓')
+}
+
+function libDetachPdf(paperId) {
+  const p = state.papers.find(x => x.id === paperId)
+  if (!p) return
+  p.filepath = ''
+  save('papers')
+  renderLibrary()
+  closeModal()
+  openPaperDetail(paperId)
+}
+
+async function libFindPdf(paperId) {
+  const p = state.papers.find(x => x.id === paperId)
+  if (!p?.doi) { showToast('No DOI — cannot search for open-access PDF', 'error'); return }
+
+  const btn    = document.getElementById(`lib-find-pdf-${paperId}`)
+  const status = document.getElementById(`lib-find-status-${paperId}`)
+  const setStatus = txt => { if (status) { status.classList.remove('hidden'); status.textContent = txt } }
+
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Searching…' }
+  setStatus('Querying Unpaywall for open-access PDF…')
+
+  try {
+    const uRes  = await fetch(`https://api.unpaywall.org/v2/${encodeURIComponent(p.doi)}?email=phdflow@app.com`)
+    if (!uRes.ok) throw new Error('DOI not found on Unpaywall')
+    const uData = await uRes.json()
+
+    const pdfUrl = uData.best_oa_location?.url_for_pdf
+    if (!pdfUrl) {
+      setStatus('No open-access PDF found for this DOI. You can attach a local file above.')
+      if (btn) { btn.disabled = false; btn.textContent = '🔍 Find open-access PDF' }
+      return
+    }
+
+    setStatus('Downloading PDF…')
+    const pdfRes = await fetch(pdfUrl)
+    if (!pdfRes.ok) throw new Error(`Download failed (${pdfRes.status})`)
+
+    const buf     = await pdfRes.arrayBuffer()
+    const uint8   = new Uint8Array(buf)
+    let   binary  = ''
+    const chunk   = 8192
+    for (let i = 0; i < uint8.length; i += chunk)
+      binary += String.fromCharCode(...uint8.subarray(i, i + chunk))
+    const base64 = btoa(binary)
+
+    const dataDir  = await window.api.getDataDir()
+    const safeName = (p.title || p.doi).replace(/[^a-z0-9]/gi, '_').slice(0, 80)
+    const dest     = `${dataDir}\\${safeName}.pdf`
+
+    await window.api.writeBinaryFile(dest, base64)
+
+    p.filepath = dest
+    save('papers')
+    renderLibrary()
+    closeModal()
+    openPaperDetail(paperId)
+    showToast('Open-access PDF downloaded and attached ✓')
+  } catch(e) {
+    setStatus(`Could not retrieve PDF: ${e.message}`)
+    if (btn) { btn.disabled = false; btn.textContent = '🔍 Find open-access PDF' }
+  }
 }
 
 function copyPaperBib(id) {
