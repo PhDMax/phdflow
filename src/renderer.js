@@ -76,15 +76,16 @@ function renderSidebar() {
            ${window._newsNavBadge > 99 ? '99+' : window._newsNavBadge}
          </span>`
       : ''
-    return `<button id="nav-${id}" onclick="showView('${id}')" title="${label}"
-      draggable="true"
-      ondragstart="_sbDragStart(event,'${id}')"
-      ondragover="_sbDragOver(event,'${id}')"
-      ondragleave="_sbDragLeave('${id}')"
-      ondrop="_sbDrop(event,'${id}')"
-      ondragend="_sbDragEnd(event)"
+    const dragAttrs = _sbRearrangeMode
+      ? `draggable="true" ondragstart="_sbDragStart(event,'${id}')" ondragover="_sbDragOver(event,'${id}')" ondragleave="_sbDragLeave('${id}')" ondrop="_sbDrop(event,'${id}')" ondragend="_sbDragEnd(event)"`
+      : ''
+    const dragStyle = _sbRearrangeMode ? 'cursor:grab;' : ''
+    const dragHint  = _sbRearrangeMode && !collapsed ? `<span class="text-slate-600 flex-shrink-0 text-xs">⠿</span>` : ''
+    return `<button id="nav-${id}" onclick="${_sbRearrangeMode ? '' : `showView('${id}')`}" title="${label}"
+      ${dragAttrs}
+      style="${dragStyle}"
       class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors ${collapsed ? 'justify-center' : 'text-left'} ${id === current ? 'active' : ''}">
-      ${icon}${collapsed ? '' : ` <span class="flex-1">${label}</span>${badge}`}
+      ${icon}${collapsed ? '' : ` <span class="flex-1">${label}</span>${badge}${dragHint}`}
     </button>`
   }
 
@@ -107,10 +108,14 @@ function renderSidebar() {
   // Always-visible top item
   let html = btn('dashboard', 'Dashboard', '🏠') + '<div class="mb-1"></div>'
 
-  // Grouped sections
+  // Grouped sections — iterate `enabled` to preserve user-defined order
   const sections = ['Workspace','Tools','Feeds']
   for (const section of sections) {
-    const tools = ALL_TOOLS.filter(t => t.section === section && enabled.includes(t.id))
+    const sectionIds = new Set(ALL_TOOLS.filter(t => t.section === section).map(t => t.id))
+    const tools = enabled
+      .filter(id => sectionIds.has(id))
+      .map(id => ALL_TOOLS.find(t => t.id === id))
+      .filter(Boolean)
     if (!tools.length) continue
     if (!collapsed) html += `<div class="nav-section mt-2">${section}</div>`
     else html += `<div class="my-1 mx-2 border-t border-slate-700/40"></div>`
@@ -122,12 +127,24 @@ function renderSidebar() {
   html += btn('feedback', 'Feedback', '💬')
   html += btn('settings', 'Settings', '⚙️')
 
-  // Collapse toggle at the bottom of nav
-  html += `<div class="mt-2 mx-1">
-    <button onclick="toggleSidebar()" title="${collapsed ? 'Expand sidebar' : 'Collapse sidebar'}"
+  // Rearrange + collapse toggles at the bottom
+  html += `<div class="mt-2 mx-1 space-y-0.5">`
+  if (_sbRearrangeMode) {
+    html += `<button onclick="_sbToggleRearrange()" title="Exit rearrange mode"
+      class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-indigo-400 hover:text-indigo-200 text-xs font-semibold transition-colors ${collapsed ? 'justify-center' : 'text-left'}"
+      style="background:#312e81">
+      ${collapsed ? '✓' : '✓ Done rearranging'}
+    </button>`
+  } else {
+    html += `<button onclick="_sbToggleRearrange()" title="Rearrange sidebar items"
       class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-600 hover:text-slate-300 text-xs transition-colors ${collapsed ? 'justify-center' : 'text-left'}">
-      ${collapsed ? '→' : '← Collapse'}
-    </button>
+      ${collapsed ? '⠿' : '⠿ Rearrange'}
+    </button>`
+  }
+  html += `<button onclick="toggleSidebar()" title="${collapsed ? 'Expand sidebar' : 'Collapse sidebar'}"
+    class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-600 hover:text-slate-300 text-xs transition-colors ${collapsed ? 'justify-center' : 'text-left'}">
+    ${collapsed ? '→' : '← Collapse'}
+  </button>
   </div>`
 
   nav.innerHTML = html
@@ -136,6 +153,14 @@ function renderSidebar() {
 function toggleSidebar() {
   state._sidebarCollapsed = !state._sidebarCollapsed
   try { localStorage.setItem('ph_sidebar_collapsed', state._sidebarCollapsed ? '1' : '0') } catch(_) {}
+  renderSidebar()
+}
+
+// ── Sidebar rearrange mode ────────────────────────────────────────────────────
+let _sbRearrangeMode = false
+
+function _sbToggleRearrange() {
+  _sbRearrangeMode = !_sbRearrangeMode
   renderSidebar()
 }
 
@@ -701,9 +726,15 @@ function pageHeader(title, btn='') {
 // ── PhDFlow workspace folder helpers ──────────────────────────────────────────
 let _phdfWorkspaceDir = null
 async function openPhDFlowFolder(sub) {
-  if (!_phdfWorkspaceDir) _phdfWorkspaceDir = await api.getWorkspaceDir()
-  const target = sub ? _phdfWorkspaceDir + '\\' + sub : _phdfWorkspaceDir
-  api.openFolder(target)
+  try {
+    if (!_phdfWorkspaceDir) _phdfWorkspaceDir = await api.getWorkspaceDir()
+    const target = sub ? _phdfWorkspaceDir + '\\' + sub : _phdfWorkspaceDir
+    const err = await api.openFolder(target)
+    if (err) showToast('Could not open folder: ' + err, 'error')
+  } catch(e) {
+    _phdfWorkspaceDir = null  // reset so next attempt retries
+    showToast('Could not open folder', 'error')
+  }
 }
 function _folderBtn(sub = '') {
   return `<button onclick="openPhDFlowFolder('${sub}')" title="Open folder on your PC  (Documents/PhDFlow${sub?'/'+sub:''})"

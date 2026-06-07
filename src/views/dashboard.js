@@ -1,5 +1,11 @@
 // ══ Dashboard View ════════════════════════════════════════════════════════════
 
+let _dashRearrangeMode = false
+function dashToggleRearrange() {
+  _dashRearrangeMode = !_dashRearrangeMode
+  render_dashboard()
+}
+
 // Dashboard background — cached at startup and on every settings change
 let _dashBg = null
 api.storeGet('dashBg').then(v => { _dashBg = v || null }).catch(() => {})
@@ -133,18 +139,34 @@ function render_dashboard() {
       </button>
     </div>` : ''}
 
+    <!-- ── Rearrange bar (shown only in rearrange mode) ──────────────────── -->
+    ${_dashRearrangeMode ? `
+    <div class="mx-4 lg:mx-6 mt-4 px-4 py-2.5 bg-indigo-50 border border-indigo-200 rounded-xl flex items-center justify-between gap-3">
+      <span class="text-xs text-indigo-700 font-medium">⠿ Drag widgets to reorder them across columns</span>
+      <button onclick="dashToggleRearrange()"
+        class="text-xs font-semibold px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors flex-shrink-0">
+        ✓ Done
+      </button>
+    </div>` : `
+    <div class="mx-4 lg:mx-6 mt-4 flex justify-end">
+      <button onclick="dashToggleRearrange()"
+        class="text-xs text-slate-400 hover:text-slate-600 transition-colors flex items-center gap-1">
+        ⠿ Rearrange widgets
+      </button>
+    </div>`}
+
     <!-- ── Main Grid ────────────────────────────────────────────────────────── -->
     <div class="p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-2 gap-5">
 
       <!-- LEFT COLUMN -->
       <div id="dash-col-left" class="space-y-3"
-        ondragover="dashColOver(event,'left')" ondrop="dashColDrop(event,'left')" ondragleave="dashColLeave(event,'left')">
+        ${_dashRearrangeMode ? `ondragover="dashColOver(event,'left')" ondrop="dashColDrop(event,'left')" ondragleave="dashColLeave(event,'left')"` : ''}>
         ${leftIds.filter(id => wShow(id)).map(id => _dashWrapWidget(id, _dashWidgetHTML(id, {now,upcoming,activeProjects,openGrants,recentPapers,todayFocusTasks,overdueTodos,dueSoonTodos}))).join('')}
       </div>
 
       <!-- RIGHT COLUMN -->
       <div id="dash-col-right" class="space-y-3"
-        ondragover="dashColOver(event,'right')" ondrop="dashColDrop(event,'right')" ondragleave="dashColLeave(event,'right')">
+        ${_dashRearrangeMode ? `ondragover="dashColOver(event,'right')" ondrop="dashColDrop(event,'right')" ondragleave="dashColLeave(event,'right')"` : ''}>
         ${rightIds.filter(id => wShow(id)).map(id => _dashWrapWidget(id, _dashWidgetHTML(id, {now,upcoming,activeProjects,openGrants,recentPapers,todayFocusTasks,overdueTodos,dueSoonTodos}))).join('')}
       </div>
     </div>
@@ -190,16 +212,16 @@ function render_dashboard() {
 
 function _dashWrapWidget(id, inner) {
   if (!inner) return ''
-  return `<div data-widget="${id}" draggable="true"
-    ondragstart="dashDragStart(event,'${id}')"
-    ondragover="dashDragOver(event,'${id}')"
-    ondrop="dashDrop(event,'${id}')"
-    ondragend="dashDragEnd(event)"
-    class="relative group rounded-2xl transition-all duration-150"
-    style="cursor:default">
-    <!-- Drag handle -->
-    <div class="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-60 transition-opacity select-none pointer-events-none
-      text-slate-400 text-base leading-none" title="Drag to reorder">⠿</div>
+  const dragAttrs = _dashRearrangeMode
+    ? `draggable="true" ondragstart="dashDragStart(event,'${id}')" ondragover="dashDragOver(event,'${id}')" ondrop="dashDrop(event,'${id}')" ondragend="dashDragEnd(event)"`
+    : ''
+  const dragHandle = _dashRearrangeMode
+    ? `<div class="absolute top-2 right-2 z-10 opacity-60 select-none text-slate-400 text-base leading-none" style="cursor:grab" title="Drag to reorder">⠿</div>`
+    : ''
+  return `<div data-widget="${id}" ${dragAttrs}
+    class="relative rounded-2xl transition-all duration-150"
+    style="${_dashRearrangeMode ? 'cursor:grab;outline:2px dashed #c7d2fe;outline-offset:2px;' : ''}">
+    ${dragHandle}
     ${inner}
   </div>`
 }
