@@ -1,21 +1,25 @@
-## Session summary — v0.23.0 (June 2026)
+## Session summary — v0.23.2 (June 2026)
 
 ### Released
-PhDFlow v0.23.0 — all 6 artifacts uploaded (Setup.exe, Portable.exe, latest.yml, Source.zip, Source.tar.gz, README.md).
+PhDFlow v0.23.2 — all 6 artifacts uploaded.
 
-### What was built
+### What was built this session
 
-#### Release automation scripts
-- `scripts/push.mjs` — auto-commits all changes with a generated conventional commit message, then pushes
-- `scripts/release.mjs` — bumps version, regenerates README from live nav config, builds, creates source archives, pushes, creates GitHub release, uploads 6 artifacts
-- `scripts/wiki-push.mjs` — commits + pushes wiki with token auth
+#### Sidebar drag-and-drop fix
+Root cause: `renderSidebar` iterated `ALL_TOOLS` (fixed order) and only checked if each tool was *in* `enabled`, ignoring the custom order in `state.sidebarTools`. Fixed by iterating `enabled` first and looking up each tool's metadata from `ALL_TOOLS`.
 
-When user says "push" → `node scripts/push.mjs`
-When user says "release" → `node scripts/release.mjs [minor|patch|major]`, update wiki pages, `node scripts/wiki-push.mjs`
+#### Rearrange mode (sidebar + dashboard)
+Drag-and-drop is now behind an explicit toggle:
+- **Sidebar**: **⠿ Rearrange** button at the bottom activates drag mode (grab cursor, ⠿ handle on items). **✓ Done rearranging** exits it. Clicking nav items is disabled during rearrange mode.
+- **Dashboard**: **⠿ Rearrange widgets** link below the header activates mode (dashed indigo outline + grab handles on widgets). **✓ Done** exits it.
 
-#### Paper Library — PDF features
-Three new capabilities in the paper detail modal:
-- **📎 Attach local PDF** — file picker, links PDF to paper entry (no copy made)
-- **🔍 Find open-access PDF** — queries Unpaywall by DOI, downloads and attaches silently; shows inline status
-- **✕ Detach** — removes the PDF link from the paper
-- **📖 Read & Annotate** already existed but was only reachable for papers imported as PDFs; now accessible for any paper once a PDF is attached
+#### Calendar — 6 new event types (v0.23.1)
+Added: Supervision, Workshop, Defense/Viva, Travel, Social, Holiday/Leave — bringing total from 10 to 16 types. All rendering code derives from `_calTypeConf()` so the new types work everywhere automatically.
+
+#### openPhDFlowFolder defensive fix (v0.23.1)
+Added try/catch and proper `await` to `openPhDFlowFolder` in renderer.js. Previously an unhandled rejection could cause unexpected behaviour; errors now surface as a toast.
+
+#### Paper Library — PDF features (v0.23.0)
+- **📎 Attach local PDF** — file picker, links PDF to any paper entry
+- **🔍 Find open-access PDF** — queries Unpaywall by DOI, downloads and attaches silently
+- **✕ Detach** — removes the PDF link from a paper

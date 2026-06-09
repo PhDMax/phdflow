@@ -373,6 +373,7 @@ function _rankGrants(grants, profile) {
 
 let _liveSearchQuery    = ''
 let _liveSearchResults  = { ggov: null, nih: null, nsf: null, eu: null, ukri: null }
+let _liveGrantCache     = {}   // id → grant object; avoids embedding JSON in onclick attrs
 let _liveSourceEnabled  = { ggov: true, nih: true, nsf: true, eu: true, ukri: true }
 let _liveSearchDone     = false
 
@@ -791,7 +792,7 @@ const _SOURCE_META = {
 }
 
 function buildSearchHTML(el) {
-  if (!_liveSearchQuery) _liveSearchQuery = _buildGrantKeywords(state.profile)
+  if (!_liveSearchQuery) _liveSearchQuery = _buildApiKeywords(state.profile)
 
   const alreadyTracked = new Set(state.grants.map(g => g.sourceId).filter(Boolean))
 
@@ -941,6 +942,7 @@ function _builtinGrantCard(g, alreadyTracked) {
 }
 
 function _liveGrantCard(g, alreadyTracked, sourceKey) {
+  _liveGrantCache[g.id] = g   // safe lookup so we don't embed JSON in onclick
   const tracked    = alreadyTracked.has(g.id)
   const sourceMeta = _SOURCE_META[sourceKey]
   const deadlineStr = g.deadline ? fmtDate(g.deadline) : ''
@@ -967,7 +969,7 @@ function _liveGrantCard(g, alreadyTracked, sourceKey) {
       </div>
       <div class="flex gap-2 flex-shrink-0">
         <button onclick="api.openExternal('${esc(g.url)}')" class="text-indigo-500 hover:underline">Open ↗</button>
-        ${!tracked ? `<button onclick="trackLiveGrant(${JSON.stringify(g).replace(/"/g,'&quot;')})" class="text-xs px-2.5 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">+ Track</button>` : ''}
+        ${!tracked ? `<button onclick="trackLiveGrant(_liveGrantCache[${JSON.stringify(g.id)}])" class="text-xs px-2.5 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">+ Track</button>` : ''}
       </div>
     </div>
   </div>`
@@ -975,7 +977,7 @@ function _liveGrantCard(g, alreadyTracked, sourceKey) {
 
 async function runLiveGrantSearch() {
   const inp = document.getElementById('grant-search-q')
-  if (inp) _liveSearchQuery = inp.value.trim() || _buildGrantKeywords(state.profile)
+  if (inp) _liveSearchQuery = inp.value.trim() || _buildApiKeywords(state.profile)
 
   _liveSearchResults = { ggov:'loading', nih:'loading', nsf:'loading', eu:'loading', ukri:'loading' }
   _liveSearchDone    = false
@@ -1003,7 +1005,7 @@ async function runLiveGrantSearch() {
 }
 
 function grantOpenWebSearch() {
-  const kw  = _liveSearchQuery || _buildGrantKeywords(state.profile)
+  const kw  = _liveSearchQuery || _buildApiKeywords(state.profile)
   const q   = encodeURIComponent(`research grant fellowship funding "${kw}"`)
   api.openExternal(`https://www.google.com/search?q=${q}`)
 }

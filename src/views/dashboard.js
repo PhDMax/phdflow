@@ -412,13 +412,16 @@ function _dashMoveWidget(fromId, toId, e) {
   src = src.filter(id => id !== fromId)
 
   // Determine insert position in dest (before or after toId based on mouse position)
-  const toEl = document.querySelector(`[data-widget="${toId}"]`)
-  let toIdx  = dest.indexOf(toId)
+  const toEl   = document.querySelector(`[data-widget="${toId}"]`)
+  const fromIdx = dest.indexOf(fromId)
+  let toIdx    = dest.indexOf(toId)
   if (toEl) {
     const rect = toEl.getBoundingClientRect()
     if (e.clientY >= rect.top + rect.height/2) toIdx++
   }
   dest = dest.filter(id => id !== fromId)
+  // Same-column move: removing fromId shifts subsequent indices left by 1
+  if (srcCol === destCol && fromIdx < toIdx) toIdx--
   dest.splice(toIdx, 0, fromId)
 
   if (srcCol === destCol) {

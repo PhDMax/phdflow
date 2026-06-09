@@ -200,7 +200,8 @@ async function _sbDrop(e, targetId) {
   const to    = tools.indexOf(targetId)
   if (from === -1 || to === -1) { _sbDragId = null; return }
   tools.splice(from, 1)
-  tools.splice(to, 0, _sbDragId)
+  // Adjust target index: removing the source shifts all subsequent indices left by 1
+  tools.splice(from < to ? to - 1 : to, 0, _sbDragId)
   state.sidebarTools = tools
   await window.api.storeSet('sidebarTools', tools)
   _sbDragId = null
