@@ -157,7 +157,9 @@ function renderProjectCards(filter) {
       <!-- Header -->
       <div class="flex items-start justify-between gap-2 mb-2">
         <div class="flex items-center gap-2 min-w-0">
-          <div class="w-3 h-3 rounded-full flex-shrink-0 mt-0.5" style="background:${p.color||'#6366f1'}"></div>
+          ${p.icon
+            ? `<div class="w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] leading-none" style="background:${p.color||'#6366f1'}1a">${p.icon}</div>`
+            : `<div class="w-3 h-3 rounded-full flex-shrink-0 mt-0.5" style="background:${p.color||'#6366f1'}"></div>`}
           <h3 class="font-bold text-slate-900 text-sm leading-snug truncate">${esc(p.name)}</h3>
         </div>
         <div class="flex items-center gap-1.5 flex-shrink-0">
@@ -232,6 +234,17 @@ function openProjectModal(id) {
       <div><label class="label">Colour</label>
         <input id="pm-color" type="color" value="${p?.color||'#6366f1'}" class="h-9 w-full rounded-xl border border-slate-200 cursor-pointer px-1"/></div>
     </div>
+    <div>
+      <label class="label">Icon <span class="text-slate-400 font-normal">(optional)</span></label>
+      <input type="hidden" id="pm-icon" value="${esc(p?.icon||'')}"/>
+      <div class="flex flex-wrap gap-1.5">
+        <button type="button" onclick="pmSetIcon(this,'')"
+          class="pm-icon-btn w-8 h-8 flex items-center justify-center rounded-lg border-2 text-xs text-slate-400 transition-all ${!p?.icon ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 hover:border-slate-300'}">—</button>
+        ${['🔬','🧪','📊','📚','💻','🧠','🌍','📈','✏️','🎯','🩺','📐','🔭','🌱','⚛️','📡'].map(ic => `
+        <button type="button" onclick="pmSetIcon(this,'${ic}')"
+          class="pm-icon-btn w-8 h-8 flex items-center justify-center rounded-lg border-2 text-base transition-all ${p?.icon===ic ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 hover:border-slate-300'}">${ic}</button>`).join('')}
+      </div>
+    </div>
     <div class="grid grid-cols-2 gap-3">
       <div><label class="label">Start Date</label>
         <input id="pm-start" type="date" value="${p?.startDate||''}" class="input"/></div>
@@ -248,6 +261,13 @@ function openProjectModal(id) {
   setTimeout(()=>document.getElementById('pm-name')?.focus(),50)
 }
 
+function pmSetIcon(btn, icon) {
+  document.getElementById('pm-icon').value = icon
+  document.querySelectorAll('.pm-icon-btn').forEach(b => b.className = b.className
+    .replace(/border-indigo-500 bg-indigo-50|border-slate-200 hover:border-slate-300/g, '').trim()
+    + (b === btn ? ' border-indigo-500 bg-indigo-50' : ' border-slate-200 hover:border-slate-300'))
+}
+
 function saveProject(id) {
   const name = document.getElementById('pm-name').value.trim()
   if (!name) { showToast('Project name required','error'); return }
@@ -257,6 +277,7 @@ function saveProject(id) {
     description: document.getElementById('pm-desc').value.trim(),
     status:    document.getElementById('pm-status').value,
     color:     document.getElementById('pm-color').value,
+    icon:      document.getElementById('pm-icon').value,
     startDate: document.getElementById('pm-start').value,
     endDate:   document.getElementById('pm-end').value,
     tags:      document.getElementById('pm-tags').value.split(',').map(t=>t.trim()).filter(Boolean),
@@ -283,7 +304,9 @@ function openProjectDetail(id) {
   openModal(`
   <div class="flex items-start justify-between gap-3 mb-1">
     <div class="flex items-center gap-2.5">
-      <div class="w-4 h-4 rounded-full flex-shrink-0" style="background:${p.color||'#6366f1'}"></div>
+      ${p.icon
+        ? `<div class="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-sm leading-none" style="background:${p.color||'#6366f1'}1a">${p.icon}</div>`
+        : `<div class="w-4 h-4 rounded-full flex-shrink-0" style="background:${p.color||'#6366f1'}"></div>`}
       <h3 class="font-bold text-slate-900 text-lg leading-tight">${esc(p.name)}</h3>
     </div>
     ${statusBadge(p.status)}

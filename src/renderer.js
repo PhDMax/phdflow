@@ -21,12 +21,15 @@ const state = {
   darkModeSchedule: null,
   paperCollections: [],
   sidebarTools: null,
+  favoriteTools: [],
+  researchArea: null,
+  enabledPacks: [],
   writingDocs:  [],
   _sidebarCollapsed: false,
 }
 
 const VIEWS = ['dashboard','pipeline','writing','projects','notes','whiteboard','library','calendar','todos','contacts',
-               'pdf_tools','citations','unit_conv','r_assist',
+               'pdf_tools','citations','unit_conv','r_assist','lab_tools',
                'news','grants','discover','feedback','settings','support']
 
 // ── Tool registry — single source of truth for sidebar & picker ───────────────
@@ -53,6 +56,64 @@ const ALL_TOOLS = [
 ]
 const _ALWAYS_SHOWN = ['dashboard','settings','feedback','support']
 const _DEFAULT_TOOLS = ALL_TOOLS.map(t => t.id)  // all on by default
+
+// ── Specialty tool packs — extra tools, hidden unless enabled ─────────────────
+const _PACK_TOOLS = [
+  { id:'lab_tools', label:'Lab Tools', icon:'🧫', section:'Tools', desc:'Dilution, molarity, molecular weight and buffer calculators', pack:'lab' },
+]
+const _TOOL_PACKS = [
+  { id:'lab', label:'Lab Tools', icon:'🧫', desc:'Dilution & molarity calculator, molecular weight calculator and a buffer/pH helper for wet-lab work.' },
+]
+
+// Tools available given currently-enabled specialty packs
+function _availableTools() {
+  const packs = state.enabledPacks || []
+  return packs.length ? ALL_TOOLS.concat(_PACK_TOOLS.filter(t => packs.includes(t.pack))) : ALL_TOOLS
+}
+
+// ── Research-area presets — suggested one-time setup per field ────────────────
+const _FIELD_PRESETS = {
+  lab: {
+    label: 'Lab Sciences', icon: '🧪',
+    desc: 'Biology, Chemistry, Physics, Medicine & wet-lab research',
+    sidebarTools: ['pipeline','projects','notes','library','calendar','todos','contacts','pdf_tools','citations','unit_conv','r_assist','news','grants'],
+    dashboardWidgets: { events:true, projects:true, tasks:true, grants:true, papers:true },
+    unitCategory: 'conc',
+    packs: ['lab'],
+  },
+  humanities: {
+    label: 'Humanities', icon: '📖',
+    desc: 'Literature, History, Philosophy & language studies',
+    sidebarTools: ['writing','projects','notes','library','calendar','todos','contacts','citations','news','discover'],
+    dashboardWidgets: { events:true, projects:true, tasks:true, grants:false, papers:true },
+    unitCategory: 'data',
+    packs: [],
+  },
+  social: {
+    label: 'Social Sciences', icon: '🧑‍🤝‍🧑',
+    desc: 'Psychology, Sociology, Political Science & Economics',
+    sidebarTools: ['pipeline','writing','projects','notes','library','calendar','todos','contacts','pdf_tools','citations','unit_conv','r_assist','news','grants','discover'],
+    dashboardWidgets: { events:true, projects:true, tasks:true, grants:true, papers:true },
+    unitCategory: 'conc',
+    packs: [],
+  },
+  cs_eng: {
+    label: 'CS & Engineering', icon: '💻',
+    desc: 'Computer Science, Engineering & Mathematics',
+    sidebarTools: ['pipeline','writing','projects','notes','whiteboard','library','calendar','todos','contacts','pdf_tools','citations','unit_conv','news','grants','discover'],
+    dashboardWidgets: { events:true, projects:true, tasks:true, grants:false, papers:true },
+    unitCategory: 'data',
+    packs: [],
+  },
+  other: {
+    label: 'Other / General', icon: '🌐',
+    desc: "Doesn't fit a category — keep all tools available",
+    sidebarTools: null, // null = use all default tools
+    dashboardWidgets: { events:true, projects:true, tasks:true, grants:true, papers:true },
+    unitCategory: 'length',
+    packs: [],
+  },
+}
 
 window._newsNavBadge = 0  // unread new-paper count; set by news.js background refresh
 
@@ -108,13 +169,29 @@ function renderSidebar() {
   // Always-visible top item
   let html = btn('dashboard', 'Dashboard', '🏠') + '<div class="mb-1"></div>'
 
+  const available = _availableTools()
+
+  // ── Favorites — pinned quick-access tools ───────────────────────────────────
+  const favTools = (state.favoriteTools || [])
+    .filter(id => enabled.includes(id))
+    .map(id => available.find(t => t.id === id))
+    .filter(Boolean)
+  if (favTools.length && !_sbRearrangeMode) {
+    if (!collapsed) html += `<div class="nav-section mt-2">⭐ Favorites</div>`
+    else html += `<div class="my-1 mx-2 border-t border-slate-700/40"></div>`
+    html += favTools.map(t => `<button onclick="showView('${t.id}')" title="${t.label}"
+      class="nav-btn w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-xs font-medium transition-colors ${collapsed ? 'justify-center' : 'text-left'} ${t.id === current ? 'active' : ''}">
+      ${t.icon}${collapsed ? '' : ` <span class="flex-1">${t.label}</span>`}
+    </button>`).join('')
+  }
+
   // Grouped sections — iterate `enabled` to preserve user-defined order
   const sections = ['Workspace','Tools','Feeds']
   for (const section of sections) {
-    const sectionIds = new Set(ALL_TOOLS.filter(t => t.section === section).map(t => t.id))
+    const sectionIds = new Set(available.filter(t => t.section === section).map(t => t.id))
     const tools = enabled
       .filter(id => sectionIds.has(id))
-      .map(id => ALL_TOOLS.find(t => t.id === id))
+      .map(id => available.find(t => t.id === id))
       .filter(Boolean)
     if (!tools.length) continue
     if (!collapsed) html += `<div class="nav-section mt-2">${section}</div>`
@@ -227,8 +304,43 @@ const _ACCENT_PALETTES = {
   emerald: { 50:'#ecfdf5',100:'#d1fae5',200:'#a7f3d0',400:'#34d399',500:'#10b981',600:'#059669',700:'#047857',800:'#065f46' },
 }
 
+// Generate a full 50–800 shade palette from any hex colour (for custom accents)
+function _hexToHsl(hex) {
+  const r = parseInt(hex.slice(1,3),16)/255, g = parseInt(hex.slice(3,5),16)/255, b = parseInt(hex.slice(5,7),16)/255
+  const max = Math.max(r,g,b), min = Math.min(r,g,b)
+  let h, s, l = (max+min)/2
+  if (max === min) { h = s = 0 }
+  else {
+    const d = max - min
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
+    switch (max) {
+      case r: h = (g-b)/d + (g<b?6:0); break
+      case g: h = (b-r)/d + 2; break
+      default: h = (r-g)/d + 4
+    }
+    h /= 6
+  }
+  return [h*360, s*100, l*100]
+}
+function _hslToHex(h, s, l) {
+  s /= 100; l /= 100
+  const k = n => (n + h/30) % 12
+  const a = s * Math.min(l, 1-l)
+  const f = n => l - a * Math.max(-1, Math.min(k(n)-3, Math.min(9-k(n), 1)))
+  const toHex = x => Math.round(255*x).toString(16).padStart(2,'0')
+  return `#${toHex(f(0))}${toHex(f(8))}${toHex(f(4))}`
+}
+function _genPalette(hex) {
+  const [h, s] = _hexToHsl(hex)
+  const sat = Math.max(s, 35)
+  const lightness = { 50:97, 100:93, 200:85, 400:65, 500:55, 600:46, 700:38, 800:30 }
+  const palette = {}
+  for (const [shade, l] of Object.entries(lightness)) palette[shade] = _hslToHex(h, sat, l)
+  return palette
+}
+
 function applyAccent(color) {
-  const c = _ACCENT_PALETTES[color] || _ACCENT_PALETTES.indigo
+  const c = (color && color[0] === '#') ? _genPalette(color) : (_ACCENT_PALETTES[color] || _ACCENT_PALETTES.indigo)
   let el = document.getElementById('ph-accent-style')
   if (!el) { el = document.createElement('style'); el.id = 'ph-accent-style'; document.head.appendChild(el) }
   if (!color || color === 'indigo') { el.textContent = ''; return }
@@ -267,6 +379,11 @@ function applyFont(font) {
 function applyPaperMode(mode) {
   document.body.classList.remove('pm-paper','pm-ruled','pm-vintage')
   if (mode && mode !== 'off') document.body.classList.add('pm-' + mode)
+}
+
+// ── UI Density ────────────────────────────────────────────────────────────────
+function applyDensity(d) {
+  document.documentElement.dataset.density = (d === 'compact' || d === 'spacious') ? d : 'comfortable'
 }
 
 // ── Onboarding + view init are called after login via loadAndShowApp() ─────────
@@ -354,7 +471,8 @@ function showToolPicker(fromSettings = false) {
   const sections = ['Workspace','Tools','Feeds']
 
   const toolCard = (t) => {
-    const on = enabled.includes(t.id)
+    const on  = enabled.includes(t.id)
+    const fav = (state.favoriteTools || []).includes(t.id)
     return `<label class="tool-picker-card flex items-start gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all select-none
       ${on ? 'border-indigo-500 bg-indigo-50' : 'border-slate-200 bg-white hover:border-slate-300'}"
       onclick="toggleToolCard('${t.id}',this)">
@@ -363,13 +481,16 @@ function showToolPicker(fromSettings = false) {
         <div class="text-xs font-semibold text-slate-800">${t.label}</div>
         <div class="text-xs text-slate-400 mt-0.5 leading-snug">${t.desc}</div>
       </div>
+      ${fromSettings ? `<button type="button" onclick="event.stopPropagation();_toggleFavoriteStar(this,'${t.id}')"
+        class="tool-fav-btn text-base leading-none flex-shrink-0 mt-0.5 ${fav ? 'text-amber-400' : 'text-slate-300 hover:text-amber-300'}"
+        title="${fav ? 'Remove from favorites' : 'Pin to favorites bar'}">${fav ? '★' : '☆'}</button>` : ''}
       <input type="checkbox" class="tool-cb accent-indigo-600 mt-1 flex-shrink-0" data-id="${t.id}" ${on?'checked':''}
         onclick="event.stopPropagation()"/>
     </label>`
   }
 
   const body = sections.map(s => {
-    const tools = ALL_TOOLS.filter(t => t.section === s)
+    const tools = _availableTools().filter(t => t.section === s)
     return `
     <div>
       <div class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">${s}</div>
@@ -435,6 +556,24 @@ function toggleToolCard(id, label) {
   label.className += cb.checked
     ? ' border-indigo-500 bg-indigo-50'
     : ' border-slate-200 bg-white hover:border-slate-300'
+}
+
+async function _toggleFavoriteStar(btn, id) {
+  const favs = new Set(state.favoriteTools || [])
+  if (favs.has(id)) {
+    favs.delete(id)
+    btn.textContent = '☆'
+    btn.title = 'Pin to favorites bar'
+    btn.className = btn.className.replace('text-amber-400', 'text-slate-300 hover:text-amber-300')
+  } else {
+    favs.add(id)
+    btn.textContent = '★'
+    btn.title = 'Remove from favorites'
+    btn.className = btn.className.replace('text-slate-300 hover:text-amber-300', 'text-amber-400')
+  }
+  state.favoriteTools = [...favs]
+  await window.api.storeSet('favoriteTools', state.favoriteTools)
+  renderSidebar()
 }
 
 function onboardSelectAll(on) {
@@ -1078,12 +1217,14 @@ function _initOdyStatusListener() {
 async function loadAndShowApp() {
   const keys = ['profile','projects','papers','contacts','notes','whiteboards','events','todos',
                  'grants','newsFeeds','newsTopics','newsRead','calGoals','calFeeds','todoGroups',
-                 'darkModeSchedule','paperCollections','sidebarTools','writingDocs']
+                 'darkModeSchedule','paperCollections','sidebarTools','favoriteTools','writingDocs',
+                 'researchArea','enabledPacks']
   await Promise.all([
     window.api.storeGet('theme').then(t => applyTheme(t || 'light')),
     window.api.storeGet('accentColor').then(c => applyAccent(c || 'indigo')),
     window.api.storeGet('fontFamily').then(f => applyFont(f || 'system')),
     window.api.storeGet('paperMode').then(m => applyPaperMode(m || 'off')),
+    window.api.storeGet('uiDensity').then(d => applyDensity(d || 'comfortable')),
     ...keys.map(async k => { const val = await window.api.storeGet(k); if (val !== null) state[k] = val })
   ])
   try { state._sidebarCollapsed = localStorage.getItem('ph_sidebar_collapsed') === '1' } catch(_) {}

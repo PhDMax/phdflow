@@ -188,9 +188,12 @@ function saveProfileFull() {
 // ── Personalize tab ───────────────────────────────────────────────────────────
 
 async function renderPersonalizeTab(body) {
-  const currentAccent = (await api.storeGet('accentColor')) || 'indigo'
-  const currentFont   = (await api.storeGet('fontFamily'))  || 'system'
-  const currentPaper  = (await api.storeGet('paperMode'))   || 'off'
+  const currentAccent  = (await api.storeGet('accentColor')) || 'indigo'
+  const currentFont    = (await api.storeGet('fontFamily'))  || 'system'
+  const currentPaper   = (await api.storeGet('paperMode'))   || 'off'
+  const currentDensity = (await api.storeGet('uiDensity'))   || 'comfortable'
+  const currentArea    = state.researchArea || (await api.storeGet('researchArea')) || null
+  const currentPacks   = state.enabledPacks || (await api.storeGet('enabledPacks')) || []
   const widgets       = state.profile?.dashboardWidgets || {}
 
   const ACCENTS = [
@@ -224,7 +227,7 @@ async function renderPersonalizeTab(body) {
     <div class="bg-white rounded-2xl border border-slate-200 p-5">
       <h3 class="text-sm font-bold text-slate-700 mb-1">🎨 Accent Colour</h3>
       <p class="text-xs text-slate-400 mb-4">Sets the primary colour used for buttons, links, and highlights throughout the app.</p>
-      <div class="flex gap-3 flex-wrap" id="accent-swatches">
+      <div class="flex gap-3 flex-wrap items-start" id="accent-swatches">
         ${ACCENTS.map(a => `
         <button onclick="personSetAccent('${a.id}')" id="accent-swatch-${a.id}"
           title="${a.label}"
@@ -232,6 +235,16 @@ async function renderPersonalizeTab(body) {
           <div class="w-9 h-9 rounded-full shadow-sm" style="background:${a.hex}"></div>
           <span class="text-[10px] font-semibold text-slate-600">${a.label}</span>
         </button>`).join('')}
+        <!-- Custom colour picker -->
+        <label title="Custom colour" id="accent-swatch-custom"
+          class="flex flex-col items-center gap-1.5 p-2.5 rounded-xl border-2 cursor-pointer transition-all ${currentAccent[0]==='#' ? 'border-slate-700 shadow-md scale-105' : 'border-transparent hover:border-slate-300'}">
+          <div class="w-9 h-9 rounded-full shadow-sm relative overflow-hidden" style="background:${currentAccent[0]==='#' ? currentAccent : 'conic-gradient(red,yellow,lime,cyan,blue,magenta,red)'}">
+            <input type="color" value="${currentAccent[0]==='#' ? currentAccent : '#4f46e5'}"
+              oninput="personSetAccent(this.value)"
+              class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"/>
+          </div>
+          <span class="text-[10px] font-semibold text-slate-600">Custom</span>
+        </label>
       </div>
     </div>
 
@@ -279,6 +292,29 @@ async function renderPersonalizeTab(body) {
           <div>
             <div class="text-xs font-bold text-slate-800">${p.label}</div>
             <div class="text-[10px] text-slate-400 mt-0.5">${p.sub}</div>
+          </div>
+        </button>`).join('')}
+      </div>
+    </div>
+
+    <!-- Interface Density -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-5">
+      <h3 class="text-sm font-bold text-slate-700 mb-1">📐 Interface Density</h3>
+      <p class="text-xs text-slate-400 mb-4">Adjust spacing and padding across the app — fit more on screen or give content room to breathe.</p>
+      <div class="grid grid-cols-3 gap-3">
+        ${[
+          { id:'compact',    label:'Compact',    sub:'Fit more on screen', rows:5, h:3 },
+          { id:'comfortable',label:'Comfortable',sub:'Default',            rows:3, h:4 },
+          { id:'spacious',   label:'Spacious',   sub:'Roomier layout',     rows:2, h:6 },
+        ].map(d => `
+        <button onclick="personSetDensity('${d.id}')" id="density-btn-${d.id}"
+          class="flex flex-col gap-2 p-3 rounded-xl border-2 text-left transition-all ${d.id === currentDensity ? 'border-indigo-500 bg-indigo-50/50' : 'border-slate-200 hover:border-slate-300'}">
+          <div class="w-full h-14 rounded-lg overflow-hidden flex-shrink-0 bg-slate-50 p-1.5 flex flex-col gap-1 justify-center">
+            ${Array.from({length:d.rows}).map(()=>`<div class="w-full rounded bg-slate-200" style="height:${d.h}px"></div>`).join('')}
+          </div>
+          <div>
+            <div class="text-xs font-bold text-slate-800">${d.label}</div>
+            <div class="text-[10px] text-slate-400 mt-0.5">${d.sub}</div>
           </div>
         </button>`).join('')}
       </div>
@@ -332,6 +368,46 @@ async function renderPersonalizeTab(body) {
       </div>
     </div>
 
+    <!-- Specialty tool packs -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-5">
+      <h3 class="text-sm font-bold text-slate-700 mb-1">🧰 Specialty Tool Packs</h3>
+      <p class="text-xs text-slate-400 mb-4">Optional extra tools that only appear in your sidebar once enabled.</p>
+      <div class="space-y-2.5">
+        ${_TOOL_PACKS.map(pack => {
+          const on = currentPacks.includes(pack.id)
+          return `
+          <label class="flex items-start gap-3 cursor-pointer select-none group p-2.5 rounded-xl hover:bg-slate-50 transition-colors">
+            <input type="checkbox" class="accent-indigo-600 w-4 h-4 flex-shrink-0 mt-0.5"
+              ${on ? 'checked' : ''} onchange="personToggleToolPack('${pack.id}')"/>
+            <div class="flex-1 min-w-0">
+              <div class="text-sm font-semibold text-slate-700">${pack.icon} ${pack.label}</div>
+              <div class="text-xs text-slate-400">${pack.desc}</div>
+            </div>
+          </label>`
+        }).join('')}
+      </div>
+    </div>
+
+    <!-- Research area presets -->
+    <div class="bg-white rounded-2xl border border-slate-200 p-5">
+      <h3 class="text-sm font-bold text-slate-700 mb-1">🔬 Research Area</h3>
+      <p class="text-xs text-slate-400 mb-4">Tell us what kind of research you do and we'll suggest a sidebar, dashboard, and unit converter setup tailored to it. This won't change your profile's research field — it's just a one-time setup helper.</p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        ${Object.entries(_FIELD_PRESETS).map(([id, preset]) => `
+        <div class="flex items-start gap-3 p-3 rounded-xl border-2 transition-all ${currentArea === id ? 'border-indigo-500 bg-indigo-50/50' : 'border-slate-200'}">
+          <span class="text-xl leading-none mt-0.5 flex-shrink-0">${preset.icon}</span>
+          <div class="min-w-0 flex-1">
+            <div class="text-xs font-semibold text-slate-800">${preset.label}</div>
+            <div class="text-[10px] text-slate-400 mt-0.5 leading-snug mb-2">${preset.desc}</div>
+            <button onclick="personApplyFieldPreset('${id}')"
+              class="text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors ${currentArea === id ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200' : 'bg-slate-100 text-slate-600 hover:bg-indigo-100 hover:text-indigo-700'}">
+              ${currentArea === id ? '✓ Applied — re-apply' : 'Apply suggested setup →'}
+            </button>
+          </div>
+        </div>`).join('')}
+      </div>
+    </div>
+
     <!-- Dashboard widgets -->
     <div class="bg-white rounded-2xl border border-slate-200 p-5">
       <h3 class="text-sm font-bold text-slate-700 mb-1">🏠 Dashboard Widgets</h3>
@@ -360,7 +436,8 @@ async function personSetAccent(color) {
   await api.storeSet('accentColor', color)
   // Re-render the tab to update selected state
   renderPersonalizeTab(document.getElementById('settings-body'))
-  showToast(`Accent colour set to ${color[0].toUpperCase() + color.slice(1)} ✓`)
+  const label = color[0] === '#' ? color : (color[0].toUpperCase() + color.slice(1))
+  showToast(`Accent colour set to ${label} ✓`)
 }
 
 async function personSetFont(font) {
@@ -457,6 +534,95 @@ async function personSetPaper(mode) {
     window[`render_${state.currentView}`]()
   }
   showToast(mode === 'off' ? 'Page style reset ✓' : `${mode.charAt(0).toUpperCase()+mode.slice(1)} style applied ✓`)
+}
+
+async function personSetDensity(density) {
+  applyDensity(density)
+  await api.storeSet('uiDensity', density)
+  renderPersonalizeTab(document.getElementById('settings-body'))
+  showToast(`${density.charAt(0).toUpperCase()+density.slice(1)} density applied ✓`)
+}
+
+// ── Specialty tool packs ──────────────────────────────────────────────────────
+async function personToggleToolPack(packId) {
+  const packs = new Set(state.enabledPacks || [])
+  const enabling = !packs.has(packId)
+  if (enabling) packs.add(packId); else packs.delete(packId)
+  state.enabledPacks = [...packs]
+  await api.storeSet('enabledPacks', state.enabledPacks)
+
+  // Auto add/remove this pack's tools from the sidebar tool list
+  const packToolIds = _PACK_TOOLS.filter(t => t.pack === packId).map(t => t.id)
+  let tools = _enabledTools().slice()
+  if (enabling) packToolIds.forEach(id => { if (!tools.includes(id)) tools.push(id) })
+  else tools = tools.filter(id => !packToolIds.includes(id))
+  state.sidebarTools = tools
+  await api.storeSet('sidebarTools', tools)
+
+  renderSidebar()
+  renderPersonalizeTab(document.getElementById('settings-body'))
+  const pack = _TOOL_PACKS.find(p => p.id === packId)
+  showToast(`${pack?.label || 'Pack'} ${enabling ? 'enabled' : 'disabled'} ✓`)
+}
+
+// ── Research area presets ──────────────────────────────────────────────────────
+function personApplyFieldPreset(id) {
+  const preset = _FIELD_PRESETS[id]
+  if (!preset) return
+  openModal(`
+  <h3 class="text-base font-bold text-slate-900 mb-2">${preset.icon} Apply ${esc(preset.label)} setup?</h3>
+  <p class="text-sm text-slate-500 mb-4">This will replace your sidebar tools and dashboard widgets with a suggested setup for <strong>${esc(preset.label)}</strong>, and switch the Unit Converter's default category. You'll have a few seconds to undo afterwards, and can always change everything individually later.</p>
+  <div class="flex gap-3">
+    <button onclick="closeModal()" class="flex-1 btn-secondary">Cancel</button>
+    <button onclick="closeModal();_doApplyFieldPreset('${id}')" class="flex-1 btn-primary">Apply suggested setup</button>
+  </div>`, false)
+}
+
+async function _doApplyFieldPreset(id) {
+  const preset = _FIELD_PRESETS[id]
+  if (!preset) return
+
+  const prev = {
+    sidebarTools:     state.sidebarTools,
+    dashboardWidgets: state.profile?.dashboardWidgets,
+    enabledPacks:     state.enabledPacks,
+    researchArea:     state.researchArea,
+  }
+
+  const tools = preset.sidebarTools || _DEFAULT_TOOLS
+  state.sidebarTools = tools
+  await api.storeSet('sidebarTools', tools)
+
+  state.profile = state.profile || {}
+  state.profile.dashboardWidgets = preset.dashboardWidgets
+  await save('profile')
+
+  state.enabledPacks = preset.packs || []
+  await api.storeSet('enabledPacks', state.enabledPacks)
+
+  state.researchArea = id
+  await api.storeSet('researchArea', id)
+
+  if (preset.unitCategory) _utilUnitCat = preset.unitCategory
+
+  renderSidebar()
+  if (state.currentView === 'dashboard') render_dashboard()
+  renderPersonalizeTab(document.getElementById('settings-body'))
+
+  showUndoToast(`Applied ${preset.label} setup ✓`, async () => {
+    state.sidebarTools = prev.sidebarTools
+    await api.storeSet('sidebarTools', prev.sidebarTools)
+    state.profile.dashboardWidgets = prev.dashboardWidgets
+    await save('profile')
+    state.enabledPacks = prev.enabledPacks || []
+    await api.storeSet('enabledPacks', state.enabledPacks)
+    state.researchArea = prev.researchArea
+    await api.storeSet('researchArea', prev.researchArea)
+    renderSidebar()
+    if (state.currentView === 'dashboard') render_dashboard()
+    if (state.currentView === 'settings') renderPersonalizeTab(document.getElementById('settings-body'))
+    showToast('Reverted ✓')
+  })
 }
 
 function personSaveWidgets() {
