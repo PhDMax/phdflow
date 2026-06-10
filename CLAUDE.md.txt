@@ -1,25 +1,24 @@
-## Session summary — v0.23.2 (June 2026)
+## Session summary — v0.23.3 (June 2026)
 
 ### Released
-PhDFlow v0.23.2 — all 6 artifacts uploaded.
+PhDFlow v0.23.3 — all 6 artifacts uploaded.
 
-### What was built this session
+### Bug fixes this session
 
-#### Sidebar drag-and-drop fix
-Root cause: `renderSidebar` iterated `ALL_TOOLS` (fixed order) and only checked if each tool was *in* `enabled`, ignoring the custom order in `state.sidebarTools`. Fixed by iterating `enabled` first and looking up each tool's metadata from `ALL_TOOLS`.
+#### grants.js — broken function name (crash)
+`_buildGrantKeywords` called at 3 sites but function is named `_buildApiKeywords`. Was a ReferenceError that crashed the entire Grant Search tab. Fixed with replace_all.
 
-#### Rearrange mode (sidebar + dashboard)
-Drag-and-drop is now behind an explicit toggle:
-- **Sidebar**: **⠿ Rearrange** button at the bottom activates drag mode (grab cursor, ⠿ handle on items). **✓ Done rearranging** exits it. Clicking nav items is disabled during rearrange mode.
-- **Dashboard**: **⠿ Rearrange widgets** link below the header activates mode (dashed indigo outline + grab handles on widgets). **✓ Done** exits it.
+#### grants.js — unsafe JSON.stringify in onclick
+`trackLiveGrant(${JSON.stringify(g).replace(...)})` embedded full grant object JSON in an HTML attribute — fragile with special characters. Fixed by adding `_liveGrantCache` map; onclick now passes just `g.id`.
 
-#### Calendar — 6 new event types (v0.23.1)
-Added: Supervision, Workshop, Defense/Viva, Travel, Social, Holiday/Leave — bringing total from 10 to 16 types. All rendering code derives from `_calTypeConf()` so the new types work everywhere automatically.
+#### renderer.js — sidebar drag-and-drop order not saved
+`renderSidebar` iterated `ALL_TOOLS` (fixed order) and only checked membership in `enabled`, ignoring its order. Fixed by iterating `enabled` first and looking up each tool in `ALL_TOOLS`.
 
-#### openPhDFlowFolder defensive fix (v0.23.1)
-Added try/catch and proper `await` to `openPhDFlowFolder` in renderer.js. Previously an unhandled rejection could cause unexpected behaviour; errors now surface as a toast.
+#### renderer.js — sidebar splice off-by-one
+After removing the dragged item with `splice(from, 1)`, the target index wasn't adjusted. When dragging downward (from < to), item landed one position too far. Fixed: `splice(from < to ? to - 1 : to, 0, _sbDragId)`.
 
-#### Paper Library — PDF features (v0.23.0)
-- **📎 Attach local PDF** — file picker, links PDF to any paper entry
-- **🔍 Find open-access PDF** — queries Unpaywall by DOI, downloads and attaches silently
-- **✕ Detach** — removes the PDF link from a paper
+#### dashboard.js — widget splice off-by-one (same column)
+Same issue as sidebar: same-column downward drags placed widget one position too far. Fixed: `if (srcCol === destCol && fromIdx < toIdx) toIdx--`.
+
+#### renderer.js / dashboard.js — rearrange mode
+Drag-and-drop now gated behind an explicit "⠿ Rearrange" toggle on both sidebar and dashboard. Items are not draggable by default.
