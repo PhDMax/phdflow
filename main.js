@@ -596,6 +596,10 @@ ipcMain.handle('write-binary-file', async (_, dest, base64) => {
   return true
 })
 
+ipcMain.handle('read-binary-file', async (_, src) => {
+  return fs.readFileSync(src).toString('base64')
+})
+
 // ─── IPC: Extended PDF Tools ──────────────────────────────────────────────────
 
 ipcMain.handle('rotate-pdf', async (_, filepath, dest, rotation, pageNums) => {

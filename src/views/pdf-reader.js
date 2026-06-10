@@ -40,8 +40,11 @@ async function openPdfReader(paperId) {
 
   // Load PDF
   try {
-    const fileUrl = 'file:///' + paper.filepath.replace(/\\/g, '/')
-    const loadingTask = window.pdfjsLib.getDocument({ url: fileUrl, disableAutoFetch: false })
+    const base64 = await window.api.readBinaryFile(paper.filepath)
+    const binary = atob(base64)
+    const bytes  = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+    const loadingTask = window.pdfjsLib.getDocument({ data: bytes })
     _pdfDoc = await loadingTask.promise
     document.getElementById('pdf-total-pages').textContent = _pdfDoc.numPages
     _pdfSetPage(1)
@@ -205,12 +208,11 @@ async function _pdfSetPage(n) {
       textLayer.style.width  = vp.width+'px'
       textLayer.style.height = vp.height+'px'
       const textContent = await page.getTextContent()
-      await window.pdfjsLib.renderTextLayer({
+      await new window.pdfjsLib.TextLayer({
         textContentSource: textContent,
         container: textLayer,
         viewport: vp,
-        textDivs: [],
-      }).promise
+      }).render()
     }
 
     // Re-draw annotation overlays for this page

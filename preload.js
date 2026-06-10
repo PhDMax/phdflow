@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('api', {
   // ── File I/O ──────────────────────────────────────────────────────────────
   writeTextFile:     (dest, text)        => ipcRenderer.invoke('write-text-file', dest, text),
   writeBinaryFile:   (dest, base64)      => ipcRenderer.invoke('write-binary-file', dest, base64),
+  readBinaryFile:    (src)               => ipcRenderer.invoke('read-binary-file', src),
   openDataFolder:    ()                  => ipcRenderer.invoke('open-data-folder'),
   getDataDir:        ()                  => ipcRenderer.invoke('get-data-dir'),
 
