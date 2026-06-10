@@ -125,7 +125,11 @@ function render_whiteboard() {
 
     ${_wb ? `
     <!-- Drawing Toolbar -->
-    <div class="bg-white border-b border-slate-200 px-2 py-1 flex items-center gap-px flex-shrink-0 overflow-x-auto">
+    <div class="bg-white border-b border-slate-200 px-2 py-1 flex items-center gap-px flex-shrink-0">
+
+    <!-- Scrollable tool group — shrinks first so the action cluster on the
+         right (undo/redo/zoom/clear/export) stays reachable on narrow windows -->
+    <div class="flex items-center gap-px overflow-x-auto min-w-0 flex-1">
 
       <!-- Tools -->
       ${WB_TOOLS.map(t => `
@@ -216,7 +220,10 @@ function render_whiteboard() {
       <button onclick="wbInsertChart('line')"  title="Insert data line chart" class="w-8 h-8 flex items-center justify-center rounded text-sm text-slate-500 hover:bg-slate-100 transition-colors flex-shrink-0">📈</button>
       <button onclick="wbInsertChart('pie')"   title="Insert data pie chart"  class="w-8 h-8 flex items-center justify-center rounded text-sm text-slate-500 hover:bg-slate-100 transition-colors flex-shrink-0">🥧</button>
 
-      <div class="ml-auto flex items-center gap-1 flex-shrink-0 pl-2">
+    </div>
+
+      <!-- Action cluster — pinned to the right, never scrolls out of view -->
+      <div class="flex items-center gap-1 flex-shrink-0 pl-2 ml-1 border-l border-slate-200">
         <button onclick="wbUndo()" title="Undo Ctrl+Z" class="w-8 h-8 flex items-center justify-center rounded text-slate-500 hover:bg-slate-100 transition-colors">↩</button>
         <button onclick="wbRedo()" title="Redo Ctrl+Y" class="w-8 h-8 flex items-center justify-center rounded text-slate-500 hover:bg-slate-100 transition-colors">↪</button>
         <div class="w-px h-5 bg-slate-200 mx-0.5"></div>
