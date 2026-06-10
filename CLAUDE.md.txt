@@ -1,24 +1,34 @@
-## Session summary — v0.23.3 (June 2026)
+## Session summary — v0.24.0 (June 2026)
 
 ### Released
-PhDFlow v0.23.3 — all 6 artifacts uploaded.
+PhDFlow v0.24.0 — PDF Tools expansion + OCR.
 
-### Bug fixes this session
+### New features this session
 
-#### grants.js — broken function name (crash)
-`_buildGrantKeywords` called at 3 sites but function is named `_buildApiKeywords`. Was a ReferenceError that crashed the entire Grant Search tab. Fixed with replace_all.
+#### PDF reader fix
+pdf.js's fetch-based stream always returns status 0 for `file://` URLs, which
+pdf.js treats as a fatal error even though the file loads fine. Now reads the
+PDF as bytes via IPC and passes it to `getDocument({ data })` instead. Also
+added polyfills (main thread + pdf.js worker) for `Uint8Array.toHex/toBase64`,
+`Map.getOrInsertComputed`, `Math.sumPrecise`, and switched the text layer to
+the new `TextLayer` class — needed for bundled pdf.js 6.x on current
+Electron/Chromium.
 
-#### grants.js — unsafe JSON.stringify in onclick
-`trackLiveGrant(${JSON.stringify(g).replace(...)})` embedded full grant object JSON in an HTML attribute — fragile with special characters. Fixed by adding `_liveGrantCache` map; onclick now passes just `g.id`.
+#### PDF Tools — 6 new operations
+- **Page Manager** — drag-and-drop visual page reorder, rotate, delete
+  (`src/views/pdf-page-manager.js`)
+- **Watermark** — text or image overlay, configurable opacity/rotation/position
+- **Metadata** — view and edit title/author/subject/keywords etc.
+- **Insert Blank Pages** — at any position, any standard page size
+- **Crop** — set margins via numeric inputs
+- **PDF ⇄ Images** — export pages to PNG/JPEG, or build a PDF from images
 
-#### renderer.js — sidebar drag-and-drop order not saved
-`renderSidebar` iterated `ALL_TOOLS` (fixed order) and only checked membership in `enabled`, ignoring its order. Fixed by iterating `enabled` first and looking up each tool in `ALL_TOOLS`.
-
-#### renderer.js — sidebar splice off-by-one
-After removing the dragged item with `splice(from, 1)`, the target index wasn't adjusted. When dragging downward (from < to), item landed one position too far. Fixed: `splice(from < to ? to - 1 : to, 0, _sbDragId)`.
-
-#### dashboard.js — widget splice off-by-one (same column)
-Same issue as sidebar: same-column downward drags placed widget one position too far. Fixed: `if (srcCol === destCol && fromIdx < toIdx) toIdx--`.
-
-#### renderer.js / dashboard.js — rearrange mode
-Drag-and-drop now gated behind an explicit "⠿ Rearrange" toggle on both sidebar and dashboard. Items are not draggable by default.
+#### OCR — make scanned PDFs searchable
+Adds an invisible, selectable text layer over scanned pages without changing
+how they look (English only for now, fully offline). The renderer pre-renders
+each page to PNG via pdf.js; the main process runs Tesseract.js and overlays
+recognized words with `pdf-lib` (`drawText(..., { opacity: 0 })`), sized to
+match the original word's width for natural text selection. Trained data is
+bundled as a gzipped ~1.9MB file at `resources/tessdata/eng.traineddata.gz`.
+electron-builder excludes the unused tesseract.js browser bundles and
+SIMD/LSTM wasm variants (~37MB) to keep the installer size down.

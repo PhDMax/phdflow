@@ -42,7 +42,7 @@ const ALL_TOOLS = [
   { id:'todos',      label:'To-Do List',      icon:'✅', section:'Workspace', desc:'Tasks with time estimates and daily focus mode' },
   { id:'contacts',   label:'Contacts',        icon:'👥', section:'Workspace', desc:'Your academic network and collaborators' },
   // ── Tools — individual persistent workspaces ──────────────────────────────
-  { id:'pdf_tools',  label:'PDF Tools',         icon:'📄', section:'Tools', desc:'Merge, split, rotate and process PDF files' },
+  { id:'pdf_tools',  label:'PDF Tools',         icon:'📄', section:'Tools', desc:'Merge, split, rotate, watermark, crop, OCR and more' },
   { id:'citations',  label:'Citations',          icon:'✏️',  section:'Tools', desc:'Format references and count words' },
   { id:'unit_conv',  label:'Unit Converter',     icon:'⚗️',  section:'Tools', desc:'Convert scientific units with history' },
   { id:'r_assist',   label:'R Assistant',        icon:'📊', section:'Tools', desc:'Step-by-step guide to R statistical tests' },

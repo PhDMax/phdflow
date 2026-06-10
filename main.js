@@ -666,6 +666,245 @@ ipcMain.handle('export-to-pdf', async (_, html, dest) => {
   } catch(e) { return { success: false, error: e.message } }
 })
 
+ipcMain.handle('read-pdf-metadata', async (_, filepath) => {
+  try {
+    const { PDFDocument } = require('pdf-lib')
+    const doc = await PDFDocument.load(fs.readFileSync(filepath))
+    return { success: true, metadata: {
+      title:    doc.getTitle()    || '',
+      author:   doc.getAuthor()   || '',
+      subject:  doc.getSubject()  || '',
+      keywords: doc.getKeywords() || '',
+      pageCount: doc.getPageCount(),
+    }}
+  } catch(e) { return { success: false, error: e.message } }
+})
+
+ipcMain.handle('edit-pdf-metadata', async (_, filepath, dest, meta = {}) => {
+  try {
+    const { PDFDocument } = require('pdf-lib')
+    const doc = await PDFDocument.load(fs.readFileSync(filepath))
+    if (meta.title    !== undefined) doc.setTitle(meta.title)
+    if (meta.author   !== undefined) doc.setAuthor(meta.author)
+    if (meta.subject  !== undefined) doc.setSubject(meta.subject)
+    if (meta.keywords !== undefined) {
+      const kw = String(meta.keywords).split(',').map(s=>s.trim()).filter(Boolean)
+      doc.setKeywords(kw)
+    }
+    doc.setModificationDate(new Date())
+    fs.writeFileSync(dest, await doc.save())
+    return { success: true, dest }
+  } catch(e) { return { success: false, error: e.message } }
+})
+
+function _hexToRgb01(hex) {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '#888888')
+  if (!m) return [0.53, 0.53, 0.53]
+  return [parseInt(m[1],16)/255, parseInt(m[2],16)/255, parseInt(m[3],16)/255]
+}
+
+ipcMain.handle('add-watermark', async (_, filepath, dest, opts = {}) => {
+  try {
+    const { PDFDocument, StandardFonts, rgb, degrees } = require('pdf-lib')
+    const src   = await PDFDocument.load(fs.readFileSync(filepath))
+    const total = src.getPageCount()
+    const {
+      type = 'text', text = 'DRAFT', fontSize = 48, opacity = 0.3, rotation = 45,
+      color = '#888888', tile = false, imagePath, imageScale = 0.5,
+    } = opts
+
+    let font, img
+    if (type === 'text') {
+      font = await src.embedFont(StandardFonts.HelveticaBold)
+    } else {
+      const bytes = fs.readFileSync(imagePath)
+      const ext = path.extname(imagePath).toLowerCase()
+      img = (ext === '.png') ? await src.embedPng(bytes) : await src.embedJpg(bytes)
+    }
+    const [r,g,b] = _hexToRgb01(color)
+
+    for (let i = 0; i < total; i++) {
+      const page = src.getPage(i)
+      const { width, height } = page.getSize()
+      if (type === 'text') {
+        const tw = font.widthOfTextAtSize(text, fontSize)
+        if (tile) {
+          const stepX = tw + 80, stepY = fontSize * 3
+          for (let y = -stepY; y < height + stepY; y += stepY) {
+            for (let x = -stepX; x < width + stepX; x += stepX) {
+              page.drawText(text, { x, y, size: fontSize, font, color: rgb(r,g,b), opacity, rotate: degrees(rotation) })
+            }
+          }
+        } else {
+          page.drawText(text, {
+            x: width / 2 - tw / 2, y: height / 2,
+            size: fontSize, font, color: rgb(r,g,b), opacity, rotate: degrees(rotation),
+          })
+        }
+      } else {
+        const dims = img.scale(imageScale)
+        page.drawImage(img, {
+          x: width / 2 - dims.width / 2, y: height / 2 - dims.height / 2,
+          width: dims.width, height: dims.height, opacity,
+        })
+      }
+    }
+    fs.writeFileSync(dest, await src.save())
+    return { success: true, dest, pageCount: total }
+  } catch(e) { return { success: false, error: e.message } }
+})
+
+const PAGE_SIZES = { a4: [595.28, 841.89], letter: [612, 792] }
+
+ipcMain.handle('insert-blank-pages', async (_, filepath, dest, opts = {}) => {
+  try {
+    const { PDFDocument } = require('pdf-lib')
+    const src   = await PDFDocument.load(fs.readFileSync(filepath))
+    const total = src.getPageCount()
+    const { position = 'end', count = 1, size = 'match' } = opts
+
+    let insertAt = total
+    if (position === 'start') insertAt = 0
+    else if (typeof position === 'number') insertAt = Math.max(0, Math.min(total, position))
+
+    let dims
+    if (PAGE_SIZES[size]) dims = PAGE_SIZES[size]
+    else if (total > 0) {
+      const ref = src.getPage(Math.max(0, Math.min(insertAt, total - 1)))
+      dims = [ref.getWidth(), ref.getHeight()]
+    } else dims = PAGE_SIZES.a4
+
+    for (let i = 0; i < count; i++) src.insertPage(insertAt + i, dims)
+    fs.writeFileSync(dest, await src.save())
+    return { success: true, dest, inserted: count, total: src.getPageCount() }
+  } catch(e) { return { success: false, error: e.message } }
+})
+
+ipcMain.handle('crop-pdf', async (_, filepath, dest, opts = {}) => {
+  try {
+    const { PDFDocument } = require('pdf-lib')
+    const src   = await PDFDocument.load(fs.readFileSync(filepath))
+    const total = src.getPageCount()
+    const { pages = 'all', margins = {} } = opts
+    const { top = 0, bottom = 0, left = 0, right = 0 } = margins
+    const targets = pages === 'all' ? Array.from({ length: total }, (_, i) => i + 1) : pages
+
+    for (const n of targets) {
+      if (n < 1 || n > total) continue
+      const page = src.getPage(n - 1)
+      const { width, height } = page.getSize()
+      const w = Math.max(1, width - left - right)
+      const h = Math.max(1, height - top - bottom)
+      page.setCropBox(left, bottom, w, h)
+    }
+    fs.writeFileSync(dest, await src.save())
+    return { success: true, dest, cropped: targets.length }
+  } catch(e) { return { success: false, error: e.message } }
+})
+
+ipcMain.handle('images-to-pdf', async (_, paths, dest) => {
+  try {
+    const { PDFDocument } = require('pdf-lib')
+    const doc = await PDFDocument.create()
+    for (const fp of paths) {
+      const bytes = fs.readFileSync(fp)
+      const ext   = path.extname(fp).toLowerCase()
+      const img   = (ext === '.png') ? await doc.embedPng(bytes) : await doc.embedJpg(bytes)
+      const { width, height } = img.scale(1)
+      const page = doc.addPage([width, height])
+      page.drawImage(img, { x: 0, y: 0, width, height })
+    }
+    fs.writeFileSync(dest, await doc.save())
+    return { success: true, dest, pageCount: paths.length }
+  } catch(e) { return { success: false, error: e.message } }
+})
+
+ipcMain.handle('rebuild-pdf', async (_, filepath, dest, pages) => {
+  try {
+    const { PDFDocument, degrees } = require('pdf-lib')
+    const src = await PDFDocument.load(fs.readFileSync(filepath))
+    const out = await PDFDocument.create()
+    const copied = await out.copyPages(src, pages.map(p => p.index))
+    copied.forEach((p, i) => {
+      const delta = pages[i].rotate || 0
+      if (delta) p.setRotation(degrees((p.getRotation().angle + delta) % 360))
+      out.addPage(p)
+    })
+    fs.writeFileSync(dest, await out.save())
+    return { success: true, dest, pageCount: copied.length }
+  } catch(e) { return { success: false, error: e.message } }
+})
+
+ipcMain.handle('open-image-dialog', async () => {
+  const r = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile','multiSelections'],
+    filters: [{ name: 'Images', extensions: ['png','jpg','jpeg'] }]
+  })
+  return r.canceled ? [] : r.filePaths
+})
+
+ipcMain.handle('open-folder-dialog', async (_, opts = {}) => {
+  const r = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory'], ...opts })
+  return r.canceled ? null : r.filePaths[0]
+})
+
+// ─── OCR: make a scanned PDF searchable ────────────────────────────────────────
+// Pages are pre-rendered to PNG by the renderer (pdf.js); OCR + invisible text
+// overlay happen here via tesseract.js + pdf-lib. Original file is never touched.
+ipcMain.handle('ocr-pdf', async (event, filepath, dest, pages) => {
+  let worker
+  try {
+    const { PDFDocument, StandardFonts } = require('pdf-lib')
+    const { createWorker } = require('tesseract.js')
+
+    const doc  = await PDFDocument.load(fs.readFileSync(filepath))
+    const font = await doc.embedFont(StandardFonts.Helvetica)
+
+    worker = await createWorker('eng', 1, {
+      langPath: path.join(__dirname, 'resources', 'tessdata'),
+      cachePath: app.getPath('userData'),
+      gzip: true,
+    })
+
+    const total = pages.length
+    for (let i = 0; i < total; i++) {
+      const { pageNum, scale, png } = pages[i]
+      event.sender.send('ocr-progress', { current: i + 1, total, page: pageNum })
+
+      const { data } = await worker.recognize(Buffer.from(png, 'base64'), {}, { blocks: true })
+      const page = doc.getPage(pageNum - 1)
+      const { height: pageH } = page.getSize()
+
+      for (const block of data.blocks || []) {
+        for (const para of block.paragraphs || []) {
+          for (const line of para.lines || []) {
+            for (const w of line.words || []) {
+              const text = w.text.trim()
+              if (!text) continue
+              const baseWidth = font.widthOfTextAtSize(text, 1)
+              if (baseWidth <= 0) continue
+
+              const x = w.bbox.x0 / scale
+              const y = pageH - (w.bbox.y1 / scale)
+              const wordWidthPt = (w.bbox.x1 - w.bbox.x0) / scale
+              const fontSize = Math.min(Math.max(wordWidthPt / baseWidth, 1), 200)
+
+              page.drawText(text, { x, y, size: fontSize, font, opacity: 0 })
+            }
+          }
+        }
+      }
+    }
+
+    fs.writeFileSync(dest, await doc.save())
+    return { success: true, dest, pages: total }
+  } catch(e) {
+    return { success: false, error: e.message }
+  } finally {
+    if (worker) await worker.terminate()
+  }
+})
+
 // ─── Researcher profile cache (local disk) ────────────────────────────────────
 
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000  // 30 days

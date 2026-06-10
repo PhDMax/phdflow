@@ -176,12 +176,19 @@ function render_r_assist() {
 // ══ PDF TOOLS ═════════════════════════════════════════════════════════════════
 
 const PDF_OPS = [
-  { id:'merge',    icon:'🔗', label:'Merge',       desc:'Combine multiple PDFs into one'             },
-  { id:'split',    icon:'✂️',  label:'Split',       desc:'Extract page ranges into separate files'   },
-  { id:'extract',  icon:'📤', label:'Extract',     desc:'Save specific pages to a new PDF'           },
-  { id:'remove',   icon:'🗑',  label:'Remove Pages',desc:'Delete pages from a PDF'                   },
-  { id:'rotate',   icon:'🔄', label:'Rotate',      desc:'Rotate pages 90° / 180° / 270°'            },
-  { id:'pagenums', icon:'🔢', label:'Page Numbers',desc:'Stamp page numbers onto every page'         },
+  { id:'merge',     icon:'🔗', label:'Merge',        desc:'Combine multiple PDFs into one'                },
+  { id:'split',     icon:'✂️',  label:'Split',        desc:'Extract page ranges into separate files'      },
+  { id:'extract',   icon:'📤', label:'Extract',      desc:'Save specific pages to a new PDF'              },
+  { id:'remove',    icon:'🗑',  label:'Remove Pages', desc:'Delete pages from a PDF'                       },
+  { id:'rotate',    icon:'🔄', label:'Rotate',       desc:'Rotate pages 90° / 180° / 270°'               },
+  { id:'pagenums',  icon:'🔢', label:'Page Numbers', desc:'Stamp page numbers onto every page'            },
+  { id:'pagemgr',   icon:'🗂', label:'Page Manager', desc:'Reorder, rotate & delete pages visually'       },
+  { id:'watermark', icon:'💧', label:'Watermark',    desc:'Stamp text or an image across every page'      },
+  { id:'metadata',  icon:'🏷', label:'Metadata',     desc:'Edit title, author, subject & keywords'        },
+  { id:'insert',    icon:'➕', label:'Insert Blank', desc:'Insert blank pages'                            },
+  { id:'crop',      icon:'🔲', label:'Crop',         desc:'Trim margins from pages'                       },
+  { id:'images',    icon:'🖼', label:'PDF ⇄ Images', desc:'Export pages as PNGs or build a PDF from images' },
+  { id:'ocr',       icon:'🔍', label:'OCR',          desc:'Make a scanned PDF searchable'                  },
 ]
 
 function _utilRenderPdf() {
@@ -357,6 +364,299 @@ function _utilPdfOpForm() {
         </button>
       </div>`
 
+    case 'pagemgr': return `
+      <h4 class="font-semibold text-slate-800 mb-1">🗂 Page Manager</h4>
+      <p class="text-xs text-slate-500 mb-4">Visually drag to reorder pages, rotate or delete individual pages, then save as a new PDF.</p>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Source PDF</label>
+          <button onclick="utilPickPdf('pagemgr-src')" class="w-full text-left px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:border-indigo-300 transition-colors">
+            <span id="pagemgr-src-lbl">Click to select PDF…</span>
+          </button>
+          <input type="hidden" id="pagemgr-src"/>
+        </div>
+        <button onclick="utilOpenPageManager()"
+          class="w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors">
+          🗂 Open Page Manager…
+        </button>
+      </div>`
+
+    case 'watermark': return `
+      <h4 class="font-semibold text-slate-800 mb-1">💧 Watermark / Stamp</h4>
+      <p class="text-xs text-slate-500 mb-4">Overlay text or an image across every page.</p>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Source PDF</label>
+          <button onclick="utilPickPdf('wm-src')" class="w-full text-left px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:border-indigo-300 transition-colors">
+            <span id="wm-src-lbl">Click to select PDF…</span>
+          </button>
+          <input type="hidden" id="wm-src"/>
+        </div>
+        <div class="flex gap-2">
+          <button id="wm-type-text" onclick="_utilWmSetType('text')"
+            class="flex-1 px-3 py-2 rounded-lg text-xs font-medium border transition-colors bg-indigo-600 text-white border-indigo-600">📝 Text</button>
+          <button id="wm-type-image" onclick="_utilWmSetType('image')"
+            class="flex-1 px-3 py-2 rounded-lg text-xs font-medium border transition-colors bg-white text-slate-600 border-slate-200 hover:border-indigo-300">🖼 Image</button>
+        </div>
+        <div id="wm-text-fields" class="space-y-3">
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Text</label>
+            <input id="wm-text" type="text" value="DRAFT"
+              class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+          </div>
+          <div class="flex gap-3">
+            <div class="flex-1">
+              <label class="block text-xs font-medium text-slate-600 mb-1">Font size</label>
+              <input id="wm-fontsize" type="number" value="48" min="6" max="200"
+                class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+            </div>
+            <div class="flex-1">
+              <label class="block text-xs font-medium text-slate-600 mb-1">Rotation°</label>
+              <input id="wm-rotation" type="number" value="45" min="-180" max="180"
+                class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+            </div>
+            <div class="flex-1">
+              <label class="block text-xs font-medium text-slate-600 mb-1">Colour</label>
+              <input id="wm-color" type="color" value="#888888" class="w-full h-[38px] px-1 py-1 border border-slate-200 rounded-lg"/>
+            </div>
+          </div>
+          <label class="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+            <input type="checkbox" id="wm-tile" class="accent-indigo-600"/> Tile across page
+          </label>
+        </div>
+        <div id="wm-image-fields" class="space-y-3 hidden">
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Image (PNG/JPG)</label>
+            <button onclick="_utilWmPickImage()" class="w-full text-left px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:border-indigo-300 transition-colors">
+              <span id="wm-image-lbl">Click to select image…</span>
+            </button>
+            <input type="hidden" id="wm-image"/>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Scale  <span class="text-slate-400 font-normal">(1 = original size)</span></label>
+            <input id="wm-imgscale" type="number" value="0.5" min="0.05" max="3" step="0.05"
+              class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Opacity  <span class="text-slate-400 font-normal" id="wm-opacity-lbl">0.30</span></label>
+          <input id="wm-opacity" type="range" min="0.05" max="1" step="0.05" value="0.3" class="w-full accent-indigo-600"
+            oninput="document.getElementById('wm-opacity-lbl').textContent=this.value"/>
+        </div>
+        <button onclick="utilAddWatermark()"
+          class="w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors">
+          💧 Apply Watermark & Save…
+        </button>
+      </div>`
+
+    case 'metadata': return `
+      <h4 class="font-semibold text-slate-800 mb-1">🏷 Edit Metadata</h4>
+      <p class="text-xs text-slate-500 mb-4">View and edit a PDF's title, author, subject & keywords.</p>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Source PDF</label>
+          <button onclick="utilPickPdfMeta()" class="w-full text-left px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:border-indigo-300 transition-colors">
+            <span id="meta-src-lbl">Click to select PDF…</span>
+          </button>
+          <input type="hidden" id="meta-src"/>
+        </div>
+        <div id="meta-fields" class="space-y-3 hidden">
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Title</label>
+            <input id="meta-title" type="text" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Author</label>
+            <input id="meta-author" type="text" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Subject</label>
+            <input id="meta-subject" type="text" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Keywords  <span class="text-slate-400 font-normal">(comma-separated)</span></label>
+            <input id="meta-keywords" type="text" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+          </div>
+          <button onclick="utilSaveMetadata()"
+            class="w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors">
+            🏷 Save Metadata As…
+          </button>
+        </div>
+      </div>`
+
+    case 'insert': return `
+      <h4 class="font-semibold text-slate-800 mb-1">➕ Insert Blank Pages</h4>
+      <p class="text-xs text-slate-500 mb-4">Add one or more blank pages at a chosen position.</p>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Source PDF</label>
+          <button onclick="utilPickPdf('insert-src')" class="w-full text-left px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:border-indigo-300 transition-colors">
+            <span id="insert-src-lbl">Click to select PDF…</span>
+          </button>
+          <input type="hidden" id="insert-src"/>
+        </div>
+        <div class="flex gap-3">
+          <div class="flex-1">
+            <label class="block text-xs font-medium text-slate-600 mb-1">Position</label>
+            <select id="insert-pos" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+              <option value="start">Before page 1</option>
+              <option value="end" selected>At the end</option>
+              <option value="after">After page…</option>
+            </select>
+          </div>
+          <div style="width:90px">
+            <label class="block text-xs font-medium text-slate-600 mb-1">After page</label>
+            <input id="insert-after" type="number" value="1" min="1"
+              class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+          </div>
+          <div style="width:90px">
+            <label class="block text-xs font-medium text-slate-600 mb-1">Count</label>
+            <input id="insert-count" type="number" value="1" min="1" max="50"
+              class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Page size</label>
+          <select id="insert-size" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+            <option value="match">Match adjacent page</option>
+            <option value="a4">A4</option>
+            <option value="letter">US Letter</option>
+          </select>
+        </div>
+        <button onclick="utilInsertBlankPages()"
+          class="w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors">
+          ➕ Insert & Save…
+        </button>
+      </div>`
+
+    case 'crop': return `
+      <h4 class="font-semibold text-slate-800 mb-1">🔲 Crop Pages</h4>
+      <p class="text-xs text-slate-500 mb-4">Trim margins from all or selected pages (in points, 72pt = 1 inch).</p>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Source PDF</label>
+          <button onclick="utilPickPdf('crop-src')" class="w-full text-left px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:border-indigo-300 transition-colors">
+            <span id="crop-src-lbl">Click to select PDF…</span>
+          </button>
+          <input type="hidden" id="crop-src"/>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Pages  <span class="text-slate-400 font-normal">(blank = all)</span></label>
+          <input id="crop-pages" type="text" placeholder="all  or  1, 3, 5-8"
+            class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+        </div>
+        <div class="grid grid-cols-4 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Top</label>
+            <input id="crop-top" type="number" value="0" min="0"
+              class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Bottom</label>
+            <input id="crop-bottom" type="number" value="0" min="0"
+              class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Left</label>
+            <input id="crop-left" type="number" value="0" min="0"
+              class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Right</label>
+            <input id="crop-right" type="number" value="0" min="0"
+              class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+          </div>
+        </div>
+        <button onclick="utilCropPdf()"
+          class="w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors">
+          🔲 Crop & Save…
+        </button>
+      </div>`
+
+    case 'images': return `
+      <h4 class="font-semibold text-slate-800 mb-1">🖼 PDF ⇄ Images</h4>
+      <p class="text-xs text-slate-500 mb-4">Export PDF pages as PNG images, or build a new PDF from images.</p>
+      <div class="space-y-5">
+        <div class="border border-slate-200 rounded-lg p-4">
+          <h5 class="text-sm font-semibold text-slate-700 mb-1">PDF → Images</h5>
+          <p class="text-xs text-slate-500 mb-3">Render every page (or a range) to a PNG file.</p>
+          <div class="space-y-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Source PDF</label>
+              <button onclick="utilPickPdf('img-src')" class="w-full text-left px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:border-indigo-300 transition-colors">
+                <span id="img-src-lbl">Click to select PDF…</span>
+              </button>
+              <input type="hidden" id="img-src"/>
+            </div>
+            <div class="flex gap-3">
+              <div class="flex-1">
+                <label class="block text-xs font-medium text-slate-600 mb-1">Pages  <span class="text-slate-400 font-normal">(blank = all)</span></label>
+                <input id="img-pages" type="text" placeholder="all  or  1, 3, 5-8"
+                  class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+              </div>
+              <div style="width:110px">
+                <label class="block text-xs font-medium text-slate-600 mb-1">Scale</label>
+                <select id="img-scale" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                  <option value="1">1×</option>
+                  <option value="2" selected>2×</option>
+                  <option value="3">3×</option>
+                </select>
+              </div>
+            </div>
+            <button onclick="utilExportPdfToImages()"
+              class="w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors">
+              🖼 Export Pages as PNGs…
+            </button>
+          </div>
+        </div>
+        <div class="border border-slate-200 rounded-lg p-4">
+          <h5 class="text-sm font-semibold text-slate-700 mb-1">Images → PDF</h5>
+          <p class="text-xs text-slate-500 mb-3">Combine PNG/JPG images into a single PDF, one image per page, in the order selected.</p>
+          <button onclick="utilImagesToPdf()"
+            class="w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors">
+            📂 Select Images & Build PDF…
+          </button>
+        </div>
+      </div>`
+
+    case 'ocr': return `
+      <h4 class="font-semibold text-slate-800 mb-1">🔍 OCR — Make Searchable</h4>
+      <p class="text-xs text-slate-500 mb-4">Recognizes text on each page and adds an invisible, selectable text layer on top — the page images themselves are unchanged.</p>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Source PDF</label>
+          <button onclick="utilPickPdf('ocr-src')" class="w-full text-left px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:border-indigo-300 transition-colors">
+            <span id="ocr-src-lbl">Click to select PDF…</span>
+          </button>
+          <input type="hidden" id="ocr-src"/>
+        </div>
+        <div class="flex gap-3">
+          <div class="flex-1">
+            <label class="block text-xs font-medium text-slate-600 mb-1">Pages  <span class="text-slate-400 font-normal">(blank = all)</span></label>
+            <input id="ocr-pages" type="text" placeholder="all  or  1, 3, 5-8"
+              class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+          </div>
+          <div style="width:130px">
+            <label class="block text-xs font-medium text-slate-600 mb-1">Quality</label>
+            <select id="ocr-scale" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+              <option value="2" selected>Normal (2×)</option>
+              <option value="3">High (3×)</option>
+            </select>
+          </div>
+        </div>
+        <p class="text-xs text-slate-400">English only for now. Larger documents take longer — keep PhDFlow open while it runs.</p>
+        <button id="ocr-run-btn" onclick="utilRunOcr()"
+          class="w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50">
+          🔍 Run OCR & Save…
+        </button>
+        <div id="ocr-progress-wrap" class="hidden">
+          <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+            <div id="ocr-progress-bar" class="bg-indigo-600 h-2 rounded-full transition-all" style="width:0%"></div>
+          </div>
+          <p id="ocr-progress-text" class="text-xs text-slate-500 mt-1.5"></p>
+        </div>
+      </div>`
+
     default: return ''
   }
 }
@@ -474,6 +774,249 @@ async function utilAddPageNumbers() {
   if (!dest) return
   const r = await api.addPageNumbers(fp, dest, { position:pos, startNum:start, showTotal:total, fontSize:11 })
   r.success ? showToast(`Added page numbers to ${r.pageCount} pages ✓`) : showToast('Failed: '+r.error,'error')
+}
+
+// ── Page Manager launcher ─────────────────────────────────────────────────────
+function utilOpenPageManager() {
+  const fp = document.getElementById('pagemgr-src')?.value
+  if (!fp) { showToast('Select a source PDF first', 'error'); return }
+  openPdfPageManager(fp)
+}
+
+// ── Watermark / Stamp ──────────────────────────────────────────────────────────
+function _utilWmSetType(type) {
+  window._wmType = type
+  const tBtn = document.getElementById('wm-type-text')
+  const iBtn = document.getElementById('wm-type-image')
+  const active   = 'flex-1 px-3 py-2 rounded-lg text-xs font-medium border transition-colors bg-indigo-600 text-white border-indigo-600'
+  const inactive = 'flex-1 px-3 py-2 rounded-lg text-xs font-medium border transition-colors bg-white text-slate-600 border-slate-200 hover:border-indigo-300'
+  if (tBtn) tBtn.className = type==='text'  ? active : inactive
+  if (iBtn) iBtn.className = type==='image' ? active : inactive
+  document.getElementById('wm-text-fields')?.classList.toggle('hidden', type!=='text')
+  document.getElementById('wm-image-fields')?.classList.toggle('hidden', type!=='image')
+}
+
+async function _utilWmPickImage() {
+  const paths = await api.openImageDialog()
+  if (!paths?.length) return
+  document.getElementById('wm-image').value = paths[0]
+  document.getElementById('wm-image-lbl').textContent = paths[0].split('\\').pop()
+}
+
+async function utilAddWatermark() {
+  const fp = document.getElementById('wm-src')?.value
+  if (!fp) { showToast('Select a source PDF first', 'error'); return }
+  const type    = window._wmType || 'text'
+  const opacity = parseFloat(document.getElementById('wm-opacity')?.value || '0.3')
+  const opts = { type, opacity }
+  if (type === 'text') {
+    opts.text     = document.getElementById('wm-text')?.value?.trim() || 'DRAFT'
+    opts.fontSize = parseFloat(document.getElementById('wm-fontsize')?.value || '48')
+    opts.rotation = parseFloat(document.getElementById('wm-rotation')?.value || '45')
+    opts.color    = document.getElementById('wm-color')?.value || '#888888'
+    opts.tile     = document.getElementById('wm-tile')?.checked || false
+  } else {
+    const imagePath = document.getElementById('wm-image')?.value
+    if (!imagePath) { showToast('Select an image first', 'error'); return }
+    opts.imagePath  = imagePath
+    opts.imageScale = parseFloat(document.getElementById('wm-imgscale')?.value || '0.5')
+  }
+  const dest = await api.openSaveDialog({ title:'Save watermarked PDF', defaultPath: fp.replace(/\.pdf$/i,'_watermarked.pdf'), filters:[{name:'PDF',extensions:['pdf']}] })
+  if (!dest) return
+  const r = await api.addWatermark(fp, dest, opts)
+  if (r.success) {
+    showToast(`Watermark applied to ${r.pageCount} page(s) ✓`)
+    _pushToolHist('pdf', { op:'watermark', label:`Watermarked ${fp.split('\\').pop()}`, file: fp.split('\\').pop(), dest })
+  } else showToast('Failed: '+r.error,'error')
+}
+
+// ── Edit Metadata ──────────────────────────────────────────────────────────────
+async function utilPickPdfMeta() {
+  const paths = await api.openPdfDialog()
+  if (!paths?.length) return
+  const fp = paths[0]
+  document.getElementById('meta-src').value = fp
+  document.getElementById('meta-src-lbl').textContent = fp.split('\\').pop()
+  const r = await api.readPdfMetadata(fp)
+  if (!r.success) { showToast('Could not read metadata: '+r.error, 'error'); return }
+  document.getElementById('meta-title').value    = r.metadata.title    || ''
+  document.getElementById('meta-author').value   = r.metadata.author   || ''
+  document.getElementById('meta-subject').value  = r.metadata.subject  || ''
+  document.getElementById('meta-keywords').value = r.metadata.keywords || ''
+  document.getElementById('meta-fields').classList.remove('hidden')
+}
+
+async function utilSaveMetadata() {
+  const fp = document.getElementById('meta-src')?.value
+  if (!fp) { showToast('Select a source PDF first', 'error'); return }
+  const meta = {
+    title:    document.getElementById('meta-title')?.value    || '',
+    author:   document.getElementById('meta-author')?.value   || '',
+    subject:  document.getElementById('meta-subject')?.value  || '',
+    keywords: document.getElementById('meta-keywords')?.value || '',
+  }
+  const dest = await api.openSaveDialog({ title:'Save PDF with new metadata', defaultPath: fp.replace(/\.pdf$/i,'_edited.pdf'), filters:[{name:'PDF',extensions:['pdf']}] })
+  if (!dest) return
+  const r = await api.editPdfMetadata(fp, dest, meta)
+  if (r.success) {
+    showToast('Metadata updated ✓')
+    _pushToolHist('pdf', { op:'metadata', label:`Edited metadata of ${fp.split('\\').pop()}`, file: fp.split('\\').pop(), dest })
+  } else showToast('Failed: '+r.error,'error')
+}
+
+// ── Insert Blank Pages ─────────────────────────────────────────────────────────
+async function utilInsertBlankPages() {
+  const fp = document.getElementById('insert-src')?.value
+  if (!fp) { showToast('Select a source PDF first', 'error'); return }
+  const posSel = document.getElementById('insert-pos')?.value || 'end'
+  const after  = parseInt(document.getElementById('insert-after')?.value || '1')
+  const count  = parseInt(document.getElementById('insert-count')?.value || '1')
+  const size   = document.getElementById('insert-size')?.value || 'match'
+  const position = posSel==='after' ? after : posSel
+  const dest = await api.openSaveDialog({ title:'Save PDF with inserted pages', defaultPath: fp.replace(/\.pdf$/i,'_inserted.pdf'), filters:[{name:'PDF',extensions:['pdf']}] })
+  if (!dest) return
+  const r = await api.insertBlankPages(fp, dest, { position, count, size })
+  if (r.success) {
+    showToast(`Inserted ${r.inserted} blank page(s) ✓`)
+    _pushToolHist('pdf', { op:'insert', label:`Inserted ${r.inserted} blank page(s) into ${fp.split('\\').pop()}`, file: fp.split('\\').pop(), dest })
+  } else showToast('Failed: '+r.error,'error')
+}
+
+// ── Crop Pages ─────────────────────────────────────────────────────────────────
+async function utilCropPdf() {
+  const fp = document.getElementById('crop-src')?.value
+  if (!fp) { showToast('Select a source PDF first', 'error'); return }
+  const pg    = document.getElementById('crop-pages')?.value?.trim()
+  const pages = (!pg || pg.toLowerCase()==='all') ? 'all' : _parsePageList(pg, 9999)
+  const margins = {
+    top:    parseFloat(document.getElementById('crop-top')?.value    || '0'),
+    bottom: parseFloat(document.getElementById('crop-bottom')?.value || '0'),
+    left:   parseFloat(document.getElementById('crop-left')?.value   || '0'),
+    right:  parseFloat(document.getElementById('crop-right')?.value  || '0'),
+  }
+  const dest = await api.openSaveDialog({ title:'Save cropped PDF', defaultPath: fp.replace(/\.pdf$/i,'_cropped.pdf'), filters:[{name:'PDF',extensions:['pdf']}] })
+  if (!dest) return
+  const r = await api.cropPdf(fp, dest, { pages, margins })
+  if (r.success) {
+    showToast(`Cropped ${r.cropped} page(s) ✓`)
+    _pushToolHist('pdf', { op:'crop', label:`Cropped ${fp.split('\\').pop()}`, file: fp.split('\\').pop(), dest })
+  } else showToast('Failed: '+r.error,'error')
+}
+
+// ── PDF ⇄ Images ───────────────────────────────────────────────────────────────
+async function utilImagesToPdf() {
+  const paths = await api.openImageDialog()
+  if (!paths || !paths.length) return
+  const dest = await api.openSaveDialog({ title:'Save PDF from images', defaultPath:'images.pdf', filters:[{name:'PDF',extensions:['pdf']}] })
+  if (!dest) return
+  const r = await api.imagesToPdf(paths, dest)
+  if (r.success) {
+    showToast(`Built PDF from ${r.pageCount} image(s) ✓`)
+    _pushToolHist('pdf', { op:'images-to-pdf', label:`Built PDF from ${r.pageCount} images → ${dest.split('\\').pop()}`, dest })
+  } else showToast('Failed: '+r.error,'error')
+}
+
+async function utilExportPdfToImages() {
+  const fp = document.getElementById('img-src')?.value
+  if (!fp) { showToast('Select a source PDF first', 'error'); return }
+  if (!window.pdfjsLib) { showToast('PDF renderer still loading — try again in a moment', 'error'); return }
+  const pgStr = document.getElementById('img-pages')?.value?.trim()
+  const scale = parseFloat(document.getElementById('img-scale')?.value || '2')
+  const outDir = await api.openFolderDialog({ title:'Choose output folder for images' })
+  if (!outDir) return
+  showToast('Rendering pages…', 'info')
+  try {
+    const base64 = await api.readBinaryFile(fp)
+    const binary = atob(base64)
+    const bytes  = new Uint8Array(binary.length)
+    for (let i=0;i<binary.length;i++) bytes[i] = binary.charCodeAt(i)
+    const doc   = await window.pdfjsLib.getDocument({ data: bytes }).promise
+    const total = doc.numPages
+    const pages = (!pgStr || pgStr.toLowerCase()==='all') ? Array.from({length:total},(_,i)=>i+1) : _parsePageList(pgStr, total)
+    const baseName = fp.split('\\').pop().replace(/\.pdf$/i,'')
+    let count = 0
+    for (const n of pages) {
+      if (n<1 || n>total) continue
+      const page   = await doc.getPage(n)
+      const vp     = page.getViewport({ scale })
+      const canvas = document.createElement('canvas')
+      canvas.width = vp.width; canvas.height = vp.height
+      const ctx = canvas.getContext('2d')
+      await page.render({ canvasContext: ctx, viewport: vp }).promise
+      const b64  = canvas.toDataURL('image/png').split(',')[1]
+      const dest = `${outDir}\\${baseName}_page${String(n).padStart(3,'0')}.png`
+      await api.writeBinaryFile(dest, b64)
+      count++
+    }
+    showToast(`Exported ${count} page(s) as PNG ✓`)
+    _pushToolHist('pdf', { op:'pdf-to-images', label:`Exported ${count} pages from ${fp.split('\\').pop()} as PNG`, file: fp.split('\\').pop(), dest: outDir })
+  } catch(e) { showToast('Export failed: '+e.message, 'error') }
+}
+
+async function utilRunOcr() {
+  const fp = document.getElementById('ocr-src')?.value
+  if (!fp) { showToast('Select a source PDF first', 'error'); return }
+  if (!window.pdfjsLib) { showToast('PDF renderer still loading — try again in a moment', 'error'); return }
+  const pgStr = document.getElementById('ocr-pages')?.value?.trim()
+  const scale = parseFloat(document.getElementById('ocr-scale')?.value || '2')
+
+  const dest = await api.openSaveDialog({ title:'Save searchable PDF', defaultPath: fp.replace(/\.pdf$/i,'_ocr.pdf'), filters:[{name:'PDF',extensions:['pdf']}] })
+  if (!dest) return
+
+  const btn  = document.getElementById('ocr-run-btn')
+  const wrap = document.getElementById('ocr-progress-wrap')
+  const bar  = document.getElementById('ocr-progress-bar')
+  const text = document.getElementById('ocr-progress-text')
+  if (btn)  btn.disabled = true
+  if (wrap) wrap.classList.remove('hidden')
+  if (bar)  bar.style.width = '0%'
+  if (text) text.textContent = 'Rendering pages…'
+
+  try {
+    const base64 = await api.readBinaryFile(fp)
+    const binary = atob(base64)
+    const bytes  = new Uint8Array(binary.length)
+    for (let i=0;i<binary.length;i++) bytes[i] = binary.charCodeAt(i)
+    const doc   = await window.pdfjsLib.getDocument({ data: bytes }).promise
+    const total = doc.numPages
+    const pageNums = (!pgStr || pgStr.toLowerCase()==='all') ? Array.from({length:total},(_,i)=>i+1) : _parsePageList(pgStr, total)
+
+    const pages = []
+    for (const n of pageNums) {
+      if (n<1 || n>total) continue
+      const page   = await doc.getPage(n)
+      const vp     = page.getViewport({ scale })
+      const canvas = document.createElement('canvas')
+      canvas.width = vp.width; canvas.height = vp.height
+      const ctx = canvas.getContext('2d')
+      await page.render({ canvasContext: ctx, viewport: vp }).promise
+      const png = canvas.toDataURL('image/png').split(',')[1]
+      pages.push({ pageNum: n, scale, png })
+    }
+    if (!pages.length) { showToast('No pages to OCR', 'error'); return }
+
+    window._ocrProgressUpdate = ({ current, total: t, page }) => {
+      const pct = Math.round((current / t) * 100)
+      if (bar)  bar.style.width = pct + '%'
+      if (text) text.textContent = `Recognizing text on page ${page} (${current}/${t})…`
+    }
+    if (!window._ocrListenerSet) {
+      api.onOcrProgress(d => window._ocrProgressUpdate?.(d))
+      window._ocrListenerSet = true
+    }
+
+    const r = await api.ocrPdf(fp, dest, pages)
+    if (r.success) {
+      showToast(`OCR complete — ${r.pages} page(s) made searchable ✓`)
+      _pushToolHist('pdf', { op:'ocr', label:`OCR: ${fp.split('\\').pop()} → ${dest.split('\\').pop()}`, file: fp.split('\\').pop(), dest })
+    } else showToast('OCR failed: '+r.error, 'error')
+  } catch(e) {
+    showToast('OCR failed: '+e.message, 'error')
+  } finally {
+    if (btn)  btn.disabled = false
+    if (wrap) wrap.classList.add('hidden')
+    window._ocrProgressUpdate = null
+  }
 }
 
 // ══ TEXT & CITATIONS ══════════════════════════════════════════════════════════

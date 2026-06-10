@@ -36,6 +36,17 @@ contextBridge.exposeInMainWorld('api', {
   rotatePdf:         (fp,dest,rot,pages) => ipcRenderer.invoke('rotate-pdf', fp, dest, rot, pages),
   addPageNumbers:    (fp, dest, opts)    => ipcRenderer.invoke('add-page-numbers', fp, dest, opts),
   removePages:       (fp, dest, pages)   => ipcRenderer.invoke('remove-pages', fp, dest, pages),
+  readPdfMetadata:   (fp)                => ipcRenderer.invoke('read-pdf-metadata', fp),
+  editPdfMetadata:   (fp, dest, meta)    => ipcRenderer.invoke('edit-pdf-metadata', fp, dest, meta),
+  addWatermark:      (fp, dest, opts)    => ipcRenderer.invoke('add-watermark', fp, dest, opts),
+  insertBlankPages:  (fp, dest, opts)    => ipcRenderer.invoke('insert-blank-pages', fp, dest, opts),
+  cropPdf:           (fp, dest, opts)    => ipcRenderer.invoke('crop-pdf', fp, dest, opts),
+  imagesToPdf:       (paths, dest)       => ipcRenderer.invoke('images-to-pdf', paths, dest),
+  rebuildPdf:        (fp, dest, pages)   => ipcRenderer.invoke('rebuild-pdf', fp, dest, pages),
+  openImageDialog:   ()                  => ipcRenderer.invoke('open-image-dialog'),
+  openFolderDialog:  (opts)              => ipcRenderer.invoke('open-folder-dialog', opts),
+  ocrPdf:            (fp, dest, pages)   => ipcRenderer.invoke('ocr-pdf', fp, dest, pages),
+  onOcrProgress:     (cb)                => ipcRenderer.on('ocr-progress', (_, d) => cb(d)),
 
   // ── Research APIs ─────────────────────────────────────────────────────────
   searchResearchers:     (opts)              => ipcRenderer.invoke('search-researchers', opts),

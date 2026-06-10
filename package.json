@@ -16,6 +16,7 @@
     "pdf-parse": "^1.1.1",
     "pdfjs-dist": "^6.0.227",
     "rss-parser": "^3.13.0",
+    "tesseract.js": "^7.0.0",
     "xlsx": "^0.18.5"
   },
   "author": "PhDFlow",
@@ -39,6 +40,7 @@
       "main.js",
       "preload.js",
       "src/**/*",
+      "resources/**/*",
       "odysseus/**/*",
       "!odysseus/venv/**/*",
       "!odysseus/.git/**/*",
@@ -52,6 +54,11 @@
       "!node_modules/electron-builder/**/*",
       "!node_modules/@tailwindcss/**/*",
       "!node_modules/tailwindcss/**/*",
+      "!node_modules/tesseract.js/dist/**/*",
+      "!node_modules/tesseract.js-core/tesseract-core.wasm.js",
+      "!node_modules/tesseract.js-core/tesseract-core-lstm.*",
+      "!node_modules/tesseract.js-core/tesseract-core-simd*",
+      "!node_modules/tesseract.js-core/tesseract-core-relaxedsimd*",
       "!src/input.css"
     ],
     "extraResources": [
