@@ -66,10 +66,28 @@ function _parseICS(raw) {
     const start = parseDT(props.DTSTART)
     const end   = props.DTEND ? parseDT(props.DTEND) : null
     if (!start?.date) return null
+
+    // Multi-day span: work out the inclusive last day this event covers.
+    let endDate = null
+    if (end?.date && end.date > start.date) {
+      if (start.time || end.time) {
+        // Timed event — DTEND's date is the actual last day it runs into.
+        endDate = end.date
+      } else {
+        // All-day event — DTEND is exclusive per RFC 5545 §3.6.1, so the
+        // last covered day is DTEND minus one day.
+        const d = new Date(`${end.date}T00:00:00Z`)
+        d.setUTCDate(d.getUTCDate() - 1)
+        endDate = d.toISOString().slice(0, 10)
+        if (endDate <= start.date) endDate = null
+      }
+    }
+
     return {
       uid:         unescape(props.UID) || `${props.DTSTART}~${props.SUMMARY}`,
       title:       unescape(props.SUMMARY),
       date:        start.date,
+      endDate,
       startTime:   start.time,
       endTime:     end?.time || null,
       location:    unescape(props.LOCATION || ''),
@@ -85,14 +103,16 @@ function _allEventsForDate(dateStr) {
   for (const feed of (state.calFeeds || [])) {
     if (!feed.enabled) continue
     for (const ev of (_calFeedEvents[feed.id] || [])) {
-      if (ev.date !== dateStr) continue
+      const lastDate = ev.endDate || ev.date
+      if (dateStr < ev.date || dateStr > lastDate) continue
       ext.push({ ...ev,
-        id:        `feed-${feed.id}-${ev.uid}`,
-        type:      'external',
-        external:  true,
-        feedId:    feed.id,
-        feedName:  feed.name,
-        feedColor: feed.color || '#6366f1',
+        id:             `feed-${feed.id}-${ev.uid}`,
+        type:           'external',
+        external:       true,
+        feedId:         feed.id,
+        feedName:       feed.name,
+        feedColor:      feed.color || '#6366f1',
+        isContinuation: dateStr !== ev.date,
       })
     }
   }
@@ -105,12 +125,15 @@ function _calEventChip(e, extra = '') {
   if (e.external) {
     const c = e.feedColor || '#6366f1'
     const initials = (e.feedName || '').slice(0, 2).toUpperCase()
+    const spans    = e.endDate && e.endDate !== e.date
+    const contPfx  = e.isContinuation ? '› ' : ''
+    const rangeSfx = spans ? ` (${fmtDate(e.date)} – ${fmtDate(e.endDate)})` : ''
     return `<div class="text-[10px] px-1.5 py-0.5 rounded truncate cursor-pointer font-medium flex items-center gap-1 ${extra}"
       style="background:${c}20;color:${c};border-left:2px solid ${c}"
       onclick="${sp}calShowExternal('${esc(e.feedId)}','${esc(e.uid)}')"
-      title="${esc(e.feedName)}: ${esc(e.title)}">
+      title="${esc(e.feedName)}: ${esc(e.title)}${rangeSfx}">
       <span class="flex-shrink-0 text-[8px] font-bold opacity-60">${initials}</span>
-      <span class="truncate">${esc(e.title)}</span>
+      <span class="truncate">${contPfx}${esc(e.title)}</span>
     </div>`
   }
   const conf     = (_calTypeConf()[e.type] || _calTypeConf().personal)
@@ -1234,7 +1257,9 @@ function calShowExternal(feedId, uid) {
   <div class="space-y-2 text-sm mb-4">
     <div class="flex gap-2">
       <span class="text-slate-400 w-20 flex-shrink-0">Date</span>
-      <span class="font-medium text-slate-800">${fmtDate(ev.date)}</span>
+      <span class="font-medium text-slate-800">${ev.endDate && ev.endDate !== ev.date
+        ? `${fmtDate(ev.date)} – ${fmtDate(ev.endDate)}`
+        : fmtDate(ev.date)}</span>
     </div>
     ${ev.startTime ? `<div class="flex gap-2">
       <span class="text-slate-400 w-20 flex-shrink-0">Time</span>
