@@ -124,12 +124,9 @@ function render_whiteboard() {
     </div>
 
     ${_wb ? `
-    <!-- Drawing Toolbar -->
-    <div class="bg-white border-b border-slate-200 px-2 py-1 flex items-center gap-px flex-shrink-0">
-
-    <!-- Scrollable tool group — shrinks first so the action cluster on the
-         right (undo/redo/zoom/clear/export) stays reachable on narrow windows -->
-    <div class="flex items-center gap-px overflow-x-auto min-w-0 flex-1">
+    <!-- Drawing Toolbar — a single continuous flow that wraps onto as many
+         rows as the window needs, no horizontal scrollbar -->
+    <div class="bg-white border-b border-slate-200 px-2 py-1.5 flex flex-wrap items-center gap-1 flex-shrink-0">
 
       <!-- Tools -->
       ${WB_TOOLS.map(t => `
@@ -139,24 +136,22 @@ function render_whiteboard() {
         ${t.icon}
       </button>`).join('')}
 
-      <div class="w-px h-5 bg-slate-200 mx-1.5 flex-shrink-0"></div>
+      <div class="w-px h-5 bg-slate-200 flex-shrink-0"></div>
 
       <!-- Stroke colours (palette + custom picker) -->
-      <div class="flex items-center gap-0.5 flex-shrink-0">
-        ${WB_PALETTE.map(c => `
-        <button data-wb-color="${c}" onclick="wbSetColor('${c}')" title="${c}"
-          style="background:${c};outline:${_wbColor===c ? '2px solid #6366f1' : (c==='#ffffff'?'1px solid #e2e8f0':'none')};outline-offset:1px"
-          class="w-5 h-5 rounded-full flex-shrink-0 transition-transform hover:scale-110"></button>`).join('')}
-        <input type="color" id="wb-stroke-clr-inp" value="${_wbColor}"
-          oninput="wbSetColor(this.value)"
-          title="Custom stroke colour"
-          style="width:20px;height:20px;border-radius:50%;border:1px solid #e2e8f0;
-            padding:1px;appearance:none;-webkit-appearance:none;margin-left:2px">
-      </div>
+      ${WB_PALETTE.map(c => `
+      <button data-wb-color="${c}" onclick="wbSetColor('${c}')" title="${c}"
+        style="background:${c};outline:${_wbColor===c ? '2px solid #6366f1' : (c==='#ffffff'?'1px solid #e2e8f0':'none')};outline-offset:1px"
+        class="w-5 h-5 rounded-full flex-shrink-0 transition-transform hover:scale-110"></button>`).join('')}
+      <input type="color" id="wb-stroke-clr-inp" value="${_wbColor}"
+        oninput="wbSetColor(this.value)"
+        title="Custom stroke colour"
+        style="width:20px;height:20px;border-radius:50%;border:1px solid #e2e8f0;
+          padding:1px;appearance:none;-webkit-appearance:none;flex-shrink:0">
 
-      <div class="w-px h-5 bg-slate-200 mx-1.5 flex-shrink-0"></div>
+      <div class="w-px h-5 bg-slate-200 flex-shrink-0"></div>
 
-      <!-- Stroke width — numerical input -->
+      <!-- Stroke width -->
       <div class="flex items-center gap-1 flex-shrink-0">
         <span class="text-[10px] text-slate-400">px</span>
         <input type="number" min="1" max="40" step="1" value="${_wbSW}"
@@ -166,23 +161,21 @@ function render_whiteboard() {
             focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white text-slate-700"/>
       </div>
 
-      <div class="w-px h-5 bg-slate-200 mx-1.5 flex-shrink-0"></div>
-
       <!-- Fill toggle + fill colour picker -->
-      <button id="wb-fill-btn" onclick="wbToggleFill()" title="Toggle fill (shapes only)"
-        class="px-2 h-8 rounded text-xs font-medium transition-colors flex-shrink-0
-          ${_wbFill ? 'bg-indigo-100 text-indigo-700' : 'text-slate-500 hover:bg-slate-100'}">
-        ${_wbFill ? '◼ Fill' : '◻ Fill'}
-      </button>
-      <input type="color" id="wb-fill-clr-inp" value="${_wbFillClr}"
-        oninput="wbSetFillColor(this.value)"
-        title="Fill colour"
-        style="width:24px;height:24px;border-radius:6px;border:2px solid #e2e8f0;
-          padding:1px;appearance:none;-webkit-appearance:none;margin-left:2px;flex-shrink:0">
+      <div class="flex items-center gap-1 flex-shrink-0">
+        <button id="wb-fill-btn" onclick="wbToggleFill()" title="Toggle fill (shapes only)"
+          class="px-2 h-8 rounded text-xs font-medium transition-colors flex-shrink-0
+            ${_wbFill ? 'bg-indigo-100 text-indigo-700' : 'text-slate-500 hover:bg-slate-100'}">
+          ${_wbFill ? '◼ Fill' : '◻ Fill'}
+        </button>
+        <input type="color" id="wb-fill-clr-inp" value="${_wbFillClr}"
+          oninput="wbSetFillColor(this.value)"
+          title="Fill colour"
+          style="width:24px;height:24px;border-radius:6px;border:2px solid #e2e8f0;
+            padding:1px;appearance:none;-webkit-appearance:none;flex-shrink:0">
+      </div>
 
-      <div class="w-px h-5 bg-slate-200 mx-1.5 flex-shrink-0"></div>
-
-      <!-- Font size — numerical input -->
+      <!-- Font size -->
       <div class="flex items-center gap-1 flex-shrink-0">
         <span class="text-[10px] text-slate-400">T</span>
         <input type="number" min="8" max="96" step="1" value="${_wbFontSize}"
@@ -192,7 +185,7 @@ function render_whiteboard() {
             focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white text-slate-700"/>
       </div>
 
-      <div class="w-px h-5 bg-slate-200 mx-1.5 flex-shrink-0"></div>
+      <div class="w-px h-5 bg-slate-200 flex-shrink-0"></div>
 
       <!-- Background -->
       <select id="wb-bg-select" onchange="wbSetBg(this.value)"
@@ -204,40 +197,45 @@ function render_whiteboard() {
 
       <!-- Smart toggle -->
       <button id="wb-smart-btn" onclick="wbToggleSmart()" title="Smart shape recognition"
-        class="px-2 h-8 rounded text-xs font-medium transition-colors flex-shrink-0 ml-1
+        class="px-2 h-8 rounded text-xs font-medium transition-colors flex-shrink-0
           ${_wbSmartOn ? 'bg-amber-100 text-amber-700' : 'text-slate-400 hover:bg-slate-100'}">
         ✦ Smart
       </button>
 
       <!-- Templates button -->
       <button onclick="wbToggleTplPanel()" title="Insert a graph or figure template"
-        class="px-2 h-8 rounded text-xs font-medium transition-colors flex-shrink-0 ml-1
+        class="px-2 h-8 rounded text-xs font-medium transition-colors flex-shrink-0
           ${_wbTplPanel ? 'bg-indigo-100 text-indigo-700' : 'text-slate-400 hover:bg-slate-100'}">
         📐 Templates
       </button>
+
       <!-- Quick chart insert -->
       <button onclick="wbInsertChart('bar')"   title="Insert data bar chart"  class="w-8 h-8 flex items-center justify-center rounded text-sm text-slate-500 hover:bg-slate-100 transition-colors flex-shrink-0">📊</button>
       <button onclick="wbInsertChart('line')"  title="Insert data line chart" class="w-8 h-8 flex items-center justify-center rounded text-sm text-slate-500 hover:bg-slate-100 transition-colors flex-shrink-0">📈</button>
       <button onclick="wbInsertChart('pie')"   title="Insert data pie chart"  class="w-8 h-8 flex items-center justify-center rounded text-sm text-slate-500 hover:bg-slate-100 transition-colors flex-shrink-0">🥧</button>
 
-    </div>
+      <div class="w-px h-5 bg-slate-200 flex-shrink-0"></div>
 
-      <!-- Action cluster — pinned to the right, never scrolls out of view -->
-      <div class="flex items-center gap-1 flex-shrink-0 pl-2 ml-1 border-l border-slate-200">
-        <button onclick="wbUndo()" title="Undo Ctrl+Z" class="w-8 h-8 flex items-center justify-center rounded text-slate-500 hover:bg-slate-100 transition-colors">↩</button>
-        <button onclick="wbRedo()" title="Redo Ctrl+Y" class="w-8 h-8 flex items-center justify-center rounded text-slate-500 hover:bg-slate-100 transition-colors">↪</button>
-        <div class="w-px h-5 bg-slate-200 mx-0.5"></div>
-        <button onclick="wbZoomOut()" title="Zoom out  -" class="w-8 h-8 flex items-center justify-center rounded text-slate-500 hover:bg-slate-100 transition-colors text-base font-bold">−</button>
-        <button id="wb-zoom-label" onclick="wbZoomReset()" title="Reset zoom  0"
-          class="px-2 h-8 rounded text-xs text-slate-500 hover:bg-slate-100 transition-colors tabular-nums min-w-[44px] text-center">
-          ${Math.round(_wbZoom*100)}%
-        </button>
-        <button onclick="wbZoomIn()" title="Zoom in  +" class="w-8 h-8 flex items-center justify-center rounded text-slate-500 hover:bg-slate-100 transition-colors text-base font-bold">+</button>
-        <div class="w-px h-5 bg-slate-200 mx-0.5"></div>
-        <button onclick="wbClear()" class="px-2.5 h-8 rounded text-xs text-red-400 hover:bg-red-50 transition-colors">Clear</button>
-        <button onclick="wbExportPng()" class="px-2.5 h-8 rounded text-xs bg-slate-100 hover:bg-indigo-100 text-slate-600 hover:text-indigo-700 font-medium transition-colors">PNG</button>
-        <button onclick="openPhDFlowFolder('Whiteboard')" title="Open Whiteboard folder" class="px-2 h-8 rounded text-xs text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">📁</button>
-      </div>
+      <!-- Undo / Redo -->
+      <button onclick="wbUndo()" title="Undo Ctrl+Z" class="w-8 h-8 flex items-center justify-center rounded text-slate-500 hover:bg-slate-100 transition-colors flex-shrink-0">↩</button>
+      <button onclick="wbRedo()" title="Redo Ctrl+Y" class="w-8 h-8 flex items-center justify-center rounded text-slate-500 hover:bg-slate-100 transition-colors flex-shrink-0">↪</button>
+
+      <div class="w-px h-5 bg-slate-200 flex-shrink-0"></div>
+
+      <!-- Zoom -->
+      <button onclick="wbZoomOut()" title="Zoom out  -" class="w-8 h-8 flex items-center justify-center rounded text-slate-500 hover:bg-slate-100 transition-colors text-base font-bold flex-shrink-0">−</button>
+      <button id="wb-zoom-label" onclick="wbZoomReset()" title="Reset zoom  0"
+        class="px-2 h-8 rounded text-xs text-slate-500 hover:bg-slate-100 transition-colors tabular-nums min-w-[44px] text-center flex-shrink-0">
+        ${Math.round(_wbZoom*100)}%
+      </button>
+      <button onclick="wbZoomIn()" title="Zoom in  +" class="w-8 h-8 flex items-center justify-center rounded text-slate-500 hover:bg-slate-100 transition-colors text-base font-bold flex-shrink-0">+</button>
+
+      <div class="w-px h-5 bg-slate-200 flex-shrink-0"></div>
+
+      <!-- Clear / Export / Folder -->
+      <button onclick="wbClear()" class="px-2.5 h-8 rounded text-xs text-red-400 hover:bg-red-50 transition-colors flex-shrink-0">Clear</button>
+      <button onclick="wbExportPng()" class="px-2.5 h-8 rounded text-xs bg-slate-100 hover:bg-indigo-100 text-slate-600 hover:text-indigo-700 font-medium transition-colors flex-shrink-0">PNG</button>
+      <button onclick="openPhDFlowFolder('Whiteboard')" title="Open Whiteboard folder" class="px-2 h-8 rounded text-xs text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors flex-shrink-0">📁</button>
     </div>
 
     <!-- Selection property bar (visible when a shape is selected) -->
