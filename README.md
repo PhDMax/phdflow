@@ -34,13 +34,13 @@ All data stays on your device. No account required. No API keys needed.
 
 ## 📥 Installation
 
-1. Download **PhDFlow Setup 0.23.5.exe** from the [latest release](../../releases/latest) and run it
+1. Download **PhDFlow Setup 0.23.6.exe** from the [latest release](../../releases/latest) and run it
 2. Create your account on first launch — everything stays on your device
 
 > Windows SmartScreen may warn on first run — click **More info → Run anyway**
 
 ### Portable version
-**PhDFlow-Portable-0.23.5.exe** — runs without installing, useful for USB drives or restricted machines.
+**PhDFlow-Portable-0.23.6.exe** — runs without installing, useful for USB drives or restricted machines.
 
 ---
 
@@ -69,7 +69,9 @@ npm run build          # Produces dist/PhDFlow-Setup-x.x.x.exe
 
 ## 📋 Changelog
 
-### v0.23.5
+### v0.23.6
+- fix: keep whiteboard action buttons visible when window is narrow
+- chore: bump to v0.23.5
 - chore: session updates
 - chore: bump to v0.23.4
 - chore: session updates
