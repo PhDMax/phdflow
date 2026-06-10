@@ -1,34 +1,48 @@
-## Session summary — v0.24.0 (June 2026)
+## Session summary — v0.24.1 (June 2026)
 
 ### Released
-PhDFlow v0.24.0 — PDF Tools expansion + OCR.
+PhDFlow v0.24.1 — dark mode contrast fixes + Sign PDF.
 
 ### New features this session
 
-#### PDF reader fix
-pdf.js's fetch-based stream always returns status 0 for `file://` URLs, which
-pdf.js treats as a fatal error even though the file loads fine. Now reads the
-PDF as bytes via IPC and passes it to `getDocument({ data })` instead. Also
-added polyfills (main thread + pdf.js worker) for `Uint8Array.toHex/toBase64`,
-`Map.getOrInsertComputed`, `Math.sumPrecise`, and switched the text layer to
-the new `TextLayer` class — needed for bundled pdf.js 6.x on current
-Electron/Chromium.
+#### Dark mode "flashbang" fixes
+Audited every view in both light and dark themes via a Playwright tour
+(`scripts/dark-tour.mjs`) and pixel-sampled colors with PowerShell to verify
+contrast. Fixed three remaining bright-white spots in dark mode:
+- **Whiteboard canvas** — background (white/dots/grid) now switches to dark
+  variants via a `data-bg` attribute on `#wb-container`, read by
+  `html[data-theme="dark"] #wb-container[data-bg="..."]` CSS rules instead of
+  being computed once at render time.
+- **`.btn-secondary` / `.btn-danger` / `.label`** — global button and label
+  classes (defined in `projects.js`, injected once) now have dark-mode
+  overrides in `src/index.html`.
+- **Calendar overflow/empty day cells** — `bg-slate-50/30` and
+  `bg-slate-50/60` (Tailwind v4 opacity-modifier classes, which compile to
+  escaped selectors distinct from the base class) now get dark
+  `rgba(15,23,42,...)` overrides.
 
-#### PDF Tools — 6 new operations
-- **Page Manager** — drag-and-drop visual page reorder, rotate, delete
-  (`src/views/pdf-page-manager.js`)
-- **Watermark** — text or image overlay, configurable opacity/rotation/position
-- **Metadata** — view and edit title/author/subject/keywords etc.
-- **Insert Blank Pages** — at any position, any standard page size
-- **Crop** — set margins via numeric inputs
-- **PDF ⇄ Images** — export pages to PNG/JPEG, or build a PDF from images
+#### PDF Tools — Sign
+New "Sign" operation applies a real cryptographic PAdES/PKCS#7 signature
+using the user's own existing certificate (`.p12`/`.pfx`, e.g. from a
+university or national eID) — no self-signed certificate option, by design.
 
-#### OCR — make scanned PDFs searchable
-Adds an invisible, selectable text layer over scanned pages without changing
-how they look (English only for now, fully offline). The renderer pre-renders
-each page to PNG via pdf.js; the main process runs Tesseract.js and overlays
-recognized words with `pdf-lib` (`drawText(..., { opacity: 0 })`), sized to
-match the original word's width for natural text selection. Trained data is
-bundled as a gzipped ~1.9MB file at `resources/tessdata/eng.traineddata.gz`.
-electron-builder excludes the unused tesseract.js browser bundles and
-SIMD/LSTM wasm variants (~37MB) to keep the installer size down.
+- **Certificate import**: file picker for `.p12`/`.pfx`; only the file path
+  is remembered between sessions (`pdfSignCertPath` in the store), the
+  password is never stored.
+- **Verify button**: reads the cert via `node-forge`
+  (`forge.pkcs12.pkcs12FromAsn1`), shows signer CN, issuer, validity dates,
+  and an expiry warning, before signing.
+- **Optional metadata**: Reason / Location / Contact Info, embedded in the
+  signature.
+- **Optional visible stamp**: a small "Digitally signed by..." info box on
+  the first or last page (user toggle, off by default).
+- **Signing pipeline** (`main.js`): `pdf-lib` loads the PDF
+  (`useObjectStreams: false` is required for the placeholder byte-range
+  mechanism), `@signpdf/placeholder-pdf-lib` adds the signature placeholder
+  (`signatureLength: 16384` for headroom with larger cert chains),
+  `@signpdf/signer-p12`'s `P12Signer` + `@signpdf/signpdf` produce the
+  detached PKCS#7 signature.
+- New deps: `@signpdf/signpdf`, `@signpdf/signer-p12`,
+  `@signpdf/placeholder-pdf-lib`, `node-forge` (all MIT/BSD-3-Clause, free).
+- Note: pdf-lib's WinAnsi standard-font encoding can't render `✓` — stamp
+  text uses plain ASCII only.
