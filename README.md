@@ -20,7 +20,7 @@ All data stays on your device. No account required. No API keys needed.
 - 👥 **Contacts** — Your academic network and collaborators
 
 ### Tools
-- 📄 **PDF Tools** — Merge, split, rotate and process PDF files
+- 📄 **PDF Tools** — Merge, split, rotate, watermark, crop, OCR and more
 - ✏️ **Citations** — Format references and count words
 - ⚗️ **Unit Converter** — Convert scientific units with history
 - 📊 **R Assistant** — Step-by-step guide to R statistical tests
@@ -34,13 +34,13 @@ All data stays on your device. No account required. No API keys needed.
 
 ## 📥 Installation
 
-1. Download **PhDFlow Setup 0.23.7.exe** from the [latest release](../../releases/latest) and run it
+1. Download **PhDFlow Setup 0.24.0.exe** from the [latest release](../../releases/latest) and run it
 2. Create your account on first launch — everything stays on your device
 
 > Windows SmartScreen may warn on first run — click **More info → Run anyway**
 
 ### Portable version
-**PhDFlow-Portable-0.23.7.exe** — runs without installing, useful for USB drives or restricted machines.
+**PhDFlow-Portable-0.24.0.exe** — runs without installing, useful for USB drives or restricted machines.
 
 ---
 
@@ -69,7 +69,10 @@ npm run build          # Produces dist/PhDFlow-Setup-x.x.x.exe
 
 ## 📋 Changelog
 
-### v0.23.7
+### v0.24.0
+- feat: utilities +1 views, app shell, config
+- fix: PDF reader fails to load local PDFs ("Unexpected server response (0)")
+- chore: bump to v0.23.7
 - fix: make whiteboard toolbar wrap seamlessly at any window size
 - chore: bump to v0.23.6
 - fix: keep whiteboard action buttons visible when window is narrow
