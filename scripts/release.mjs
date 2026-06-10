@@ -95,10 +95,12 @@ async function uploadAsset(uploadUrl, filePath, token) {
   console.log(`  ✓  ${name} uploaded`)
 }
 
-function gitLogSinceLastTag() {
+function gitLogSinceLastTag(oldVersion) {
+  // GitHub releases create tags remotely; fetch them so the local repo
+  // knows about the previous release's tag too.
+  try { run('git fetch --tags', { silent: true }) } catch {}
   try {
-    const lastTag = run('git describe --tags --abbrev=0', { silent: true })
-    const log = run(`git log ${lastTag}..HEAD --pretty=format:"- %s" --no-merges`, { silent: true })
+    const log = run(`git log v${oldVersion}..HEAD --pretty=format:"- %s" --no-merges`, { silent: true })
     return log || '- Minor improvements and bug fixes'
   } catch {
     return '- Initial release'
@@ -234,14 +236,14 @@ The only outbound connections are:
     .split('\n').filter(l => l && !l.startsWith('??')).join('\n')
   if (dirty) { console.error('✗ Working tree has uncommitted changes. Run `node scripts/push.mjs` first.\n' + dirty); process.exit(1) }
 
-  // 3. Collect changelog before bumping
-  const changelog = gitLogSinceLastTag()
-
-  // 4. Bump version
+  // 3. Read current version
   const pkg        = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf-8'))
   const oldVersion = pkg.version
   const newVersion = bumpVersion(oldVersion, bumpType)
   console.log(`\n📦  ${oldVersion}  →  ${newVersion}  (${bumpType})`)
+
+  // 4. Collect changelog since the last release tag
+  const changelog = gitLogSinceLastTag(oldVersion)
 
   pkg.version = newVersion
   writeFileSync(join(ROOT, 'package.json'), JSON.stringify(pkg, null, 2) + '\n', 'utf-8')
