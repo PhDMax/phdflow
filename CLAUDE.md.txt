@@ -1,29 +1,51 @@
-## Session summary — v0.24.2 (June 2026)
+## Session summary — v0.25.0 (June 2026)
 
 ### Released
-PhDFlow v0.24.2 — release script fix (changelog generation).
+PhDFlow v0.25.0 — personalization features.
 
 ### Changes this session
 
-#### Fixed: release notes included entire project history
-`scripts/release.mjs`'s `gitLogSinceLastTag()` used
-`git describe --tags --abbrev=0` to find the previous version's tag. GitHub
-releases create tags **remotely** via the API, but the local repo never ran
-`git fetch --tags`, so its newest known tag was stale (`v0.9.0`). The
-resulting "Changes" section in the v0.24.1 release notes pulled in ~15
-versions of history instead of just the one commit since v0.24.0.
+#### Added: six personalization features
+1. **Interface Density** — Settings → Personalize → Interface Density lets
+   users pick Compact, Comfortable (default), or Spacious layout. Sets
+   `document.documentElement.dataset.density`, used by CSS to adjust
+   spacing/padding throughout the app.
+2. **Custom Accent Colour** — alongside the six built-in themes, a new
+   "Custom" swatch opens a colour picker. `_genPalette(hex)` derives a full
+   Tailwind-style shade scale from any chosen colour and injects it via a
+   `<style id="ph-accent-style">` block, overriding `.bg-indigo-*`,
+   `.text-indigo-*`, `.border-indigo-*`, `.nav-btn.active`,
+   `.accent-indigo-600`, and `#dash-fab-btn` with `!important`.
+3. **Per-Project Icons** — the project create/edit modal now has an emoji
+   icon picker (`pmSetIcon`); the chosen icon is saved on the project and
+   shown on project cards and the project detail header.
+4. **Favorites Quick-Access Bar** — in the sidebar tool picker (opened from
+   Settings), each tool card has a ☆ star (`_toggleFavoriteStar`) that pins
+   it to a new "⭐ Favorites" section at the top of the sidebar
+   (`state.favoriteTools`).
+5. **Research Area field presets** — Settings → Personalize → Research Area
+   lets users pick their field (Lab Sciences, Humanities, Social Sciences,
+   CS & Engineering, Other) and click "Apply suggested setup"
+   (`_doApplyFieldPreset`) to configure sidebar tools, dashboard widgets,
+   unit-converter category, and tool packs in one step (`_FIELD_PRESETS`).
+   Fully reversible via the standard undo toast.
+6. **Specialty Tool Packs / Lab Tools** — Settings → Personalize → Specialty
+   Tool Packs gates optional tool sets behind `state.enabledPacks`
+   (`_PACK_TOOLS`/`_TOOL_PACKS`/`_availableTools()`). The first pack, "Lab
+   Tools" (new `src/views/lab_tools.js`), adds a sidebar view with three
+   wet-lab calculators: Dilution (C₁V₁=C₂V₂), Molar Mass (formula parser
+   with parentheses/brackets and hydrate notation, elements H–U), and
+   Solution Prep (mass needed for a target molarity/volume).
 
-Fixed by having `gitLogSinceLastTag(oldVersion)`:
-1. Run `git fetch --tags` first, so newly-created remote tags are visible
-   locally.
-2. Diff directly against `v${oldVersion}` (read from `package.json` before
-   bumping) instead of relying on `git describe`.
+All six features were verified end-to-end via Playwright in both light and
+dark themes (31 screenshots), including numeric checks of the lab
+calculators (e.g. CuSO4·5H2O = 249.677 g/mol). No console/page errors in
+real usage paths.
 
-The v0.24.1 release notes were also corrected via the GitHub API
-(`PATCH /releases/{id}`). Verified the fix on this v0.24.2 release — the
-changelog now correctly shows only the commits since v0.24.1.
+Wiki updated: `Settings-and-Vault.md` (Personalize section), `Projects.md`
+(icon field), `Home.md` (new Lab Tools row), and new page `Lab-Tools.md`.
 
-### Standard release process (now five steps + verification)
+### Standard release process (six steps + verification)
 1. `node scripts/release.mjs [patch|minor|major]`
 2. Update wiki pages for any new/changed views
 3. `node scripts/wiki-push.mjs`
