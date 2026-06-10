@@ -1897,7 +1897,11 @@ ipcMain.handle('updater-install', () => {
 // ─── IPC: Calendar ICS Fetch ─────────────────────────────────────────────────
 ipcMain.handle('fetch-ics', async (_, url) => {
   try {
-    const r = await fetch(url, {
+    // Calendar apps (Apple iCloud, etc.) often hand out "webcal://" / "webcals://"
+    // subscription links — those aren't valid fetch() schemes, but they're just
+    // shorthand for http(s):// serving the same .ics file.
+    const fetchUrl = String(url).trim().replace(/^webcals?:\/\//i, 'https://')
+    const r = await fetch(fetchUrl, {
       headers: { 'User-Agent': 'PhD-Command-Center/0.3', 'Accept': 'text/calendar,text/plain,*/*' },
       redirect: 'follow',
       signal: AbortSignal.timeout(15000)
