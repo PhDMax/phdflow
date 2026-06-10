@@ -95,6 +95,27 @@
     html[data-theme="dark"] .badge-none{background:#1e293b;color:#94a3b8}
     html[data-theme="dark"] .drop-zone{border-color:#334155 !important;background:#1e293b !important}
     html[data-theme="dark"] ::-webkit-scrollbar-thumb{background:#334155}
+    /* ── Global button/label classes (defined in projects.js, injected once) ── */
+    html[data-theme="dark"] .btn-secondary{background:#1e293b !important;color:#cbd5e1 !important;border-color:#475569 !important}
+    html[data-theme="dark"] .btn-secondary:hover{background:#334155 !important}
+    html[data-theme="dark"] .btn-danger{background:#1e293b !important;color:#f87171 !important;border-color:#7f1d1d !important}
+    html[data-theme="dark"] .btn-danger:hover{background:#3f1d1d !important}
+    html[data-theme="dark"] .label{color:#94a3b8 !important}
+    /* ── Calendar overflow/empty day cells ───────────────────────────────── */
+    html[data-theme="dark"] .bg-slate-50\/30{background-color:rgba(15,23,42,.5) !important}
+    html[data-theme="dark"] .bg-slate-50\/60{background-color:rgba(15,23,42,.8) !important}
+    /* ── Whiteboard canvas background (avoid bright white in dark mode) ─────── */
+    html[data-theme="dark"] #wb-container[data-bg="white"]{background:#1e293b !important}
+    html[data-theme="dark"] #wb-container[data-bg="dots"]{
+      background:#0f172a !important;
+      background-image:radial-gradient(circle,#334155 1px,transparent 1px) !important;
+      background-size:24px 24px !important;
+    }
+    html[data-theme="dark"] #wb-container[data-bg="grid"]{
+      background:#0f172a !important;
+      background-image:linear-gradient(#1e293b 1px,transparent 1px),linear-gradient(90deg,#1e293b 1px,transparent 1px) !important;
+      background-size:24px 24px !important;
+    }
     /* ── Global search overlay (uses inline styles, needs ID-based overrides) ── */
     html[data-theme="dark"] #gsearch-overlay > div{background:#1e293b !important}
     html[data-theme="dark"] #gsearch-overlay > div > div:first-child{border-bottom-color:#334155 !important}

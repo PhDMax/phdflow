@@ -802,6 +802,97 @@ ipcMain.handle('crop-pdf', async (_, filepath, dest, opts = {}) => {
   } catch(e) { return { success: false, error: e.message } }
 })
 
+// ── Digital signatures (PAdES, via user-supplied .p12/.pfx certificate) ────────
+ipcMain.handle('open-cert-dialog', async () => {
+  const r = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    filters: [{ name: 'Certificate files', extensions: ['p12','pfx'] }]
+  })
+  return r.canceled ? [] : r.filePaths
+})
+
+function _loadP12Cert(certPath, password) {
+  const forge = require('node-forge')
+  const der  = fs.readFileSync(certPath, 'binary')
+  const asn1 = forge.asn1.fromDer(der)
+  const p12  = forge.pkcs12.pkcs12FromAsn1(asn1, password || '')
+  const certBags = p12.getBags({ bagType: forge.pki.oids.certBag })[forge.pki.oids.certBag] || []
+  if (!certBags.length) throw new Error('No certificate found in this file')
+  return certBags[0].cert
+}
+
+ipcMain.handle('read-p12-info', async (_, certPath, password) => {
+  try {
+    const cert = _loadP12Cert(certPath, password)
+    const cn = (cert.subject.getField('CN') || {}).value
+      || cert.subject.attributes.map(a => `${a.shortName}=${a.value}`).join(', ')
+    const issuerCn = (cert.issuer.getField('CN') || {}).value || ''
+    return {
+      success: true,
+      commonName: cn,
+      issuer: issuerCn,
+      validFrom: cert.validity.notBefore.toISOString(),
+      validTo: cert.validity.notAfter.toISOString(),
+      expired: cert.validity.notAfter.getTime() < Date.now(),
+    }
+  } catch(e) { return { success: false, error: e.message } }
+})
+
+ipcMain.handle('sign-pdf', async (_, filepath, dest, opts = {}) => {
+  try {
+    const { PDFDocument, StandardFonts, rgb } = require('pdf-lib')
+    const { pdflibAddPlaceholder } = require('@signpdf/placeholder-pdf-lib')
+    const { P12Signer } = require('@signpdf/signer-p12')
+    const signpdf = require('@signpdf/signpdf').default
+
+    const {
+      certPath, password = '',
+      reason = '', location = '', contactInfo = '',
+      stamp = false, stampPage = 'last',
+    } = opts
+
+    const certBuffer = fs.readFileSync(certPath)
+
+    let signerName = 'Digitally signed'
+    try {
+      const cn = (_loadP12Cert(certPath, password).subject.getField('CN') || {}).value
+      if (cn) signerName = cn
+    } catch {}
+
+    const pdfDoc = await PDFDocument.load(fs.readFileSync(filepath))
+
+    if (stamp) {
+      const pages = pdfDoc.getPages()
+      const page = stampPage === 'first' ? pages[0] : pages[pages.length - 1]
+      const font     = await pdfDoc.embedFont(StandardFonts.Helvetica)
+      const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
+      const { width } = page.getSize()
+      const lines = [`Digitally signed by ${signerName}`, new Date().toLocaleString()]
+      if (reason)   lines.push(`Reason: ${reason}`)
+      if (location) lines.push(`Location: ${location}`)
+      const boxW = 240, lineH = 12, pad = 8
+      const boxH = pad * 2 + lines.length * lineH
+      const x = width - boxW - 24, y = 24
+      page.drawRectangle({ x, y, width: boxW, height: boxH, borderColor: rgb(0.6,0.6,0.6), borderWidth: 1, color: rgb(0.97,0.97,0.97), opacity: 0.95 })
+      lines.forEach((line, i) => {
+        page.drawText(line, {
+          x: x + pad, y: y + boxH - pad - (i + 1) * lineH + 2,
+          size: 8, font: i === 0 ? boldFont : font, color: rgb(0.2,0.2,0.2),
+        })
+      })
+    }
+
+    pdflibAddPlaceholder({ pdfDoc, reason, contactInfo, name: signerName, location, signatureLength: 16384 })
+
+    const pdfBytes = Buffer.from(await pdfDoc.save({ useObjectStreams: false }))
+    const signer = new P12Signer(certBuffer, { passphrase: password })
+    const signedPdf = await signpdf.sign(pdfBytes, signer)
+
+    fs.writeFileSync(dest, signedPdf)
+    return { success: true, dest, signedBy: signerName }
+  } catch(e) { return { success: false, error: e.message } }
+})
+
 ipcMain.handle('images-to-pdf', async (_, paths, dest) => {
   try {
     const { PDFDocument } = require('pdf-lib')

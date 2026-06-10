@@ -5,6 +5,7 @@ let _utilCitPaper = null
 let _utilUnitCat  = 'length'
 let _rStep        = []
 let _rResult      = null
+let _utilSignCertPath = ''
 
 // ── Shared history engine ─────────────────────────────────────────────────────
 const _toolHist = { pdf: null, cit: null, units: null, r: null }
@@ -117,6 +118,13 @@ function render_pdf_tools() {
     </div>
   </div>`
   _loadToolHist('pdf').then(() => _refreshHistPanel('pdf'))
+  api.storeGet('pdfSignCertPath').then(p => {
+    _utilSignCertPath = p || ''
+    if (_utilPdfOp === 'sign') {
+      const el = document.getElementById('pdf-tool-area')
+      if (el) el.innerHTML = _utilRenderPdf()
+    }
+  })
 }
 
 // ── 2. Citations ──────────────────────────────────────────────────────────────
@@ -189,6 +197,7 @@ const PDF_OPS = [
   { id:'crop',      icon:'🔲', label:'Crop',         desc:'Trim margins from pages'                       },
   { id:'images',    icon:'🖼', label:'PDF ⇄ Images', desc:'Export pages as PNGs or build a PDF from images' },
   { id:'ocr',       icon:'🔍', label:'OCR',          desc:'Make a scanned PDF searchable'                  },
+  { id:'sign',      icon:'🖊', label:'Sign',         desc:'Apply a digital signature with your certificate' },
 ]
 
 function _utilRenderPdf() {
@@ -657,6 +666,73 @@ function _utilPdfOpForm() {
         </div>
       </div>`
 
+    case 'sign': return `
+      <h4 class="font-semibold text-slate-800 mb-1">🖊 Sign PDF</h4>
+      <p class="text-xs text-slate-500 mb-4">Embeds a real cryptographic signature (PAdES) using your own certificate — verifiable in any PDF reader, and legally meaningful if your certificate was issued by a trusted authority (e.g. your university or national eID).</p>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Source PDF</label>
+          <button onclick="utilPickPdf('sign-src')" class="w-full text-left px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:border-indigo-300 transition-colors">
+            <span id="sign-src-lbl">Click to select PDF…</span>
+          </button>
+          <input type="hidden" id="sign-src"/>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Your certificate  <span class="text-slate-400 font-normal">(.p12 / .pfx)</span></label>
+          <button onclick="utilPickCert()" class="w-full text-left px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:border-indigo-300 transition-colors">
+            <span id="sign-cert-lbl">${_utilSignCertPath ? esc(_utilSignCertPath.split('\\').pop()) : 'Click to select certificate…'}</span>
+          </button>
+          <input type="hidden" id="sign-cert" value="${esc(_utilSignCertPath)}"/>
+          <p class="text-xs text-slate-400 mt-1">Remembered for next time — only the file path is stored, never the password.</p>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Certificate password</label>
+          <div class="flex gap-2">
+            <input id="sign-pw" type="password" placeholder="Password for the certificate file"
+              class="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+            <button onclick="utilVerifyCert()" class="px-3 py-2 border border-slate-200 rounded-lg text-xs font-medium text-slate-600 hover:border-indigo-300 transition-colors whitespace-nowrap">Verify</button>
+          </div>
+        </div>
+        <div id="sign-cert-info"></div>
+        <details class="group">
+          <summary class="text-xs font-medium text-slate-600 cursor-pointer select-none">Signature details (optional)</summary>
+          <div class="space-y-3 mt-3">
+            <div class="flex gap-3">
+              <div class="flex-1">
+                <label class="block text-xs font-medium text-slate-600 mb-1">Reason</label>
+                <input id="sign-reason" type="text" placeholder="e.g. I approve this document"
+                  class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+              </div>
+              <div class="flex-1">
+                <label class="block text-xs font-medium text-slate-600 mb-1">Location</label>
+                <input id="sign-location" type="text" placeholder="e.g. Munich, Germany"
+                  class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Contact info</label>
+              <input id="sign-contact" type="text" placeholder="e.g. your email address"
+                class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+            </div>
+          </div>
+        </details>
+        <label class="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+          <input type="checkbox" id="sign-stamp" class="accent-indigo-600" onchange="document.getElementById('sign-stamp-opts').classList.toggle('hidden', !this.checked)"/>
+          Also add a visible "Digitally signed by…" stamp on the page
+        </label>
+        <div id="sign-stamp-opts" class="hidden">
+          <label class="block text-xs font-medium text-slate-600 mb-1">Stamp position</label>
+          <select id="sign-stamp-page" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+            <option value="last" selected>Bottom-right of last page</option>
+            <option value="first">Bottom-right of first page</option>
+          </select>
+        </div>
+        <button id="sign-run-btn" onclick="utilSignPdf()"
+          class="w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50">
+          🖊 Sign & Save…
+        </button>
+      </div>`
+
     default: return ''
   }
 }
@@ -1017,6 +1093,69 @@ async function utilRunOcr() {
     if (wrap) wrap.classList.add('hidden')
     window._ocrProgressUpdate = null
   }
+}
+
+async function utilPickCert() {
+  const paths = await api.openCertDialog()
+  if (!paths?.length) return
+  _utilSignCertPath = paths[0]
+  await api.storeSet('pdfSignCertPath', _utilSignCertPath)
+  document.getElementById('sign-cert').value = _utilSignCertPath
+  document.getElementById('sign-cert-lbl').textContent = _utilSignCertPath.split('\\').pop()
+  document.getElementById('sign-cert-info').innerHTML = ''
+}
+
+async function utilVerifyCert() {
+  const certPath = document.getElementById('sign-cert')?.value
+  const info = document.getElementById('sign-cert-info')
+  if (!certPath) { showToast('Select your certificate file first', 'error'); return }
+  const password = document.getElementById('sign-pw')?.value || ''
+  info.innerHTML = `<p class="text-xs text-slate-400">Checking certificate…</p>`
+  const r = await api.readP12Info(certPath, password)
+  if (!r.success) {
+    info.innerHTML = `<div class="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg p-2.5">⚠ ${esc(r.error)}</div>`
+    return
+  }
+  const validTo = new Date(r.validTo).toLocaleDateString()
+  const cls = r.expired ? 'text-red-600 bg-red-50 border-red-200' : 'text-emerald-700 bg-emerald-50 border-emerald-200'
+  info.innerHTML = `<div class="text-xs ${cls} border rounded-lg p-2.5 space-y-0.5">
+    <div>${r.expired ? '⚠ This certificate has expired' : '✓ Certificate read successfully'}</div>
+    <div class="text-slate-600">Signer: <strong>${esc(r.commonName)}</strong></div>
+    <div class="text-slate-600">Issued by: ${esc(r.issuer)}</div>
+    <div class="text-slate-600">Valid until: ${validTo}</div>
+  </div>`
+}
+
+async function utilSignPdf() {
+  const fp = document.getElementById('sign-src')?.value
+  if (!fp) { showToast('Select a source PDF first', 'error'); return }
+  const certPath = document.getElementById('sign-cert')?.value
+  if (!certPath) { showToast('Select your certificate (.p12/.pfx) first', 'error'); return }
+  const password = document.getElementById('sign-pw')?.value || ''
+
+  const opts = {
+    certPath, password,
+    reason:      document.getElementById('sign-reason')?.value?.trim()   || '',
+    location:    document.getElementById('sign-location')?.value?.trim() || '',
+    contactInfo: document.getElementById('sign-contact')?.value?.trim()  || '',
+    stamp:       document.getElementById('sign-stamp')?.checked || false,
+    stampPage:   document.getElementById('sign-stamp-page')?.value || 'last',
+  }
+
+  const dest = await api.openSaveDialog({ title:'Save signed PDF', defaultPath: fp.replace(/\.pdf$/i,'_signed.pdf'), filters:[{name:'PDF',extensions:['pdf']}] })
+  if (!dest) return
+
+  const btn = document.getElementById('sign-run-btn')
+  if (btn) { btn.disabled = true; btn.textContent = '🖊 Signing…' }
+  const r = await api.signPdf(fp, dest, opts)
+  if (btn) { btn.disabled = false; btn.textContent = '🖊 Sign & Save…' }
+
+  if (r.success) {
+    showToast(`Signed by ${r.signedBy} ✓`)
+    _pushToolHist('pdf', { op:'sign', label:`Signed ${fp.split('\\').pop()} as ${r.signedBy}`, file: fp.split('\\').pop(), dest })
+    const pw = document.getElementById('sign-pw')
+    if (pw) pw.value = ''
+  } else showToast('Signing failed: '+r.error, 'error')
 }
 
 // ══ TEXT & CITATIONS ══════════════════════════════════════════════════════════

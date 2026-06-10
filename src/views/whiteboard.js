@@ -315,7 +315,7 @@ function render_whiteboard() {
     </div>
 
     <!-- Canvas area -->
-    <div id="wb-container" class="flex-1 relative overflow-hidden select-none" style="${WB_BG[_wbBg]||WB_BG.dots}">
+    <div id="wb-container" data-bg="${_wbBg}" class="flex-1 relative overflow-hidden select-none" style="${WB_BG[_wbBg]||WB_BG.dots}">
       <canvas id="wb-canvas" class="absolute inset-0"
         style="cursor:${_wbTool==='text'?'text':_wbTool==='select'?'default':_wbTool==='erase'?'none':'crosshair'}"></canvas>
       <div id="wb-hint" class="absolute bottom-3 left-1/2 -translate-x-1/2 text-xs text-slate-400 pointer-events-none select-none">
@@ -1419,7 +1419,10 @@ function _wbUpdateToolbar() {
     _wbCanvas.style.cursor = _wbTool==='text'?'text':_wbTool==='select'?'default':_wbTool==='erase'?'none':'crosshair'
   }
   const container = document.getElementById('wb-container')
-  if (container) container.setAttribute('style', WB_BG[_wbBg]||WB_BG.dots)
+  if (container) {
+    container.setAttribute('style', WB_BG[_wbBg]||WB_BG.dots)
+    container.dataset.bg = _wbBg
+  }
 }
 
 // ── Board Management ──────────────────────────────────────────────────────────

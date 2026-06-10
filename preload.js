@@ -47,6 +47,9 @@ contextBridge.exposeInMainWorld('api', {
   openFolderDialog:  (opts)              => ipcRenderer.invoke('open-folder-dialog', opts),
   ocrPdf:            (fp, dest, pages)   => ipcRenderer.invoke('ocr-pdf', fp, dest, pages),
   onOcrProgress:     (cb)                => ipcRenderer.on('ocr-progress', (_, d) => cb(d)),
+  openCertDialog:    ()                  => ipcRenderer.invoke('open-cert-dialog'),
+  readP12Info:       (certPath, pw)      => ipcRenderer.invoke('read-p12-info', certPath, pw),
+  signPdf:           (fp, dest, opts)    => ipcRenderer.invoke('sign-pdf', fp, dest, opts),
 
   // ── Research APIs ─────────────────────────────────────────────────────────
   searchResearchers:     (opts)              => ipcRenderer.invoke('search-researchers', opts),
