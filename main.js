@@ -31,6 +31,9 @@ autoUpdater.on('error',                (err) => _sendUpdate('error',       { mes
 // Single-instance lock — if a second instance launches, focus the existing window
 if (!app.requestSingleInstanceLock()) { app.quit() }
 
+// Isolated userData dir for automated tests — must be set before app is ready
+if (process.env.PHDFLOW_USER_DATA_DIR) app.setPath('userData', process.env.PHDFLOW_USER_DATA_DIR)
+
 let mainWindow
 let tray = null
 let _quitting = false

@@ -7,7 +7,9 @@
     "start": "electron .",
     "dev": "electron . --inspect",
     "build:css": "npx @tailwindcss/cli -i src/input.css -o src/tailwind.out.css --minify",
-    "build": "npm run build:css && electron-builder --win"
+    "build": "npm run build:css && electron-builder --win",
+    "test": "playwright test",
+    "agents": "python agents\\phdflow_agents.py"
   },
   "dependencies": {
     "@signpdf/placeholder-pdf-lib": "^3.3.0",
@@ -26,6 +28,7 @@
   "author": "PhDFlow",
   "license": "MIT",
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@tailwindcss/cli": "^4.3.0",
     "electron": "^35.0.0",
     "electron-builder": "^26.8.1",
