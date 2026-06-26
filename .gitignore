@@ -41,3 +41,9 @@ bmac-banner.png
 scripts/_publish-now.mjs
 scripts/make-banner.mjs
 scripts/make-icons.mjs
+
+# Playwright runtime output
+test-results/
+
+# Agent session outputs
+agents/sessions/
