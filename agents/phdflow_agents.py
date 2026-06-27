@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 PhDFlow Dev Agents — multi-agent AI sessions for development assistance.
-Powered by Odysseus (running at http://127.0.0.1:7001 — start PhDFlow first).
+Powered by Ollama (local, free, no API key needed).
+Requires: ollama running + qwen2.5-coder:7b pulled.
 
 Usage:
   python agents\\phdflow_agents.py brainstorm "better citation export from library"
@@ -13,7 +14,7 @@ Usage:
   python agents\\phdflow_agents.py help
 """
 
-import sys, json, urllib.request, urllib.parse, urllib.error
+import sys, json, urllib.request, urllib.error
 import datetime, os, textwrap, time
 
 # Force UTF-8 output on Windows terminals that default to cp1252
@@ -22,8 +23,8 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-ODYSSEUS_URL  = "http://127.0.0.1:7001"
-AGENT_MODEL   = "nvidia/nemotron-3-nano-30b-a3b:free"  # free, change to taste
+OLLAMA_URL  = "http://localhost:11434"
+AGENT_MODEL = "qwen2.5-coder:7b"
 
 # ── Terminal colours ──────────────────────────────────────────────────────────
 
@@ -109,7 +110,6 @@ def _box(color, name, text):
     bot   = "└" + "─" * (width + 1) + "┘"
     lines = []
     for raw in text.strip().splitlines():
-        # soft-wrap long lines
         for chunk in textwrap.wrap(raw, width - 2) or [""]:
             lines.append(f"│ {chunk:<{width - 2}} │")
     print(f"\n{BOLD}{color}{top}{RESET}")
@@ -119,76 +119,45 @@ def _box(color, name, text):
     time.sleep(0.1)
 
 
-# ── Odysseus HTTP helpers ─────────────────────────────────────────────────────
+# ── Ollama API helpers ────────────────────────────────────────────────────────
 
-def _http(path, data, json_body=False, timeout=120, _retries=3):
-    url = ODYSSEUS_URL + path
-    if json_body:
-        body = json.dumps(data).encode()
-        req  = urllib.request.Request(url, data=body,
-                                      headers={"Content-Type": "application/json"})
-    else:
-        body = urllib.parse.urlencode(data).encode()
-        req  = urllib.request.Request(url, data=body,
-                                      headers={"Content-Type": "application/x-www-form-urlencoded"})
-    for attempt in range(_retries):
-        try:
-            with urllib.request.urlopen(req, timeout=timeout) as r:
-                return json.loads(r.read())
-        except urllib.error.HTTPError as e:
-            body = e.read().decode("utf-8", errors="replace")
-            if e.code in (429, 500, 503) and attempt < _retries - 1:
-                wait = 30 * (attempt + 1)
-                print(f"{DIM}  [{e.code}] Rate limited — waiting {wait}s before retry {attempt + 2}/{_retries}…{RESET}", flush=True)
-                time.sleep(wait)
-                continue
-            raise RuntimeError(f"HTTP {e.code} {e.reason}: {body[:500]}") from None
-
-
-def _get(path, timeout=10):
-    with urllib.request.urlopen(ODYSSEUS_URL + path, timeout=timeout) as r:
-        return json.loads(r.read())
-
-
-_cached_endpoint_id = None
-
-def _get_endpoint_id():
-    global _cached_endpoint_id
-    if _cached_endpoint_id:
-        return _cached_endpoint_id
-    endpoints = _get("/api/model-endpoints")
-    if not endpoints:
-        raise RuntimeError(
-            "No model endpoints in Odysseus.\n"
-            "Open PhDFlow → Settings → App → AI Engine → Add endpoint."
-        )
-    _cached_endpoint_id = endpoints[0]["id"]
-    return _cached_endpoint_id
-
-
-def _new_session(label="agent"):
-    return _http("/api/session",
-                 {"name": f"phdflow-agents:{label}",
-                  "endpoint_id": _get_endpoint_id(),
-                  "model": AGENT_MODEL},
-                 json_body=False)["id"]
-
-
-def _delete_session(sid):
+def _chat_ollama(system_prompt, user_message, timeout=600):
+    """Call Ollama's OpenAI-compatible /v1/chat/completions endpoint."""
+    payload = json.dumps({
+        "model": AGENT_MODEL,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user",   "content": user_message},
+        ],
+        "stream": False,
+        "options": {"num_ctx": 8192},
+    }).encode()
+    req = urllib.request.Request(
+        OLLAMA_URL + "/v1/chat/completions",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+    )
     try:
-        _http(f"/api/session/{sid}/delete", {}, json_body=False)
-    except Exception:
-        pass
-
-
-def _chat(sid, message):
-    result = _http("/api/chat", {"message": message, "session": sid}, json_body=True)
-    return (result.get("response") or result.get("message") or str(result)).strip()
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            result = json.loads(r.read())
+            return result["choices"][0]["message"]["content"].strip()
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Ollama HTTP {e.code}: {body[:500]}") from None
 
 
 def _ping():
+    """Return True if Ollama is reachable and has the required model."""
     try:
-        with urllib.request.urlopen(ODYSSEUS_URL + "/api/sessions", timeout=4):
+        with urllib.request.urlopen(OLLAMA_URL + "/api/tags", timeout=4) as r:
+            data = json.loads(r.read())
+            models = [m["name"] for m in data.get("models", [])]
+            if not any(AGENT_MODEL in m for m in models):
+                print(
+                    f"\n⚠️   Model '{AGENT_MODEL}' not found in Ollama.\n"
+                    f"    Pull it with:  ollama pull {AGENT_MODEL}\n"
+                )
+                return False
             return True
     except Exception:
         return False
@@ -196,7 +165,7 @@ def _ping():
 
 # ── Review input helpers ──────────────────────────────────────────────────────
 
-MAX_DIFF_CHARS = 4_000  # keep within free-tier token-per-minute limits
+MAX_DIFF_CHARS = 12_000
 
 def _maybe_truncate(text):
     if len(text) > MAX_DIFF_CHARS:
@@ -235,25 +204,21 @@ def _read_change(extra_args):
 
 def call_agent(key, history, task):
     """
-    Send one agent turn to Odysseus.
+    Run one agent turn via Ollama.
     history: list of {"agent": name, "text": response}
     task:    specific instruction for this turn
     Returns the agent's response text.
     """
     agent = AGENTS[key]
-    sid   = _new_session(key)
-    try:
-        parts = [agent["system"]]
-        if history:
-            parts.append("\n\n=== CONVERSATION SO FAR ===")
-            for turn in history:
-                parts.append(f"\n[{turn['agent']}]:\n{turn['text']}")
-            parts.append("\n=== END OF CONVERSATION ===")
-        parts.append(f"\n\nYOUR TASK:\n{task}")
-        parts.append("\n\nRespond now in your assigned role:")
-        return _chat(sid, "\n".join(parts))
-    finally:
-        _delete_session(sid)
+    parts = []
+    if history:
+        parts.append("=== CONVERSATION SO FAR ===")
+        for turn in history:
+            parts.append(f"\n[{turn['agent']}]:\n{turn['text']}")
+        parts.append("\n=== END OF CONVERSATION ===\n")
+    parts.append(f"YOUR TASK:\n{task}")
+    parts.append("\nRespond now in your assigned role:")
+    return _chat_ollama(agent["system"], "\n".join(parts))
 
 
 # ── Workflows ─────────────────────────────────────────────────────────────────
@@ -329,7 +294,7 @@ def run_test_gen(feature):
 
 
 def run_review(change):
-    title = change[:70].replace("\n", " ")
+    title    = change[:70].replace("\n", " ")
     ellipsis = "…" if len(change) > 70 else ""
     print(f"\n{BOLD}🔎  REVIEW — {title}{ellipsis}{RESET}")
     print(f"{DIM}  Agents: Developer → Bug Hunter → QA Tester{RESET}\n")
@@ -390,7 +355,12 @@ def save_session(workflow, topic, history):
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 HELP = f"""
-{BOLD}PhDFlow Dev Agents{RESET}  (Odysseus at {ODYSSEUS_URL})
+{BOLD}PhDFlow Dev Agents{RESET}  (Ollama local — {OLLAMA_URL}, model: {AGENT_MODEL})
+
+{BOLD}SETUP:{RESET}
+  1. Install Ollama: https://ollama.com
+  2. Pull the model:  ollama pull {AGENT_MODEL}
+  3. Ollama starts automatically — no extra steps needed.
 
 {BOLD}USAGE:{RESET}
   python agents\\phdflow_agents.py <workflow> [input]
@@ -411,7 +381,6 @@ HELP = f"""
   python agents\\phdflow_agents.py review --file my.diff
 
 Sessions are saved to agents\\sessions\\ as markdown files.
-Odysseus must be running — start PhDFlow first.
 """
 
 
@@ -429,7 +398,6 @@ def main():
         print(HELP)
         sys.exit(1)
 
-    # review resolves input from stdin / --file / text; others just join args
     if workflow == "review":
         topic, _ = _read_change(extra_args)
     else:
@@ -439,16 +407,15 @@ def main():
             print(HELP)
             sys.exit(1)
 
-    # Gate: Odysseus must be up
-    print(f"{DIM}Checking Odysseus at {ODYSSEUS_URL}…{RESET}", flush=True)
+    print(f"{DIM}Checking Ollama at {OLLAMA_URL}…{RESET}", flush=True)
     if not _ping():
         print(
-            f"\n❌  Odysseus is not reachable at {ODYSSEUS_URL}.\n"
-            f"    Open PhDFlow and wait for the green dot in the sidebar\n"
-            f"    (or Settings → App → AI Engine → Start Managed Engine).\n"
+            f"\n❌  Ollama is not reachable at {OLLAMA_URL}.\n"
+            f"    Start it with:  ollama serve\n"
+            f"    Then pull the model:  ollama pull {AGENT_MODEL}\n"
         )
         sys.exit(1)
-    print(f"✓  Odysseus is up\n")
+    print(f"✓  Ollama is up ({AGENT_MODEL})\n")
 
     dispatch = {
         "brainstorm":  run_brainstorm,
