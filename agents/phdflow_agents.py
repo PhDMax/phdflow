@@ -121,16 +121,20 @@ def _box(color, name, text):
 
 # ── Ollama API helpers ────────────────────────────────────────────────────────
 
-def _chat_ollama(system_prompt, user_message, timeout=600):
-    """Call Ollama's OpenAI-compatible /v1/chat/completions endpoint."""
+def _chat_ollama(system_prompt, user_message, timeout=120):
+    """Call Ollama's OpenAI-compatible /v1/chat/completions endpoint (streaming).
+
+    Streaming keeps the socket alive token-by-token, avoiding timeout errors
+    on long responses from slow/large models.
+    """
     payload = json.dumps({
         "model": AGENT_MODEL,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user",   "content": user_message},
         ],
-        "stream": False,
-        "options": {"num_ctx": 8192},
+        "stream": True,
+        "options": {"num_gpu": 99},
     }).encode()
     req = urllib.request.Request(
         OLLAMA_URL + "/v1/chat/completions",
@@ -138,9 +142,20 @@ def _chat_ollama(system_prompt, user_message, timeout=600):
         headers={"Content-Type": "application/json"},
     )
     try:
+        chunks = []
         with urllib.request.urlopen(req, timeout=timeout) as r:
-            result = json.loads(r.read())
-            return result["choices"][0]["message"]["content"].strip()
+            for raw_line in r:
+                line = raw_line.decode("utf-8", errors="replace").strip()
+                if not line or not line.startswith("data:"):
+                    continue
+                payload_str = line[len("data:"):].strip()
+                if payload_str == "[DONE]":
+                    break
+                chunk = json.loads(payload_str)
+                delta = chunk["choices"][0].get("delta", {})
+                if "content" in delta:
+                    chunks.append(delta["content"])
+        return "".join(chunks).strip()
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"Ollama HTTP {e.code}: {body[:500]}") from None
@@ -343,7 +358,7 @@ def save_session(workflow, topic, history):
     slug  = "".join(c if c.isalnum() or c in "-_ " else "" for c in topic)
     slug  = slug.strip().replace(" ", "-")[:40]
     fname = os.path.join(out_dir, f"{workflow}-{stamp}-{slug}.md")
-    with open(fname, "w", encoding="utf-8") as f:
+    with open(fname, "w", encoding="utf-8", errors="replace") as f:
         f.write(f"# {workflow.title()} — {topic}\n")
         f.write(f"_{datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}_\n\n")
         for turn in history:
