@@ -134,7 +134,15 @@ def _chat_ollama(system_prompt, user_message, timeout=120):
             {"role": "user",   "content": user_message},
         ],
         "stream": True,
-        "options": {"num_gpu": 99},
+        "options": {
+            # 25 layers is Ollama's own safe estimate for RTX 4050 6 GB:
+            # 3991 MiB used + 1088 MiB free (above the 1024 MiB safety margin).
+            # Do NOT raise this — it would breach Ollama's OOM safety buffer.
+            "num_gpu": 25,
+            # Cap context window and output so VRAM + generation stay bounded.
+            "num_ctx": 4096,
+            "num_predict": 600,
+        },
     }).encode()
     req = urllib.request.Request(
         OLLAMA_URL + "/v1/chat/completions",
@@ -180,7 +188,9 @@ def _ping():
 
 # ── Review input helpers ──────────────────────────────────────────────────────
 
-MAX_DIFF_CHARS = 12_000
+# Keep diff within num_ctx=4096: system (~250 tok) + task (~200 tok) + history
+# leaves roughly 3500 tok for the diff (~4 chars/tok → ~6000 chars safe ceiling).
+MAX_DIFF_CHARS = 6_000
 
 def _maybe_truncate(text):
     if len(text) > MAX_DIFF_CHARS:
