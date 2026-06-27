@@ -35,23 +35,35 @@ def _verify_session_owner(request: Request, session_id: str, session_manager=Non
     ``session_manager`` is optional and defaults to ``None`` so existing callers
     that only care about persisted sessions keep their exact prior behavior.
     """
+    from src.auth_helpers import require_user as _require_user
     user = effective_user(request)
     if not user:
-        raise HTTPException(403, "Authentication required")
+        # No authenticated identity. Delegate to require_user which already
+        # handles AUTH_ENABLED=false, unconfigured+loopback, LOCALHOST_BYPASS,
+        # and first-run mode. If it doesn't raise, the request is authorised
+        # and we skip ownership checks (single-user / no-auth mode).
+        try:
+            _require_user(request)
+        except HTTPException as _e:
+            raise HTTPException(403, "Authentication required") from None
+        return
     db = SessionLocal()
     try:
         row = db.query(DbSession.owner).filter(DbSession.id == session_id).first()
     finally:
         db.close()
     if row is not None:
-        if row.owner != user:
+        # None-owner rows were created in unauthenticated mode; allow any user.
+        if row.owner and row.owner != user:
             raise HTTPException(404, f"Session {session_id} not found")
         return
     # No DB row — allow the caller to act on an in-memory ghost they own.
     if session_manager is not None:
         ghost = getattr(session_manager, "sessions", {}).get(session_id)
-        if ghost is not None and getattr(ghost, "owner", None) == user:
-            return
+        if ghost is not None:
+            ghost_owner = getattr(ghost, "owner", None)
+            if not ghost_owner or ghost_owner == user:
+                return
     raise HTTPException(404, f"Session {session_id} not found")
 
 logger = logging.getLogger(__name__)

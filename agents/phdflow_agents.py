@@ -16,7 +16,14 @@ Usage:
 import sys, json, urllib.request, urllib.parse, urllib.error
 import datetime, os, textwrap, time
 
-ODYSSEUS_URL = "http://127.0.0.1:7001"
+# Force UTF-8 output on Windows terminals that default to cp1252
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+ODYSSEUS_URL  = "http://127.0.0.1:7001"
+AGENT_MODEL   = "nvidia/nemotron-3-nano-30b-a3b:free"  # free, change to taste
 
 # ── Terminal colours ──────────────────────────────────────────────────────────
 
@@ -114,7 +121,7 @@ def _box(color, name, text):
 
 # ── Odysseus HTTP helpers ─────────────────────────────────────────────────────
 
-def _http(path, data, json_body=False, timeout=120):
+def _http(path, data, json_body=False, timeout=120, _retries=3):
     url = ODYSSEUS_URL + path
     if json_body:
         body = json.dumps(data).encode()
@@ -124,13 +131,46 @@ def _http(path, data, json_body=False, timeout=120):
         body = urllib.parse.urlencode(data).encode()
         req  = urllib.request.Request(url, data=body,
                                       headers={"Content-Type": "application/x-www-form-urlencoded"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    for attempt in range(_retries):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", errors="replace")
+            if e.code in (429, 500, 503) and attempt < _retries - 1:
+                wait = 30 * (attempt + 1)
+                print(f"{DIM}  [{e.code}] Rate limited — waiting {wait}s before retry {attempt + 2}/{_retries}…{RESET}", flush=True)
+                time.sleep(wait)
+                continue
+            raise RuntimeError(f"HTTP {e.code} {e.reason}: {body[:500]}") from None
+
+
+def _get(path, timeout=10):
+    with urllib.request.urlopen(ODYSSEUS_URL + path, timeout=timeout) as r:
         return json.loads(r.read())
+
+
+_cached_endpoint_id = None
+
+def _get_endpoint_id():
+    global _cached_endpoint_id
+    if _cached_endpoint_id:
+        return _cached_endpoint_id
+    endpoints = _get("/api/model-endpoints")
+    if not endpoints:
+        raise RuntimeError(
+            "No model endpoints in Odysseus.\n"
+            "Open PhDFlow → Settings → App → AI Engine → Add endpoint."
+        )
+    _cached_endpoint_id = endpoints[0]["id"]
+    return _cached_endpoint_id
 
 
 def _new_session(label="agent"):
     return _http("/api/session",
-                 {"name": f"phdflow-agents:{label}", "endpoint_url": "", "model": ""},
+                 {"name": f"phdflow-agents:{label}",
+                  "endpoint_id": _get_endpoint_id(),
+                  "model": AGENT_MODEL},
                  json_body=False)["id"]
 
 
@@ -156,7 +196,7 @@ def _ping():
 
 # ── Review input helpers ──────────────────────────────────────────────────────
 
-MAX_DIFF_CHARS = 12_000  # well within Odysseus's 50 k message limit
+MAX_DIFF_CHARS = 4_000  # keep within free-tier token-per-minute limits
 
 def _maybe_truncate(text):
     if len(text) > MAX_DIFF_CHARS:
