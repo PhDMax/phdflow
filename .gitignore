@@ -45,6 +45,5 @@ scripts/make-icons.mjs
 # Playwright runtime output
 test-results/
 
-# Agent session outputs and feed (local only — read by Claude between sessions)
-agents/sessions/
-agents/AGENT_FEED.md
+# Dev agents — local tooling only, not for public distribution
+agents/
