@@ -9,6 +9,8 @@ Usage:
   python agents\\phdflow_agents.py investigate "TypeError in calendar when adding recurring event"
   python agents\\phdflow_agents.py test-gen "add todo item and mark complete"
   python agents\\phdflow_agents.py review "added dark mode toggle to settings"
+  python agents\\phdflow_agents.py discuss "should we add a plugin system?"
+  python agents\\phdflow_agents.py discuss --chat "how should we handle offline sync?"
   git diff HEAD | python agents\\phdflow_agents.py review
   python agents\\phdflow_agents.py review --file my.diff
   python agents\\phdflow_agents.py help
@@ -35,76 +37,206 @@ DIM   = "\033[2m"
 # ── Agent definitions ─────────────────────────────────────────────────────────
 
 AGENTS = {
+
+    # ── Pipeline agents ───────────────────────────────────────────────────────
+
     "user": {
-        "name": "PhD User  (Alex)",
+        "name": "Researcher  (Alex)",
         "color": "\033[94m",   # blue
         "system": textwrap.dedent("""\
-            You are Alex, a 3rd-year PhD student in molecular biology who uses PhDFlow daily
-            as your main research command center. You are technically literate but not a developer.
-            You think in terms of your daily research workflows: reading papers, tracking experiments,
-            managing deadlines, collaborating with supervisors and collaborators.
-            Be specific about what you do and don't do in the app. Mention concrete daily scenarios.
-            Keep responses focused and under 200 words. No bullet soup — prose is fine."""),
+            You are Dr. Alex Chen, a 3rd-year computational biology PhD student.
+            You have used PhDFlow as your primary research command center for 18 months,
+            running it 4-6 hours daily. You manage 3 active projects, ~120 papers in your
+            library, daily experiment notes, 4 grant deadlines, and coordinate with 2
+            supervisors and 5 lab colleagues.
+
+            When giving feedback you always:
+            - Ground every point in a concrete workflow moment
+              ("When I open the library on Monday mornings to plan the week...")
+            - Quantify friction ("this costs me about 10 minutes every day because...")
+            - Distinguish blocking from nice-to-have
+              ("without this I fall back to a spreadsheet")
+            - Name the exact view or interaction causing the problem
+
+            You write Python and R daily, so you are technically literate, but you do not
+            know JavaScript or Electron. Your job is to describe what matters and why —
+            the team decides how to build it.
+
+            Respond in first person, present tense. Max 200 words."""),
     },
+
     "pm": {
         "name": "Product Mgr (Sam)",
         "color": "\033[92m",   # green
         "system": textwrap.dedent("""\
-            You are Sam, a product manager synthesising user research into dev-ready specs.
-            PhDFlow is a free, local-first Electron desktop app for PhD researchers.
-            Views: projects, library, pipeline, writing, contacts, notes, calendar,
+            You are Sam Rivera, Product Manager for PhDFlow — a free, local-first Electron
+            desktop app for PhD researchers. You own the roadmap and bridge user research
+            and engineering.
+
+            PhDFlow views: projects, library, pipeline, writing, contacts, notes, calendar,
             todos, grants, news, whiteboard, utilities, lab_tools, settings.
-            Turn user feedback into a crisp, actionable feature spec:
-            1) Problem statement  2) Proposed solution  3) Acceptance criteria  4) Edge cases.
-            Be concise. No marketing fluff. Under 300 words."""),
+
+            For every spec you produce, use this exact structure:
+              PROBLEM: one sentence — what is broken or missing
+              GOAL: one sentence — what success looks like
+              USER STORIES: 2-3 "As a researcher, I want X so that Y" statements
+              ACCEPTANCE CRITERIA: numbered, testable, binary pass/fail
+              OUT OF SCOPE: what this spec explicitly does not cover
+              RISKS: 1-2 things that could block delivery or go wrong
+
+            You are ruthlessly scope-disciplined. You do not add features that were not
+            asked for. You flag when a request needs more user research before speccing.
+            Max 300 words."""),
     },
+
     "dev": {
-        "name": "Developer   (Jordan)",
+        "name": "Sr. Engineer (Jordan)",
         "color": "\033[33m",   # yellow
         "system": textwrap.dedent("""\
-            You are Jordan, a senior Electron developer reviewing feature specs.
-            PhDFlow's stack: Electron v35, Tailwind CSS v4, vanilla JS (no framework).
-            Each view is a separate src/views/*.js file that injects HTML into #view-content.
-            Data stored locally in app-data.json via IPC (window.api.storeGet / storeSet).
-            All dependencies must be free/open-source — no paid APIs.
-            Review for: technical feasibility, implementation approach, gotchas,
-            and effort estimate (S / M / L / XL). Be direct. Flag real concerns. Under 300 words."""),
+            You are Jordan Blake, Senior Software Engineer and lead developer of PhDFlow.
+
+            Stack: Electron v35, Tailwind CSS v4, vanilla JS (no framework).
+            Architecture: main.js (main process) <-> preload.js (contextIsolation=true)
+            <-> renderer.js + src/views/*.js (renderer).
+            Views: each src/views/*.js injects HTML into #view-content and registers
+            IPC listeners. No cross-view direct calls.
+            Data: app-data.json via window.api.storeGet(key) / window.api.storeSet(key,val).
+            Tests: Playwright + @playwright/test in tests/*.spec.js.
+            Constraint: zero paid dependencies; all libraries must be MIT/Apache/BSD.
+
+            For every review or feasibility assessment, structure your response as:
+              ASSESSMENT: one-line verdict
+              ARCHITECTURE: IPC boundary compliance, any pattern violations
+              CODE QUALITY: naming, complexity, security (contextIsolation risks?)
+              GAPS: missing error handling, edge cases, or tests
+              EFFORT: S (<2h) / M (half-day) / L (1-2d) / XL (>2d) + brief rationale
+
+            Be direct. Flag blocking issues without softening them. Distinguish blockers
+            from stylistic preferences. Max 300 words."""),
     },
+
     "qa": {
-        "name": "QA Tester   (Riley)",
+        "name": "QA Engineer  (Riley)",
         "color": "\033[95m",   # magenta
         "system": textwrap.dedent("""\
-            You are Riley, a QA engineer writing Playwright tests for PhDFlow.
-            PhDFlow is an Electron app tested with @playwright/test + _electron.launch().
-            Sidebar nav buttons have id="nav-{viewname}". Main content is #view-content.
-            Tests live in tests/*.spec.js, use helpers from tests/helpers/launch.js
-            (launchApp, login, closeApp), and run serially:
-              test.describe.configure({ mode: 'serial' })
-            Write concrete, runnable Playwright test stubs with realistic selectors.
-            Happy path first, then one important edge case. Suggest the file path at the top.
-            Under 250 words."""),
+            You are Riley Okonkwo, QA Engineer for PhDFlow. You own end-to-end test
+            coverage using Playwright + @playwright/test with Electron via _electron.launch().
+
+            Test infrastructure you work with every day:
+            - tests/helpers/launch.js: launchApp(), login(page), closeApp(electronApp)
+            - All suites use: test.describe.configure({ mode: 'serial' })
+            - Sidebar nav selectors: id="nav-{viewname}" (nav-todos, nav-library, etc.)
+            - Main content area: #view-content
+            - Auth: tests run against a pre-seeded temp userData dir; omit login() only
+              when testing the auth flow itself
+
+            For each test scenario, produce a stub in this format:
+              FILE: tests/<name>.spec.js
+              SCENARIO: the behaviour under test
+              GIVEN / WHEN / THEN: precondition, action, expected outcome
+              CODE: a runnable Playwright stub with realistic selectors
+
+            Prioritise by risk: data loss > broken flows > visual regressions.
+            Write the happy path first, then the most important failure mode.
+            Max 300 words."""),
     },
+
     "hunter": {
-        "name": "Bug Hunter  (Morgan)",
+        "name": "Security Eng (Morgan)",
         "color": "\033[91m",   # red
         "system": textwrap.dedent("""\
-            You are Morgan, a senior debugger specialising in Electron apps.
-            PhDFlow architecture: main process (main.js) <-> preload (preload.js,
-            contextIsolation=true) <-> renderer (renderer.js + src/views/*.js).
-            IPC: renderer calls window.api.* -> preload bridges -> ipcMain.handle() in main.js.
-            Data: localStorage for UI state, app-data.json for persistent data via IPC.
-            Format your answer as:
-              Root Cause:
-              Why it happens:
-              Fix:
-              How to verify:
-            Reference actual file names. Under 300 words."""),
+            You are Morgan Zhang, Security & Reliability Engineer for PhDFlow. You
+            specialise in Electron security, IPC boundary integrity, and root cause analysis.
+
+            PhDFlow attack surface you keep in mind:
+            - IPC boundary: preload.js exposes window.api.* — all input crossing this
+              boundary is untrusted and must be validated in ipcMain.handle() in main.js
+            - contextIsolation=true: renderer cannot access Node.js directly; any bypass
+              is a critical vulnerability
+            - Local data: app-data.json written via IPC — watch for path traversal and
+              schema corruption
+            - External content: news feed, arXiv, PDF rendering — watch for XSS and
+              script injection in the renderer
+            - No network auth: session tokens stored locally — check for unintended exposure
+
+            For every bug or change you analyse, respond in this exact format:
+              SYMPTOM: what the user observes
+              ROOT CAUSE: the specific line/function/pattern that is wrong
+              WHY IT HAPPENS: the underlying mechanism
+              EXPLOITABILITY: accidental or intentional? what is the impact?
+              FIX: exact change needed, with file name
+              VERIFY: how to confirm the fix worked
+
+            Only flag issues you can see evidence of. Do not speculate without basis.
+            Max 300 words."""),
+    },
+
+    # ── Discussion agents (discuss workflow) ──────────────────────────────────
+
+    "cto": {
+        "name": "CTO          (Victoria)",
+        "color": "\033[96m",   # cyan
+        "system": textwrap.dedent("""\
+            You are Dr. Victoria Marsh, CTO of the PhDFlow project. You are responsible
+            for technology strategy, architectural direction, and ensuring the product stays
+            true to its core constraint: 100% free, open-source, offline-first, and
+            maintainable by a small team.
+
+            PhDFlow context: Electron v35 desktop app, vanilla JS, local JSON + SQLite
+            storage, Odysseus (local FastAPI/Python AI backend), ~5k lines of frontend,
+            solo or very small team.
+
+            When discussing any technical or product topic, structure your response as:
+              STRATEGIC CONTEXT: why this decision matters at the product level
+              OPTIONS: 2-3 concrete approaches with honest trade-offs
+              RECOMMENDATION: which option and the single most important reason
+              WATCH OUT FOR: the risk most likely to materialise
+
+            Your principles:
+            - Ask "what are we optimising for?" before recommending anything
+            - Distinguish decisions that are easy to reverse from those that are not
+            - "We shouldn't build this yet" is a valid and often correct answer
+            - Complexity is a liability; every dependency is a maintenance commitment
+
+            Speak plainly. No filler. Max 300 words."""),
+    },
+
+    "architect": {
+        "name": "Prin. Eng.   (Noa)",
+        "color": "\033[93m",   # bright yellow
+        "system": textwrap.dedent("""\
+            You are Noa Peretz, Principal Engineer at PhDFlow. You translate strategic
+            decisions into concrete system design and implementation guidance.
+
+            Your deep expertise:
+            - Electron IPC: ipcMain.handle vs ipcMain.on, message ordering, error
+              propagation across the process boundary, avoiding renderer blocking
+            - State management in vanilla JS: event-driven patterns, module-level
+              singletons in src/views/*.js, avoiding shared mutable state between views
+            - Performance: renderer frame budget (16ms), offloading blocking work from
+              the main process to worker threads or child_process
+            - Data integrity: app-data.json schema versioning, atomic writes,
+              forward-compatible migration strategies
+            - Dependency hygiene: bundle size, license compliance, maintenance signals
+
+            When analysing a design question or responding to the CTO, structure as:
+              DESIGN: component structure, data flow, and API contracts
+              KEY DECISIONS: 2-3 choices the team must make + your recommended option
+              PITFALLS: what breaks and why if we get this wrong
+              NEXT STEP: the single most important concrete action
+
+            Reference actual file names. Write pseudocode or real code when it
+            communicates faster than prose. Where you agree with the CTO, say so briefly.
+            Where you see it differently, explain why with evidence.
+            Max 300 words."""),
     },
 }
 
 
+# ── Display ───────────────────────────────────────────────────────────────────
+
 def _box(color, name, text):
-    width = 56
+    width = 58
     label = f"┌─ {name} "
     top   = label + "─" * max(0, width - len(label)) + "┐"
     bot   = "└" + "─" * (width + 1) + "┘"
@@ -116,17 +248,13 @@ def _box(color, name, text):
     for l in lines:
         print(f"{color}{l}{RESET}")
     print(f"{BOLD}{color}{bot}{RESET}\n")
-    time.sleep(0.1)
+    time.sleep(0.05)
 
 
-# ── Ollama API helpers ────────────────────────────────────────────────────────
+# ── Ollama API ────────────────────────────────────────────────────────────────
 
 def _chat_ollama(system_prompt, user_message, timeout=120):
-    """Call Ollama's OpenAI-compatible /v1/chat/completions endpoint (streaming).
-
-    Streaming keeps the socket alive token-by-token, avoiding timeout errors
-    on long responses from slow/large models.
-    """
+    """Streaming call to Ollama — keeps the socket alive token-by-token."""
     payload = json.dumps({
         "model": AGENT_MODEL,
         "messages": [
@@ -135,12 +263,11 @@ def _chat_ollama(system_prompt, user_message, timeout=120):
         ],
         "stream": True,
         "options": {
-            # 25 layers is Ollama's own safe estimate for RTX 4050 6 GB:
-            # 3991 MiB used + 1088 MiB free (above the 1024 MiB safety margin).
-            # Do NOT raise this — it would breach Ollama's OOM safety buffer.
-            "num_gpu": 25,
-            # Cap context window and output so VRAM + generation stay bounded.
-            "num_ctx": 4096,
+            # 25 layers = Ollama's own safe estimate for RTX 4050 6 GB:
+            # 3991 MiB used, 1088 MiB free — above the 1024 MiB safety margin.
+            # Do NOT raise this; it would breach Ollama's OOM safety buffer.
+            "num_gpu":     25,
+            "num_ctx":   4096,
             "num_predict": 600,
         },
     }).encode()
@@ -170,14 +297,14 @@ def _chat_ollama(system_prompt, user_message, timeout=120):
 
 
 def _ping():
-    """Return True if Ollama is reachable and has the required model."""
+    """Return True if Ollama is reachable and has the required model loaded."""
     try:
         with urllib.request.urlopen(OLLAMA_URL + "/api/tags", timeout=4) as r:
-            data = json.loads(r.read())
+            data   = json.loads(r.read())
             models = [m["name"] for m in data.get("models", [])]
             if not any(AGENT_MODEL in m for m in models):
                 print(
-                    f"\n⚠️   Model '{AGENT_MODEL}' not found in Ollama.\n"
+                    f"\n  Model '{AGENT_MODEL}' not found in Ollama.\n"
                     f"    Pull it with:  ollama pull {AGENT_MODEL}\n"
                 )
                 return False
@@ -186,10 +313,9 @@ def _ping():
         return False
 
 
-# ── Review input helpers ──────────────────────────────────────────────────────
+# ── Input helpers ─────────────────────────────────────────────────────────────
 
-# Keep diff within num_ctx=4096: system (~250 tok) + task (~200 tok) + history
-# leaves roughly 3500 tok for the diff (~4 chars/tok → ~6000 chars safe ceiling).
+# Fits within num_ctx=4096: system (~250 tok) + task (~200 tok) + history headroom.
 MAX_DIFF_CHARS = 6_000
 
 def _maybe_truncate(text):
@@ -199,13 +325,7 @@ def _maybe_truncate(text):
     return text
 
 def _read_change(extra_args):
-    """
-    Resolve the change/diff to review from one of three sources (priority order):
-      1. --file <path>       explicit diff file
-      2. piped stdin         git diff HEAD | python … review
-      3. command-line text   python … review "added dark mode toggle"
-    Returns (change_text, short_title).
-    """
+    """Resolve diff input from --file, piped stdin, or inline text (in that order)."""
     if "--file" in extra_args:
         idx  = extra_args.index("--file")
         path = extra_args[idx + 1] if idx + 1 < len(extra_args) else ""
@@ -214,10 +334,8 @@ def _read_change(extra_args):
             sys.exit(1)
         with open(path, encoding="utf-8", errors="replace") as fh:
             return _maybe_truncate(fh.read()), os.path.basename(path)
-
     if not sys.stdin.isatty():
         return _maybe_truncate(sys.stdin.read()), "piped diff"
-
     text = " ".join(a for a in extra_args if not a.startswith("-")).strip()
     if not text:
         print("Provide a description, pipe a diff, or use --file <path>.\n")
@@ -228,12 +346,7 @@ def _read_change(extra_args):
 # ── Core agent call ───────────────────────────────────────────────────────────
 
 def call_agent(key, history, task):
-    """
-    Run one agent turn via Ollama.
-    history: list of {"agent": name, "text": response}
-    task:    specific instruction for this turn
-    Returns the agent's response text.
-    """
+    """Run one agent turn. history is a list of {agent, text} dicts."""
     agent = AGENTS[key]
     parts = []
     if history:
@@ -249,27 +362,29 @@ def call_agent(key, history, task):
 # ── Workflows ─────────────────────────────────────────────────────────────────
 
 def run_brainstorm(topic):
-    print(f"\n{BOLD}🧠  BRAINSTORM — {topic}{RESET}")
-    print(f"{DIM}  Agents: PhD User → Product Manager → Developer{RESET}\n")
+    print(f"\n{BOLD}  BRAINSTORM — {topic}{RESET}")
+    print(f"{DIM}  Researcher → Product Manager → Sr. Engineer{RESET}\n")
     history = []
 
-    print(f"{DIM}  [1/3] Asking PhD User…{RESET}", flush=True)
+    print(f"{DIM}  [1/3] Researcher sharing experience…{RESET}", flush=True)
     resp = call_agent("user", history,
-        f"Describe your experience and frustrations related to: {topic}.\n"
-        "What do you wish PhDFlow did better or differently in this area?")
+        f"Describe your experience and friction points with: {topic}.\n"
+        "Be specific about your daily workflow. What do you wish PhDFlow did differently?")
     history.append({"agent": AGENTS["user"]["name"], "text": resp})
     _box(AGENTS["user"]["color"], AGENTS["user"]["name"], resp)
 
-    print(f"{DIM}  [2/3] Product Manager synthesising…{RESET}", flush=True)
+    print(f"{DIM}  [2/3] Product Manager writing spec…{RESET}", flush=True)
     resp = call_agent("pm", history,
-        "Based on the user feedback above, write a feature spec for the PhDFlow dev team.")
+        "Turn the researcher's feedback into a feature spec for the dev team. "
+        "Use your required structure: PROBLEM / GOAL / USER STORIES / "
+        "ACCEPTANCE CRITERIA / OUT OF SCOPE / RISKS.")
     history.append({"agent": AGENTS["pm"]["name"], "text": resp})
     _box(AGENTS["pm"]["color"], AGENTS["pm"]["name"], resp)
 
-    print(f"{DIM}  [3/3] Developer reviewing…{RESET}", flush=True)
+    print(f"{DIM}  [3/3] Sr. Engineer assessing feasibility…{RESET}", flush=True)
     resp = call_agent("dev", history,
-        "Review the feature spec. Is it feasible? "
-        "Sketch the implementation approach and give an effort estimate (S/M/L/XL).")
+        "Review the spec above. Use your required structure: ASSESSMENT / ARCHITECTURE / "
+        "CODE QUALITY / GAPS / EFFORT.")
     history.append({"agent": AGENTS["dev"]["name"], "text": resp})
     _box(AGENTS["dev"]["color"], AGENTS["dev"]["name"], resp)
 
@@ -277,20 +392,23 @@ def run_brainstorm(topic):
 
 
 def run_investigate(error):
-    print(f"\n{BOLD}🔍  INVESTIGATE — {error[:70]}{RESET}")
-    print(f"{DIM}  Agents: Bug Hunter → Developer{RESET}\n")
+    print(f"\n{BOLD}  INVESTIGATE — {error[:70]}{RESET}")
+    print(f"{DIM}  Security Engineer → Sr. Engineer{RESET}\n")
     history = []
 
-    print(f"{DIM}  [1/2] Bug Hunter analysing…{RESET}", flush=True)
+    print(f"{DIM}  [1/2] Security Engineer diagnosing…{RESET}", flush=True)
     resp = call_agent("hunter", history,
-        f"Diagnose this bug report from PhDFlow:\n\n{error}")
+        f"Diagnose this bug report from PhDFlow:\n\n{error}\n\n"
+        "Use your required structure: SYMPTOM / ROOT CAUSE / WHY IT HAPPENS / "
+        "EXPLOITABILITY / FIX / VERIFY.")
     history.append({"agent": AGENTS["hunter"]["name"], "text": resp})
     _box(AGENTS["hunter"]["color"], AGENTS["hunter"]["name"], resp)
 
-    print(f"{DIM}  [2/2] Developer proposing fix…{RESET}", flush=True)
+    print(f"{DIM}  [2/2] Sr. Engineer proposing fix…{RESET}", flush=True)
     resp = call_agent("dev", history,
-        "Based on the diagnosis, describe the concrete code change needed. "
-        "Reference the actual file (main.js, src/views/*.js, renderer.js, preload.js).")
+        "Based on the diagnosis, specify the concrete code change needed. "
+        "Name the exact file and function. Use your structure: ASSESSMENT / "
+        "ARCHITECTURE / CODE QUALITY / GAPS / EFFORT.")
     history.append({"agent": AGENTS["dev"]["name"], "text": resp})
     _box(AGENTS["dev"]["color"], AGENTS["dev"]["name"], resp)
 
@@ -298,20 +416,23 @@ def run_investigate(error):
 
 
 def run_test_gen(feature):
-    print(f"\n{BOLD}🧪  TEST GEN — {feature}{RESET}")
-    print(f"{DIM}  Agents: Product Manager → QA Tester{RESET}\n")
+    print(f"\n{BOLD}  TEST GEN — {feature}{RESET}")
+    print(f"{DIM}  Product Manager → QA Engineer{RESET}\n")
     history = []
 
-    print(f"{DIM}  [1/2] PM writing acceptance criteria…{RESET}", flush=True)
+    print(f"{DIM}  [1/2] Product Manager writing acceptance criteria…{RESET}", flush=True)
     resp = call_agent("pm", history,
-        f"Write acceptance criteria for this PhDFlow feature:\n{feature}")
+        f"Write acceptance criteria for this PhDFlow feature:\n{feature}\n\n"
+        "Use your required structure: PROBLEM / GOAL / USER STORIES / "
+        "ACCEPTANCE CRITERIA / OUT OF SCOPE / RISKS.")
     history.append({"agent": AGENTS["pm"]["name"], "text": resp})
     _box(AGENTS["pm"]["color"], AGENTS["pm"]["name"], resp)
 
-    print(f"{DIM}  [2/2] QA Tester writing Playwright tests…{RESET}", flush=True)
+    print(f"{DIM}  [2/2] QA Engineer writing test stubs…{RESET}", flush=True)
     resp = call_agent("qa", history,
-        "Write Playwright test stubs covering the acceptance criteria above. "
-        "Use helpers from tests/helpers/launch.js. Suggest the file path at the top.")
+        "Write Playwright test stubs for the acceptance criteria above. "
+        "For each scenario: FILE / SCENARIO / GIVEN-WHEN-THEN / CODE. "
+        "Prioritise by risk. Happy path first, then the most important failure mode.")
     history.append({"agent": AGENTS["qa"]["name"], "text": resp})
     _box(AGENTS["qa"]["color"], AGENTS["qa"]["name"], resp)
 
@@ -321,42 +442,97 @@ def run_test_gen(feature):
 def run_review(change):
     title    = change[:70].replace("\n", " ")
     ellipsis = "…" if len(change) > 70 else ""
-    print(f"\n{BOLD}🔎  REVIEW — {title}{ellipsis}{RESET}")
-    print(f"{DIM}  Agents: Developer → Bug Hunter → QA Tester{RESET}\n")
+    print(f"\n{BOLD}  REVIEW — {title}{ellipsis}{RESET}")
+    print(f"{DIM}  Sr. Engineer → Security Engineer → QA Engineer{RESET}\n")
     history = []
 
     block = f"=== CHANGE / DIFF ===\n{change}\n=== END ==="
 
-    print(f"{DIM}  [1/3] Developer reviewing…{RESET}", flush=True)
+    print(f"{DIM}  [1/3] Sr. Engineer reviewing…{RESET}", flush=True)
     resp = call_agent("dev", history,
         f"{block}\n\n"
-        "Review this change to PhDFlow. Address:\n"
-        "1. Architecture fit — does it follow the IPC pattern and view structure?\n"
-        "2. Code quality — style, naming, unnecessary complexity?\n"
-        "3. Missing pieces — error handling, edge cases left unaddressed?\n"
-        "4. Verdict: Approve / Request changes / Needs discussion.")
+        "Review this change to PhDFlow. Use your structure: ASSESSMENT / "
+        "ARCHITECTURE / CODE QUALITY / GAPS / EFFORT.")
     history.append({"agent": AGENTS["dev"]["name"], "text": resp})
     _box(AGENTS["dev"]["color"], AGENTS["dev"]["name"], resp)
 
-    print(f"{DIM}  [2/3] Bug Hunter scanning…{RESET}", flush=True)
+    print(f"{DIM}  [2/3] Security Engineer scanning…{RESET}", flush=True)
     resp = call_agent("hunter", history,
         f"{block}\n\n"
         "Scan this change for bugs, regressions, and security issues. "
-        "Be concrete — only flag problems you can actually see in the code. "
-        "If the change looks clean, say so in one sentence and list only minor nits.")
+        "Use your structure: SYMPTOM / ROOT CAUSE / WHY IT HAPPENS / "
+        "EXPLOITABILITY / FIX / VERIFY. "
+        "If the change is clean, say so in one line and list only minor nits.")
     history.append({"agent": AGENTS["hunter"]["name"], "text": resp})
     _box(AGENTS["hunter"]["color"], AGENTS["hunter"]["name"], resp)
 
-    print(f"{DIM}  [3/3] QA Tester checking coverage…{RESET}", flush=True)
+    print(f"{DIM}  [3/3] QA Engineer checking coverage…{RESET}", flush=True)
     resp = call_agent("qa", history,
         f"{block}\n\n"
-        "List what Playwright tests need to be added or updated for this change. "
-        "For each test: file path in tests/, what scenario it covers, key assertion. "
-        "If the existing smoke tests in tests/smoke.spec.js already cover it, say so.")
+        "List Playwright tests to add or update for this change. "
+        "For each: FILE / SCENARIO / GIVEN-WHEN-THEN / CODE. "
+        "If tests/smoke.spec.js already covers a scenario, say so explicitly.")
     history.append({"agent": AGENTS["qa"]["name"], "text": resp})
     _box(AGENTS["qa"]["color"], AGENTS["qa"]["name"], resp)
 
     return history
+
+
+def run_discuss(topic, interactive=False):
+    print(f"\n{BOLD}  DISCUSS — {topic}{RESET}")
+    panel = f"{AGENTS['cto']['name']} + {AGENTS['architect']['name']}"
+    print(f"{DIM}  Panel: {panel}{RESET}\n")
+    history     = []
+    all_history = []  # full transcript across rounds for the saved file
+    round_num   = 0
+
+    while True:
+        round_num += 1
+        label = f"Round {round_num}: " if round_num > 1 else ""
+
+        print(f"{DIM}  [{label}CTO opening…]{RESET}", flush=True)
+        cto_task = (
+            f"The team is discussing: {topic}\n\n"
+            "Frame the strategic context, evaluate the options honestly, give your "
+            "recommendation, and name the single biggest risk. "
+            "Use your structure: STRATEGIC CONTEXT / OPTIONS / RECOMMENDATION / WATCH OUT FOR."
+        )
+        resp = call_agent("cto", history, cto_task)
+        history.append({"agent": AGENTS["cto"]["name"], "text": resp})
+        all_history.append({"agent": AGENTS["cto"]["name"], "text": resp})
+        _box(AGENTS["cto"]["color"], AGENTS["cto"]["name"], resp)
+
+        print(f"{DIM}  [{label}Principal Engineer responding…]{RESET}", flush=True)
+        arch_task = (
+            f"The team is discussing: {topic}\n\n"
+            "The CTO has shared their strategic view above. Add the concrete technical "
+            "depth: system design, the decisions the team must make, pitfalls, and the "
+            "single most important next step. "
+            "Use your structure: DESIGN / KEY DECISIONS / PITFALLS / NEXT STEP."
+        )
+        resp = call_agent("architect", history, arch_task)
+        history.append({"agent": AGENTS["architect"]["name"], "text": resp})
+        all_history.append({"agent": AGENTS["architect"]["name"], "text": resp})
+        _box(AGENTS["architect"]["color"], AGENTS["architect"]["name"], resp)
+
+        if not interactive:
+            break
+
+        # Interactive: let the user drive the next round
+        print(f"{BOLD}Your follow-up{RESET} (press Enter or type 'done' to finish):")
+        try:
+            user_input = input("> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            break
+        if not user_input or user_input.lower() in ("done", "exit", "q", "quit"):
+            break
+        history.append({"agent": "You", "text": user_input})
+        all_history.append({"agent": "You", "text": user_input})
+        topic = user_input  # next round is driven by the follow-up
+        print()
+
+    return all_history
 
 
 # ── Save ──────────────────────────────────────────────────────────────────────
@@ -380,30 +556,39 @@ def save_session(workflow, topic, history):
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 HELP = f"""
-{BOLD}PhDFlow Dev Agents{RESET}  (Ollama local — {OLLAMA_URL}, model: {AGENT_MODEL})
+{BOLD}PhDFlow Dev Agents{RESET}  (Ollama — {OLLAMA_URL}  |  model: {AGENT_MODEL})
 
-{BOLD}SETUP:{RESET}
-  1. Install Ollama: https://ollama.com
-  2. Pull the model:  ollama pull {AGENT_MODEL}
-  3. Ollama starts automatically — no extra steps needed.
+{BOLD}SETUP (one-time):{RESET}
+  1. Install Ollama  https://ollama.com
+  2. ollama pull {AGENT_MODEL}
+  3. Ollama auto-starts — nothing else needed.
 
 {BOLD}USAGE:{RESET}
-  python agents\\phdflow_agents.py <workflow> [input]
+  python agents\\phdflow_agents.py <workflow> [options] [input]
 
-{BOLD}WORKFLOWS:{RESET}
-  {BOLD}brainstorm{RESET}  <topic>    PhD User + PM + Developer discuss a feature idea
-  {BOLD}investigate{RESET} <error>    Bug Hunter + Developer diagnose and propose a fix
-  {BOLD}test-gen{RESET}    <feature>  PM writes criteria + QA writes Playwright tests
-  {BOLD}review{RESET}      <change>   Developer + Bug Hunter + QA review a code change
-              Accepts: text description, --file <diff>, or piped stdin
+{BOLD}PIPELINE WORKFLOWS{RESET}  (automated multi-agent chains)
+  {BOLD}brainstorm{RESET}  <topic>    Researcher + PM + Sr. Engineer explore a feature idea
+  {BOLD}investigate{RESET} <error>    Security Eng + Sr. Engineer diagnose a bug
+  {BOLD}test-gen{RESET}    <feature>  PM writes criteria, QA writes Playwright stubs
+  {BOLD}review{RESET}      <change>   Sr. Engineer + Security Eng + QA review a change
+                      Accepts: inline text, --file <diff>, or piped stdin
+
+{BOLD}DISCUSSION WORKFLOWS{RESET}  (CTO + Principal Engineer talk with you)
+  {BOLD}discuss{RESET}     <topic>    One-shot panel: CTO frames strategy, Principal Eng
+                      adds implementation depth
+  {BOLD}discuss --chat{RESET} <topic> Interactive: same panel, but you drive follow-up
+                      rounds. Type your reply after each turn; Enter or
+                      'done' to finish.
 
 {BOLD}EXAMPLES:{RESET}
   python agents\\phdflow_agents.py brainstorm "smarter deadline reminders in todos"
-  python agents\\phdflow_agents.py investigate "app freezes when importing a 50-page PDF"
-  python agents\\phdflow_agents.py test-gen "create a new project and add a milestone"
-  python agents\\phdflow_agents.py review "added dark mode toggle to settings view"
+  python agents\\phdflow_agents.py investigate "app freezes importing a 50-page PDF"
+  python agents\\phdflow_agents.py test-gen "create a project and add a milestone"
+  python agents\\phdflow_agents.py review "added collapsible sections to projects view"
   git diff HEAD | python agents\\phdflow_agents.py review
   python agents\\phdflow_agents.py review --file my.diff
+  python agents\\phdflow_agents.py discuss "should we add a plugin system?"
+  python agents\\phdflow_agents.py discuss --chat "how should we handle app updates?"
 
 Sessions are saved to agents\\sessions\\ as markdown files.
 """
@@ -418,35 +603,42 @@ def main():
     workflow   = args[0]
     extra_args = args[1:]
 
-    if workflow not in ("brainstorm", "investigate", "test-gen", "review"):
+    all_workflows = ("brainstorm", "investigate", "test-gen", "review", "discuss")
+    if workflow not in all_workflows:
         print(f"Unknown workflow: {workflow!r}\n")
         print(HELP)
         sys.exit(1)
 
+    # Parse --chat flag (discuss only)
+    interactive = "--chat" in extra_args
+    extra_args  = [a for a in extra_args if a != "--chat"]
+
+    # Resolve input
     if workflow == "review":
         topic, _ = _read_change(extra_args)
     else:
-        topic = " ".join(extra_args).strip()
+        topic = " ".join(a for a in extra_args if not a.startswith("-")).strip()
         if not topic:
-            print("Provide a topic/description after the workflow name.\n")
+            print("Provide a topic or description after the workflow name.\n")
             print(HELP)
             sys.exit(1)
 
     print(f"{DIM}Checking Ollama at {OLLAMA_URL}…{RESET}", flush=True)
     if not _ping():
         print(
-            f"\n❌  Ollama is not reachable at {OLLAMA_URL}.\n"
-            f"    Start it with:  ollama serve\n"
-            f"    Then pull the model:  ollama pull {AGENT_MODEL}\n"
+            f"\n  Ollama is not reachable at {OLLAMA_URL}.\n"
+            f"    Start it:       ollama serve\n"
+            f"    Pull the model: ollama pull {AGENT_MODEL}\n"
         )
         sys.exit(1)
-    print(f"✓  Ollama is up ({AGENT_MODEL})\n")
+    print(f"  Ollama is up ({AGENT_MODEL})\n")
 
     dispatch = {
-        "brainstorm":  run_brainstorm,
-        "investigate": run_investigate,
-        "test-gen":    run_test_gen,
-        "review":      run_review,
+        "brainstorm":  lambda t: run_brainstorm(t),
+        "investigate": lambda t: run_investigate(t),
+        "test-gen":    lambda t: run_test_gen(t),
+        "review":      lambda t: run_review(t),
+        "discuss":     lambda t: run_discuss(t, interactive=interactive),
     }
     history = dispatch[workflow](topic)
     save_session(workflow, topic, history)
