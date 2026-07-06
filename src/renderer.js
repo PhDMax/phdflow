@@ -186,11 +186,12 @@ function renderSidebar() {
   }
 
   // Grouped sections — iterate `enabled` to preserve user-defined order
+  const favSet = new Set((state.favoriteTools || []).filter(id => enabled.includes(id)))
   const sections = ['Workspace','Tools','Feeds']
   for (const section of sections) {
     const sectionIds = new Set(available.filter(t => t.section === section).map(t => t.id))
     const tools = enabled
-      .filter(id => sectionIds.has(id))
+      .filter(id => sectionIds.has(id) && !favSet.has(id))
       .map(id => available.find(t => t.id === id))
       .filter(Boolean)
     if (!tools.length) continue
