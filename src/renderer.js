@@ -48,7 +48,7 @@ const ALL_TOOLS = [
   { id:'pdf_tools',  label:'PDF Tools',         icon:'📄', section:'Tools', desc:'Merge, split, rotate, watermark, crop, OCR and more' },
   { id:'citations',  label:'Citations',          icon:'✏️',  section:'Tools', desc:'Format references and count words' },
   { id:'unit_conv',  label:'Unit Converter',     icon:'⚗️',  section:'Tools', desc:'Convert scientific units with history' },
-  { id:'r_assist',   label:'R Assistant',        icon:'📊', section:'Tools', desc:'Step-by-step guide to R statistical tests' },
+  { id:'r_assist',   label:'Stats Assistant',     icon:'📊', section:'Tools', desc:'Statistical test selector + power analysis (R · Python · SPSS)' },
   // ── Feeds — the world coming to you ──────────────────────────────────────
   { id:'news',       label:'Literature Feed', icon:'📡', section:'Feeds',     desc:'Daily paper feed from arXiv & OpenAlex' },
   { id:'grants',     label:'Grant Scan',      icon:'💰', section:'Feeds',     desc:'Discover and track funding opportunities' },

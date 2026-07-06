@@ -5,6 +5,23 @@ let _utilCitPaper = null
 let _utilUnitCat  = 'length'
 let _rStep        = []
 let _rResult      = null
+let _rLang        = 'r'        // 'r' | 'python' | 'spss'
+let _rTab         = 'chat'     // 'chat' | 'selector' | 'power'
+let _statsChatHistory = []
+let _statsChatLoading = false
+let _statsChatLang    = 'r'    // 'r' | 'python' | 'spss'
+let _pwTest       = 'ttest_ind'
+let _pwSolveFor   = 'n'
+let _pwAlpha      = 0.05
+let _pwPower      = 0.80
+let _pwD          = 0.50
+let _pwF          = 0.25
+let _pwR          = 0.30
+let _pwW          = 0.30
+let _pwF2         = 0.15
+let _pwN          = 0
+let _pwK          = 3
+let _pwDF         = 1
 let _utilSignCertPath = ''
 
 // ── Shared history engine ─────────────────────────────────────────────────────
@@ -172,9 +189,9 @@ function render_r_assist() {
   const vc = document.getElementById('view-content')
   if (!vc) return
   vc.innerHTML = `<div class="flex h-full overflow-hidden">
-    ${_histSidebar('r','R Assistant')}
+    ${_histSidebar('r','Stats Assistant')}
     <div class="flex-1 flex flex-col overflow-hidden">
-      ${pageHeader('📊 R Assistant', _folderBtn('R Assistant'))}
+      ${pageHeader('📊 Stats Assistant', _folderBtn('Stats Assistant'))}
       <div id="r-tool-area" class="flex-1 overflow-y-auto p-3 lg:p-5">${_utilRenderR()}</div>
     </div>
   </div>`
@@ -1953,68 +1970,1029 @@ emmeans(model, pairwise ~ treatment | timepoint, adjust = "tukey")
 plot(model)` },
 }
 
-function _utilRenderR() {
-  const node     = _rGetCurrentNode()
-  const isResult = _rResult !== null
-  const result   = isResult ? R_RESULTS[_rResult] : null
+// ── Python code (scipy / pingouin / statsmodels / sklearn) ───────────────────
+const PYTHON_RESULTS = {
+  one_t: { pkg:'scipy.stats · numpy', code:
+`from scipy import stats
+import numpy as np
+
+data = np.array([2.3, 2.7, 2.5, 2.8, 2.4])
+mu0  = 2.5                          # hypothesised value
+
+print(stats.shapiro(data))          # normality (p > 0.05 → OK)
+
+t, p = stats.ttest_1samp(data, mu0, alternative='two-sided')
+ci   = stats.t.interval(0.95, df=len(data)-1,
+                         loc=np.mean(data), scale=stats.sem(data))
+print(f"t = {t:.3f},  p = {p:.4f},  95% CI = [{ci[0]:.3f}, {ci[1]:.3f}]")
+
+# Cohen's d
+d = (np.mean(data) - mu0) / np.std(data, ddof=1)
+print(f"Cohen's d = {d:.3f}")` },
+
+  paired_t: { pkg:'scipy.stats · numpy', code:
+`from scipy import stats
+import numpy as np
+
+before = np.array([5.2, 4.8, 6.1, 5.5, 4.9])
+after  = np.array([5.8, 5.3, 6.7, 5.9, 5.5])
+diff   = after - before
+
+print(stats.shapiro(diff))          # normality of differences
+
+t, p = stats.ttest_rel(after, before, alternative='two-sided')
+print(f"t = {t:.3f},  p = {p:.4f}")
+
+d = np.mean(diff) / np.std(diff, ddof=1)
+print(f"Cohen's d = {d:.3f}")` },
+
+  welch_t: { pkg:'scipy.stats · numpy', code:
+`from scipy import stats
+import numpy as np
+
+group1 = np.array([2.3, 2.7, 2.5, 2.8, 2.4, 2.6])
+group2 = np.array([2.9, 3.1, 2.8, 3.3, 3.0, 2.7])
+
+print(stats.shapiro(group1)); print(stats.shapiro(group2))
+
+t, p = stats.ttest_ind(group1, group2, equal_var=False)
+print(f"t = {t:.3f},  p = {p:.4f}")
+
+n1, n2 = len(group1), len(group2)
+sp = np.sqrt(((n1-1)*group1.std(ddof=1)**2 +
+              (n2-1)*group2.std(ddof=1)**2) / (n1+n2-2))
+d  = (group1.mean() - group2.mean()) / sp
+print(f"Cohen's d = {d:.3f}")` },
+
+  wilcox1: { pkg:'scipy.stats', code:
+`from scipy import stats
+
+data = [2.1, 2.5, 1.9, 2.8, 2.3]
+mu0  = 2.0
+
+result = stats.wilcoxon([x - mu0 for x in data], alternative='two-sided')
+print(f"W = {result.statistic:.3f},  p = {result.pvalue:.4f}")` },
+
+  wilcox_sr: { pkg:'scipy.stats · numpy', code:
+`from scipy import stats
+import numpy as np
+
+before = [5, 4, 6, 5, 4, 7, 5]
+after  = [6, 5, 7, 6, 5, 8, 6]
+
+result = stats.wilcoxon(after, before, alternative='two-sided')
+print(f"W = {result.statistic:.3f},  p = {result.pvalue:.4f}")
+
+z = stats.norm.ppf(result.pvalue / 2)
+r = abs(z) / np.sqrt(len(before))
+print(f"Effect size r = {r:.3f}")` },
+
+  mwu: { pkg:'scipy.stats', code:
+`from scipy import stats
+
+group1 = [2.1, 2.5, 1.9, 2.8, 2.3]
+group2 = [3.0, 2.7, 3.4, 2.9, 3.2]
+
+result = stats.mannwhitneyu(group1, group2, alternative='two-sided')
+print(f"U = {result.statistic:.3f},  p = {result.pvalue:.4f}")` },
+
+  one_anova: { pkg:'scipy.stats · statsmodels', code:
+`from scipy import stats
+from statsmodels.stats.multicomp import pairwise_tukeyhsd
+import statsmodels.formula.api as smf
+import statsmodels.api as sm
+import pandas as pd
+
+df = pd.DataFrame({
+    'group':  ['A']*5 + ['B']*5 + ['C']*5,
+    'values': [2.3,2.7,2.5,2.8,2.4, 3.1,2.9,3.3,2.8,3.2, 2.0,1.8,2.2,1.9,2.1]
+})
+
+for g, sub in df.groupby('group'):
+    print(g, stats.shapiro(sub['values']))
+print(stats.levene(*[g['values'].values for _, g in df.groupby('group')]))
+
+F, p = stats.f_oneway(*[g['values'].values for _, g in df.groupby('group')])
+print(f"F = {F:.3f},  p = {p:.4f}")
+
+print(pairwise_tukeyhsd(df['values'], df['group']))
+
+model = smf.ols('values ~ C(group)', data=df).fit()
+aov = sm.stats.anova_lm(model, typ=1)
+eta2 = aov['sum_sq'].iloc[0] / aov['sum_sq'].sum()
+print(f"η² = {eta2:.3f}")` },
+
+  two_anova: { pkg:'statsmodels', code:
+`import statsmodels.formula.api as smf
+import statsmodels.api as sm
+import pandas as pd
+
+df = pd.DataFrame({
+    'treatment': ['A','A','A','B','B','B']*2,
+    'sex':       ['M','F','M','F','M','F']*2,
+    'values':    [3.2,2.8,3.0,4.1,3.9,4.0, 2.9,2.6,2.8,3.8,4.2,3.9]
+})
+
+model = smf.ols('values ~ C(treatment) * C(sex)', data=df).fit()
+print(sm.stats.anova_lm(model, typ=2))
+
+from statsmodels.stats.multicomp import pairwise_tukeyhsd
+print(pairwise_tukeyhsd(df['values'], df['treatment']))` },
+
+  kruskal: { pkg:'scipy.stats · scikit-posthocs', code:
+`from scipy import stats
+import pandas as pd
+
+df = pd.DataFrame({
+    'group':  ['A']*5 + ['B']*5 + ['C']*5,
+    'values': [2.3,2.7,2.5,2.8,2.4, 3.1,2.9,3.3,2.8,3.2, 2.0,1.8,2.2,1.9,2.1]
+})
+
+H, p = stats.kruskal(*[g['values'].values for _, g in df.groupby('group')])
+print(f"H = {H:.3f},  p = {p:.4f}")
+
+# Post-hoc Dunn's test: pip install scikit-posthocs
+import scikit_posthocs as sp
+print(sp.posthoc_dunn(df, val_col='values', group_col='group', p_adjust='bonferroni'))` },
+
+  rm_anova: { pkg:'pingouin', code:
+`import pingouin as pg
+import pandas as pd
+
+df = pd.DataFrame({
+    'subject':   [1,1,1,2,2,2,3,3,3,4,4,4,5,5,5,6,6,6],
+    'timepoint': [1,2,3]*6,
+    'treatment': ['A','A','A','A','A','A','B','B','B','B','B','B','A','A','A','B','B','B'],
+    'response':  [2.1,2.5,2.8, 1.9,2.2,2.6, 3.2,3.8,4.1,
+                  3.0,3.5,3.9, 2.4,2.7,3.0, 2.2,2.6,2.9]
+})
+
+aov = pg.rm_anova(data=df, dv='response', within='timepoint', subject='subject')
+print(aov)
+
+posthoc = pg.pairwise_tests(data=df, dv='response', within='timepoint',
+                             subject='subject', padjust='bonf')
+print(posthoc)` },
+
+  pearson: { pkg:'scipy.stats · numpy', code:
+`from scipy import stats
+import numpy as np
+
+x = [1.2, 2.4, 3.1, 4.5, 5.2, 6.0, 7.3]
+y = [2.1, 4.2, 6.0, 8.9, 10.1, 12.2, 14.5]
+
+print(stats.shapiro(x)); print(stats.shapiro(y))
+
+r, p = stats.pearsonr(x, y)
+z  = np.arctanh(r)
+se = 1 / np.sqrt(len(x) - 3)
+ci = np.tanh([z - 1.96*se, z + 1.96*se])
+print(f"r = {r:.3f},  p = {p:.4f},  95% CI = [{ci[0]:.3f}, {ci[1]:.3f}]")` },
+
+  spearman: { pkg:'scipy.stats', code:
+`from scipy import stats
+
+x = [1, 3, 2, 5, 4, 7, 6]
+y = [2, 5, 3, 8, 7, 11, 9]
+
+rho, p = stats.spearmanr(x, y)
+print(f"ρ = {rho:.3f},  p = {p:.4f}")` },
+
+  linear_reg: { pkg:'statsmodels', code:
+`import statsmodels.api as sm
+import numpy as np, matplotlib.pyplot as plt
+
+x = [1.2, 2.4, 3.1, 4.5, 5.2, 6.0, 7.3]
+y = [2.1, 4.2, 6.0, 8.9, 10.1, 12.2, 14.5]
+
+model = sm.OLS(y, sm.add_constant(x)).fit()
+print(model.summary())
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
+ax1.scatter(model.fittedvalues, model.resid)
+ax1.axhline(0, color='r'); ax1.set_title('Residuals vs Fitted')
+sm.qqplot(model.resid, line='s', ax=ax2); ax2.set_title('Q-Q Plot')
+plt.tight_layout(); plt.show()` },
+
+  multi_reg: { pkg:'statsmodels', code:
+`import statsmodels.formula.api as smf
+import pandas as pd
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+import numpy as np
+
+df = pd.DataFrame({
+    'y':   [3.2,4.5,2.1,5.8,3.9,6.2,4.8,3.5],
+    'x1':  [1.1,2.3,0.8,3.5,2.0,4.1,2.8,1.6],
+    'x2':  [0.5,1.2,0.3,1.8,0.9,2.2,1.5,0.7],
+    'grp': ['A','B','A','B','A','B','A','B']
+})
+
+model = smf.ols('y ~ x1 + x2 + C(grp)', data=df).fit()
+print(model.summary())
+
+X = df[['x1','x2']].assign(const=1)
+vif = {col: variance_inflation_factor(X.values, i) for i, col in enumerate(X.columns)}
+print("VIF:", vif)` },
+
+  logistic: { pkg:'statsmodels · sklearn', code:
+`import statsmodels.formula.api as smf
+import pandas as pd, numpy as np
+from sklearn.metrics import roc_auc_score
+
+df = pd.DataFrame({
+    'outcome':   [0,1,0,1,1,0,1,0,1,1],
+    'age':       [25,45,30,55,50,28,48,32,42,60],
+    'treatment': ['A','B','A','B','B','A','B','A','B','B']
+})
+
+model = smf.logit('outcome ~ age + C(treatment)', data=df).fit()
+print(model.summary())
+
+odds = np.exp(pd.concat([model.params, model.conf_int()], axis=1))
+odds.columns = ['OR', 'CI_low', 'CI_high']
+print(odds)
+
+print(f"AUC = {roc_auc_score(df['outcome'], model.predict()):.3f}")` },
+
+  poisson: { pkg:'statsmodels', code:
+`import statsmodels.formula.api as smf
+import pandas as pd
+
+df = pd.DataFrame({
+    'count': [2,5,1,8,4,11,3,7,9,6],
+    'dose':  [1,2,1,3,2,4,1,3,3,2],
+    'group': ['A','A','B','B','A','B','A','B','A','B']
+})
+
+model = smf.poisson('count ~ dose + C(group)', data=df).fit()
+print(model.summary())
+
+print(f"Deviance/df = {model.deviance/model.df_resid:.2f}  (≈1 → no overdispersion)")
+# If overdispersed: smf.negativebinomial(...)` },
+
+  chisq: { pkg:'scipy.stats · numpy', code:
+`from scipy import stats
+import numpy as np
+
+table = np.array([[45, 35], [25, 55]])
+
+chi2, p, dof, expected = stats.chi2_contingency(table)
+print(f"χ² = {chi2:.3f},  df = {dof},  p = {p:.4f}")
+print("Expected frequencies:\\n", expected.round(1))
+
+v = np.sqrt(chi2 / (table.sum() * (min(table.shape)-1)))
+print(f"Cramér's V = {v:.3f}")` },
+
+  chisq_gof: { pkg:'scipy.stats · numpy', code:
+`from scipy import stats
+import numpy as np
+
+observed = np.array([30, 45, 25])
+expected  = np.array([1/3, 1/3, 1/3])   # equal proportions
+
+chi2, p = stats.chisquare(observed, f_exp=observed.sum()*expected)
+print(f"χ² = {chi2:.3f},  p = {p:.4f}")` },
+
+  fisher: { pkg:'scipy.stats', code:
+`from scipy import stats
+import numpy as np
+
+table = np.array([[3, 8], [12, 5]])
+
+odds_ratio, p = stats.fisher_exact(table, alternative='two-sided')
+print(f"Odds ratio = {odds_ratio:.3f},  p = {p:.4f}")` },
+
+  kappa: { pkg:'sklearn.metrics', code:
+`from sklearn.metrics import cohen_kappa_score
+
+rater1 = ['Yes','No','Yes','Yes','No','No','Yes','No']
+rater2 = ['Yes','No','Yes','No','No','Yes','Yes','No']
+
+kappa = cohen_kappa_score(rater1, rater2)
+print(f"κ = {kappa:.3f}")
+
+# Weighted kappa for ordinal ratings:
+# kappa_w = cohen_kappa_score(rater1_num, rater2_num, weights='linear')` },
+
+  shapiro: { pkg:'scipy.stats · matplotlib', code:
+`from scipy import stats
+import numpy as np, matplotlib.pyplot as plt
+
+data = [2.3,2.7,2.5,2.8,2.4,2.6,2.9,2.2,2.5,2.7]
+
+stat, p = stats.shapiro(data)
+print(f"Shapiro-Wilk: W = {stat:.3f},  p = {p:.4f}")
+print("→", "Normal (p > 0.05)" if p > 0.05 else "Non-normal (p ≤ 0.05)")
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
+ax1.hist(data, edgecolor='black'); ax1.set_title('Histogram')
+stats.probplot(data, plot=ax2); ax2.set_title('Q-Q Plot')
+plt.tight_layout(); plt.show()
+
+# For n > 50: stats.kstest(data, 'norm', args=(np.mean(data), np.std(data)))` },
+
+  cox: { pkg:'lifelines', code:
+`from lifelines import KaplanMeierFitter, CoxPHFitter
+from lifelines.statistics import logrank_test
+import pandas as pd
+
+df = pd.DataFrame({
+    'time':  [5,12,8,3,15,9,2,11,6,14],
+    'event': [1,0,1,1,0,1,1,0,1,0],
+    'group': ['A','A','B','B','A','B','A','B','A','B'],
+    'age':   [45,52,38,61,49,55,43,58,47,53]
+})
+
+for g, sub in df.groupby('group'):
+    kmf = KaplanMeierFitter()
+    kmf.fit(sub['time'], sub['event'], label=g)
+    kmf.plot_survival_function()
+
+A, B = df[df.group=='A'], df[df.group=='B']
+r = logrank_test(A['time'], B['time'], A['event'], B['event'])
+print(f"Log-rank p = {r.p_value:.4f}")
+
+df['group_num'] = (df['group']=='B').astype(int)
+cph = CoxPHFitter()
+cph.fit(df[['time','event','group_num','age']], duration_col='time', event_col='event')
+cph.print_summary()` },
+
+  pca: { pkg:'sklearn · matplotlib', code:
+`from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+import pandas as pd, numpy as np, matplotlib.pyplot as plt
+
+df = pd.DataFrame({
+    'var1': [2.3,1.5,3.1,2.8,1.9,3.5,2.1,1.7,3.3,2.6],
+    'var2': [1.1,0.9,1.8,1.5,1.0,2.0,1.2,0.8,1.7,1.4],
+    'var3': [5.2,3.8,6.9,5.8,4.1,7.2,4.9,3.5,6.5,5.5],
+    'var4': [0.8,0.5,1.3,1.0,0.6,1.5,0.9,0.4,1.2,1.0]
+})
+
+X   = StandardScaler().fit_transform(df)
+pca = PCA().fit(X)
+
+print("Explained variance ratio:", pca.explained_variance_ratio_.round(3))
+print("Cumulative:", pca.explained_variance_ratio_.cumsum().round(3))
+
+plt.plot(range(1, len(pca.explained_variance_)+1), pca.explained_variance_, 'o-')
+plt.xlabel('Component'); plt.ylabel('Eigenvalue'); plt.title('Scree Plot'); plt.show()
+
+scores = pd.DataFrame(pca.transform(X), columns=[f'PC{i+1}' for i in range(df.shape[1])])
+print(scores.head())` },
+
+  lmer: { pkg:'statsmodels (or pingouin)', code:
+`import statsmodels.formula.api as smf
+import pandas as pd
+
+df = pd.DataFrame({
+    'subject':   [1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6],
+    'timepoint': [1,2,3,4]*6,
+    'treatment': ['A']*8 + ['B']*8 + ['A']*4 + ['B']*4,
+    'response':  [2.1,2.5,2.8,3.1, 1.9,2.2,2.6,3.0,
+                  3.2,3.8,4.1,4.5, 3.0,3.5,3.9,4.2,
+                  2.4,2.7,3.0,3.3, 2.2,2.6,2.9,3.2]
+})
+
+model = smf.mixedlm('response ~ C(timepoint) * C(treatment)',
+                    data=df, groups=df['subject']).fit()
+print(model.summary())` },
+}
+
+// ── SPSS syntax ───────────────────────────────────────────────────────────────
+const SPSS_RESULTS = {
+  one_t: { pkg:'SPSS Statistics', code:
+`* One-sample t-test
+T-TEST
+  /TESTVAL = 2.5
+  /MISSING = ANALYSIS
+  /VARIABLES = data
+  /CRITERIA = CI(0.95).` },
+
+  paired_t: { pkg:'SPSS Statistics', code:
+`* Paired-samples t-test
+T-TEST PAIRS = before WITH after (PAIRED)
+  /CRITERIA = CI(0.95)
+  /MISSING = ANALYSIS.` },
+
+  welch_t: { pkg:'SPSS Statistics', code:
+`* Independent-samples t-test (Welch's)
+T-TEST GROUPS = group(1 2)
+  /MISSING = ANALYSIS
+  /VARIABLES = value
+  /CRITERIA = CI(0.95).
+* Use the "Equal variances not assumed" row (Welch)` },
+
+  wilcox1: { pkg:'SPSS Statistics', code:
+`* One-sample Wilcoxon (create difference variable first)
+COMPUTE diff = data - 2.0.  /* hypothesised median */
+EXECUTE.
+
+NPAR TESTS
+  /WILCOXON = diff
+  /MISSING ANALYSIS.` },
+
+  wilcox_sr: { pkg:'SPSS Statistics', code:
+`* Paired Wilcoxon signed-rank test
+NPAR TESTS
+  /WILCOXON = before WITH after (PAIRED)
+  /STATISTICS = DESCRIPTIVES
+  /MISSING ANALYSIS.` },
+
+  mwu: { pkg:'SPSS Statistics', code:
+`* Mann-Whitney U test
+NPAR TESTS
+  /M-W = value BY group(1 2)
+  /STATISTICS = DESCRIPTIVES
+  /MISSING ANALYSIS.` },
+
+  one_anova: { pkg:'SPSS Statistics', code:
+`* One-way ANOVA with Tukey post-hoc
+ONEWAY values BY group
+  /STATISTICS DESCRIPTIVES HOMOGENEITY
+  /POSTHOC TUKEY ALPHA(0.05)
+  /MISSING ANALYSIS.` },
+
+  two_anova: { pkg:'SPSS Statistics', code:
+`* Two-way ANOVA (factorial)
+UNIANOVA values BY treatment sex
+  /METHOD = SSTYPE(3)
+  /INTERCEPT = INCLUDE
+  /EMMEANS = TABLES(treatment*sex)
+  /PRINT = DESCRIPTIVE HOMOGENEITY
+  /CRITERIA = ALPHA(0.05)
+  /DESIGN = treatment sex treatment*sex.` },
+
+  kruskal: { pkg:'SPSS Statistics', code:
+`* Kruskal-Wallis test
+NPAR TESTS
+  /K-W = values BY group(1 3)
+  /STATISTICS = DESCRIPTIVES
+  /MISSING ANALYSIS.` },
+
+  rm_anova: { pkg:'SPSS Statistics', code:
+`* Repeated-measures ANOVA (within-subjects)
+GLM response_t1 response_t2 response_t3
+  /WSFACTOR = timepoint 3 Polynomial
+  /METHOD = SSTYPE(3)
+  /PRINT = DESCRIPTIVE
+  /WSDESIGN = timepoint.` },
+
+  pearson: { pkg:'SPSS Statistics', code:
+`* Pearson correlation
+CORRELATIONS
+  /VARIABLES = x y
+  /PRINT = TWOTAIL SIG FULL
+  /MISSING = PAIRWISE.` },
+
+  spearman: { pkg:'SPSS Statistics', code:
+`* Spearman rank correlation
+NONPAR CORR
+  /VARIABLES = x y
+  /PRINT = SPEARMAN TWOTAIL SIG
+  /MISSING = PAIRWISE.` },
+
+  linear_reg: { pkg:'SPSS Statistics', code:
+`* Simple linear regression
+REGRESSION
+  /MISSING LISTWISE
+  /STATISTICS COEFF OUTS R ANOVA
+  /CRITERIA = PIN(.05) POUT(.10)
+  /NOORIGIN
+  /DEPENDENT y
+  /METHOD = ENTER x.` },
+
+  multi_reg: { pkg:'SPSS Statistics', code:
+`* Multiple linear regression
+REGRESSION
+  /MISSING LISTWISE
+  /STATISTICS COEFF OUTS R ANOVA COLLIN TOL
+  /CRITERIA = PIN(.05) POUT(.10)
+  /NOORIGIN
+  /DEPENDENT y
+  /METHOD = ENTER x1 x2 grp.` },
+
+  logistic: { pkg:'SPSS Statistics', code:
+`* Binary logistic regression
+LOGISTIC REGRESSION VARIABLES outcome
+  /METHOD = ENTER age treatment
+  /CONTRAST (treatment) = Indicator(1)
+  /PRINT = GOODFIT CI(95)
+  /CRITERIA = PIN(0.05) POUT(0.10) ITERATE(20) CUT(0.5).` },
+
+  poisson: { pkg:'SPSS Statistics', code:
+`* Poisson regression (Generalized Linear Model)
+GENLIN count BY group WITH dose
+  /MODEL group dose INTERCEPT = YES
+    DISTRIBUTION = POISSON LINK = LOG
+  /PRINT CPS DESCRIPTIVES MODELINFO FIT SUMMARY SOLUTION.` },
+
+  chisq: { pkg:'SPSS Statistics', code:
+`* Chi-squared test of independence
+CROSSTABS
+  /TABLES = row BY col
+  /STATISTICS = CHISQ PHI CC
+  /CELLS = COUNT EXPECTED ROW COLUMN TOTAL
+  /COUNT ROUND CELL.` },
+
+  chisq_gof: { pkg:'SPSS Statistics', code:
+`* Chi-squared goodness-of-fit
+NPAR TESTS
+  /CHISQUARE = category
+  /EXPECTED = EQUAL
+  /* Replace EQUAL with custom weights if needed: 1 2 1 */
+  /STATISTICS DESCRIPTIVES.` },
+
+  fisher: { pkg:'SPSS Statistics', code:
+`* Fisher's exact test (SPSS reports it automatically for 2×2 tables)
+CROSSTABS
+  /TABLES = row BY col
+  /STATISTICS = CHISQ
+  /CELLS = COUNT EXPECTED
+  /COUNT ROUND CELL.` },
+
+  kappa: { pkg:'SPSS Statistics', code:
+`* Cohen's Kappa — inter-rater agreement
+CROSSTABS
+  /TABLES = rater1 BY rater2
+  /STATISTICS = KAPPA
+  /CELLS = COUNT
+  /COUNT ROUND CELL.` },
+
+  shapiro: { pkg:'SPSS Statistics', code:
+`* Normality tests (Shapiro-Wilk + K-S + plots)
+EXAMINE VARIABLES = data
+  /PLOT NPPLOT HISTOGRAM
+  /STATISTICS DESCRIPTIVES
+  /CINTERVAL 95
+  /MISSING LISTWISE
+  /NOTOTAL.
+* Shapiro-Wilk reported for n ≤ 50
+* Kolmogorov-Smirnov (Lilliefors) for larger samples` },
+
+  cox: { pkg:'SPSS Statistics', code:
+`* Kaplan-Meier survival curves + log-rank test
+KM time BY group
+  /STATUS = event(1)
+  /PRINT TABLE MEAN
+  /TEST LOGRANK
+  /PLOT SURVIVAL.
+
+* Cox proportional hazards model
+COXREG time
+  /STATUS = event(1)
+  /METHOD = ENTER group age
+  /PRINT = CI(95)
+  /CRITERIA = PIN(.05) POUT(.10) ITERATE(20).` },
+
+  pca: { pkg:'SPSS Statistics', code:
+`* Principal Component Analysis
+FACTOR
+  /VARIABLES var1 var2 var3 var4
+  /MISSING LISTWISE
+  /ANALYSIS var1 var2 var3 var4
+  /PRINT INITIAL KMO EXTRACTION ROTATION
+  /PLOT EIGEN
+  /EXTRACTION PC
+  /CRITERIA MINEIGEN(1) ITERATE(25)
+  /ROTATION VARIMAX
+  /METHOD = CORRELATION.` },
+
+  lmer: { pkg:'SPSS Statistics', code:
+`* Linear mixed model (random intercept per subject)
+MIXED response BY timepoint treatment
+  /CRITERIA = DFMETHOD(SATTERTHWAITE) CIN(95) MXITER(100)
+  /FIXED = timepoint treatment timepoint*treatment | SSTYPE(3)
+  /METHOD = REML
+  /RANDOM = INTERCEPT | SUBJECT(subject) COVTYPE(VC)
+  /EMMEANS TABLES(treatment*timepoint) COMPARE(treatment)
+  /PRINT = SOLUTION TESTCOV.` },
+}
+
+// ── Power calculator — math primitives ───────────────────────────────────────
+// Normal CDF (Zelen & Severo, error < 7.5e-8)
+function _phi(x) {
+  const b = [0.319381530,-0.356563782,1.781477937,-1.821255978,1.330274429]
+  const t = 1/(1+0.2316419*Math.abs(x))
+  let p = t*(b[0]+t*(b[1]+t*(b[2]+t*(b[3]+t*b[4]))))
+  p = 1 - 0.3989422803*Math.exp(-x*x/2)*p
+  return x >= 0 ? p : 1-p
+}
+// Inverse normal CDF (Peter Acklam's rational approximation)
+function _phiInv(p) {
+  if (p<=0) return -Infinity; if (p>=1) return Infinity
+  const sign = p>0.5?1:-1, q=Math.min(p,1-p)
+  const r = Math.sqrt(-2*Math.log(q))
+  return sign*(r-(2.515517+0.802853*r+0.010328*r*r)/
+                  (1+1.432788*r+0.189269*r*r+0.001308*r*r*r))
+}
+// Log-gamma (Lanczos, 6 terms)
+function _lgam(x) {
+  const c=[76.18009172947146,-86.50532032941677,24.01409824083091,
+           -1.231739572450155,0.1208650973866179e-2,-0.5395239384953e-5]
+  let y=x, tmp=x+5.5, ser=1.000000000190015
+  tmp-=(x+0.5)*Math.log(tmp)
+  for(let i=0;i<6;i++){y++;ser+=c[i]/y}
+  return -tmp+Math.log(2.5066282746310005*ser/x)
+}
+// Lower regularised incomplete gamma P(a,x) = gammainc(a,x)
+function _gamP(a, x) {
+  if (x<=0) return 0
+  if (x<a+1) {                          // series
+    let ap=a, d=1/a, s=d
+    for(let i=0;i<300;i++){ap++;d*=x/ap;s+=d;if(d<s*3e-12)break}
+    return s*Math.exp(-x+a*Math.log(x)-_lgam(a))
+  }
+  // continued fraction for upper gamma
+  let b=x+1-a, c=1e30, d=1/b, h=d
+  for(let i=1;i<=300;i++){
+    const an=-i*(i-a);b+=2
+    d=an*d+b;if(Math.abs(d)<1e-30)d=1e-30
+    c=b+an/c;if(Math.abs(c)<1e-30)c=1e-30
+    d=1/d;const del=d*c;h*=del;if(Math.abs(del-1)<1e-11)break
+  }
+  return 1-Math.exp(-x+a*Math.log(x)-_lgam(a))*h
+}
+// Chi-squared CDF
+function _pchisq(x, df) { return _gamP(df/2, x/2) }
+// Regularised incomplete beta I_x(a,b)
+function _ibeta(x, a, b) {
+  if (x<=0) return 0; if (x>=1) return 1
+  const lb=_lgam(a)+_lgam(b)-_lgam(a+b)
+  const bt=Math.exp(a*Math.log(x)+b*Math.log(1-x)-lb)
+  const cf=(x,a,b)=>{
+    const EPS=1e-10,qab=a+b,qap=a+1,qam=a-1
+    let c=1,d=1-qab*x/qap;if(Math.abs(d)<1e-30)d=1e-30;d=1/d;let h=d
+    for(let m=1;m<=300;m++){
+      const m2=2*m
+      let aa=m*(b-m)*x/((qam+m2)*(a+m2))
+      d=1+aa*d;if(Math.abs(d)<1e-30)d=1e-30;c=1+aa/c;if(Math.abs(c)<1e-30)c=1e-30;d=1/d;h*=d*c
+      aa=-(a+m)*(qab+m)*x/((a+m2)*(qap+m2))
+      d=1+aa*d;if(Math.abs(d)<1e-30)d=1e-30;c=1+aa/c;if(Math.abs(c)<1e-30)c=1e-30;d=1/d;const del=d*c;h*=del
+      if(Math.abs(del-1)<EPS)break
+    }
+    return h
+  }
+  return x<(a+1)/(a+b+2)?bt*cf(x,a,b)/a:1-bt*cf(1-x,b,a)/b
+}
+// t-distribution CDF
+function _ptCDF(t, df) {
+  const x=df/(df+t*t),p=0.5*_ibeta(x,df/2,0.5)
+  return t>=0?1-p:p
+}
+// F-distribution CDF
+function _pfCDF(f, df1, df2) {
+  return f<=0?0:_ibeta(df1*f/(df1*f+df2),df1/2,df2/2)
+}
+// Quantile of t (bisection)
+function _qt(p, df) {
+  if(p<0.5) return -_qt(1-p,df)
+  let lo=0,hi=500
+  for(let i=0;i<100;i++){const m=(lo+hi)/2;(_ptCDF(m,df)<p?lo:hi)=m}
+  return (lo+hi)/2
+}
+// Quantile of chi-squared (bisection)
+function _qchisq(p, df) {
+  let lo=0,hi=Math.max(df*5,500)
+  for(let i=0;i<100;i++){const m=(lo+hi)/2;(_pchisq(m,df)<p?lo:hi)=m}
+  return (lo+hi)/2
+}
+// Non-central chi-squared upper tail P(X>=x|df,ncp) via Poisson mixture
+function _pncChisqU(x, df, ncp) {
+  if (x<=0) return 1; if (ncp<=0) return 1-_pchisq(x,df)
+  const l2=ncp/2; let logW=-l2,j=0,s=0
+  while(j<600){
+    const w=Math.exp(logW)
+    if(w<1e-15&&j>l2+5)break
+    s+=w*(1-_pchisq(x,df+2*j))
+    logW+=Math.log(l2)-Math.log(j+1); j++
+  }
+  return s
+}
+// Power formulas
+function _pwrT(d, n, alpha, type) {       // type: 'ind'=two-sample, 'one'=one-sample/paired
+  const df=type==='ind'?2*(n-1):n-1, ncp=type==='ind'?d*Math.sqrt(n/2):d*Math.sqrt(n)
+  const tc=_qt(1-alpha/2,df)
+  return _phi(ncp-tc)+_phi(-ncp-tc)
+}
+function _pwrAnova(f, n, k, alpha) {       // n per group, k groups
+  const N=n*k, df1=k-1, lambda=f*f*N
+  const crit=_qchisq(1-alpha,df1)         // chi-sq approximation (exact for large df2)
+  return _pncChisqU(crit,df1,lambda)
+}
+function _pwrCorr(r, n, alpha) {
+  const z=0.5*Math.log((1+r)/(1-r)), se=1/Math.sqrt(n-3), zc=_phiInv(1-alpha/2)
+  return _phi(Math.abs(z)/se-zc)+_phi(-Math.abs(z)/se-zc)
+}
+function _pwrChisq(w, n, df, alpha) {
+  const lambda=w*w*n, crit=_qchisq(1-alpha,df)
+  return _pncChisqU(crit,df,lambda)
+}
+function _pwrReg(f2, n, u, alpha) {        // u = number of predictors
+  const v=n-u-1, lambda=f2*n
+  const crit=_qchisq(1-alpha,u)
+  return _pncChisqU(crit,u,lambda)
+}
+// Bisection solver: find smallest n where power >= target
+function _pwSolveN(fn, target, max=10000) {
+  if(fn(max)<target) return null
+  let lo=2,hi=max
+  for(let i=0;i<40;i++){const m=Math.ceil((lo+hi)/2);fn(m)>=target?hi=m:lo=m;if(hi-lo<=1)break}
+  return hi
+}
+// Bisection solver: find effect size
+function _pwSolveES(fn, target, lo=0.001, hi=5) {
+  if(fn(hi)<target) return null
+  for(let i=0;i<60;i++){const m=(lo+hi)/2;fn(m)>=target?hi=m:lo=m;if(hi-lo<1e-5)break}
+  return (lo+hi)/2
+}
+
+// ── Power calculator state helpers ───────────────────────────────────────────
+function _pwGetES(key) {
+  return key==='d'?_pwD:key==='f'?_pwF:key==='r'?_pwR:key==='w'?_pwW:_pwF2
+}
+function _pwSetES(key,v) {
+  if(key==='d')_pwD=v;else if(key==='f')_pwF=v;else if(key==='r')_pwR=v;else if(key==='w')_pwW=v;else _pwF2=v
+}
+
+function _pwCalculate() {
+  // Read inputs
+  const alpha = parseFloat(document.getElementById('pw-alpha')?.value||'0.05')
+  const power = parseFloat(document.getElementById('pw-power')?.value||'0.80')
+  const n     = parseFloat(document.getElementById('pw-n')?.value||'20')
+  const es    = parseFloat(document.getElementById('pw-es')?.value||'0.5')
+  const k     = parseInt(document.getElementById('pw-k')?.value||'3')
+  const df    = parseInt(document.getElementById('pw-df')?.value||'1')
+  _pwAlpha=alpha; _pwPower=power; _pwN=n; _pwK=k; _pwDF=df
+
+  const tests = {
+    ttest_ind: { esKey:'d', type:'ind' },
+    ttest_one: { esKey:'d', type:'one' },
+    anova:     { esKey:'f' },
+    corr:      { esKey:'r' },
+    chisq:     { esKey:'w' },
+    reg:       { esKey:'f2' },
+  }
+  const tc = tests[_pwTest]
+  if (!tc) return
+
+  let resultHTML = ''
+  const fmt = v => v == null ? '> 10 000' : Number.isFinite(v) ? v.toFixed(3) : '—'
+
+  if (_pwSolveFor === 'n') {
+    _pwSetES(tc.esKey, es)
+    let result, label, note=''
+    if (_pwTest==='ttest_ind') {
+      result = _pwSolveN(nn=>_pwrT(_pwD,nn,alpha,'ind'), power)
+      label  = `<b>${result ?? '> 10 000'}</b> per group (${result?result*2:'> 20 000'} total)`
+      note   = 'Two-tailed Welch\'s / independent t-test'
+    } else if (_pwTest==='ttest_one') {
+      result = _pwSolveN(nn=>_pwrT(_pwD,nn,alpha,'one'), power)
+      label  = `<b>${result ?? '> 10 000'}</b> subjects`
+      note   = 'Two-tailed one-sample or paired t-test'
+    } else if (_pwTest==='anova') {
+      result = _pwSolveN(nn=>_pwrAnova(_pwF,nn,_pwK,alpha), power)
+      label  = `<b>${result ?? '> 10 000'}</b> per group (${result?result*_pwK:'> 10 000'} total, ${_pwK} groups)`
+    } else if (_pwTest==='corr') {
+      result = _pwSolveN(nn=>_pwrCorr(_pwR,nn,alpha), power)
+      label  = `<b>${result ?? '> 10 000'}</b> pairs`
+    } else if (_pwTest==='chisq') {
+      result = _pwSolveN(nn=>_pwrChisq(_pwW,nn,_pwDF,alpha), power)
+      label  = `<b>${result ?? '> 10 000'}</b> subjects (df = ${_pwDF})`
+    } else if (_pwTest==='reg') {
+      result = _pwSolveN(nn=>_pwrReg(_pwF2,nn,_pwK,alpha), power)
+      label  = `<b>${result ?? '> 10 000'}</b> subjects (${_pwK} predictors)`
+    }
+    resultHTML = `<p class="text-sm text-slate-800 mb-1">Required sample size: ${label}</p>${note?`<p class="text-xs text-slate-400">${note}</p>`:''}`
+
+  } else if (_pwSolveFor === 'power') {
+    _pwSetES(tc.esKey, es); _pwN = n
+    let pwr
+    if (_pwTest==='ttest_ind')      pwr = _pwrT(_pwD,n,alpha,'ind')
+    else if (_pwTest==='ttest_one') pwr = _pwrT(_pwD,n,alpha,'one')
+    else if (_pwTest==='anova')     pwr = _pwrAnova(_pwF,n,_pwK,alpha)
+    else if (_pwTest==='corr')      pwr = _pwrCorr(_pwR,n,alpha)
+    else if (_pwTest==='chisq')     pwr = _pwrChisq(_pwW,n,_pwDF,alpha)
+    else if (_pwTest==='reg')       pwr = _pwrReg(_pwF2,n,_pwK,alpha)
+    const pct = (pwr*100).toFixed(1)
+    const col = pwr>=0.8?'text-green-700':pwr>=0.6?'text-amber-600':'text-red-600'
+    resultHTML = `<p class="text-sm text-slate-800">Achieved power: <b class="${col}">${pct}%</b> (β = ${(1-pwr).toFixed(3)})</p>`
+
+  } else { // es
+    let result, label
+    if (_pwTest==='ttest_ind') {
+      result = _pwSolveES(es=>_pwrT(es,n,alpha,'ind'), power)
+      label  = result != null ? `Cohen's d = <b>${fmt(result)}</b>` : '> 5 (not feasible)'
+    } else if (_pwTest==='ttest_one') {
+      result = _pwSolveES(es=>_pwrT(es,n,alpha,'one'), power)
+      label  = result != null ? `Cohen's d = <b>${fmt(result)}</b>` : '> 5 (not feasible)'
+    } else if (_pwTest==='anova') {
+      result = _pwSolveES(es=>_pwrAnova(es,n,_pwK,alpha), power)
+      label  = result != null ? `Cohen's f = <b>${fmt(result)}</b>` : '> 5 (not feasible)'
+    } else if (_pwTest==='corr') {
+      result = _pwSolveES(es=>_pwrCorr(es,n,alpha), power, 0.001, 0.999)
+      label  = result != null ? `Pearson r = <b>${fmt(result)}</b>` : '> 0.999 (not feasible)'
+    } else if (_pwTest==='chisq') {
+      result = _pwSolveES(es=>_pwrChisq(es,n,_pwDF,alpha), power)
+      label  = result != null ? `Cohen's w = <b>${fmt(result)}</b>` : '> 5 (not feasible)'
+    } else if (_pwTest==='reg') {
+      result = _pwSolveES(es=>_pwrReg(es,n,_pwK,alpha), power)
+      label  = result != null ? `Cohen's f² = <b>${fmt(result)}</b>` : '> 5 (not feasible)'
+    }
+    resultHTML = `<p class="text-sm text-slate-800">Minimum detectable effect: ${label}</p>`
+  }
+
+  const el = document.getElementById('pw-result')
+  if (el) el.innerHTML = `
+    <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+      <p class="text-xs font-semibold text-indigo-600 mb-2">Result  (α = ${alpha}, ${_pwSolveFor!=='power'?`target power = ${(power*100).toFixed(0)}%`:`n = ${n}`})</p>
+      ${resultHTML}
+    </div>`
+}
+
+// ── Power calculator UI ───────────────────────────────────────────────────────
+function _utilRenderPower() {
+  const TESTS = [
+    { id:'ttest_ind', label:'t-test — 2 independent groups', esKey:'d', esLabel:"Cohen's d", bench:'0.2 small · 0.5 medium · 0.8 large' },
+    { id:'ttest_one', label:'t-test — 1 sample or paired',   esKey:'d', esLabel:"Cohen's d", bench:'0.2 small · 0.5 medium · 0.8 large' },
+    { id:'anova',     label:'One-way ANOVA',                  esKey:'f', esLabel:"Cohen's f", bench:'0.10 small · 0.25 medium · 0.40 large' },
+    { id:'corr',      label:'Pearson r correlation',          esKey:'r', esLabel:'Pearson r',  bench:'0.10 small · 0.30 medium · 0.50 large' },
+    { id:'chisq',     label:'Chi-squared test',               esKey:'w', esLabel:"Cohen's w", bench:'0.10 small · 0.30 medium · 0.50 large' },
+    { id:'reg',       label:'Linear regression (F-test)',     esKey:'f2',esLabel:"Cohen's f²",bench:'0.02 small · 0.15 medium · 0.35 large' },
+  ]
+  const t = TESTS.find(t=>t.id===_pwTest)||TESTS[0]
+  const nLabel = _pwTest==='ttest_ind' ? 'N per group' : 'N (total)'
 
   return `
-  <div class="grid grid-cols-5 gap-6 max-w-5xl mx-auto h-full">
+  <div class="max-w-2xl mx-auto">
+    <h3 class="text-sm font-bold text-slate-700 mb-0.5">⚡ Power Analysis (G*Power)</h3>
+    <p class="text-xs text-slate-400 mb-4">Compute required N, achievable power, or minimum detectable effect.</p>
 
-    <!-- Decision tree (left) -->
-    <div class="col-span-2">
-      <h3 class="text-sm font-bold text-slate-700 mb-3">📊 Statistical Test Selector</h3>
+    <div class="mb-4">
+      <label class="block text-xs font-medium text-slate-600 mb-1.5">Statistical test</label>
+      <select onchange="_pwTest=this.value;_rerenderRTool()"
+        class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+        ${TESTS.map(tt=>`<option value="${tt.id}"${_pwTest===tt.id?' selected':''}>${tt.label}</option>`).join('')}
+      </select>
+    </div>
 
-      <!-- Breadcrumb -->
-      ${_rStep.length > 0 ? `
-      <div class="mb-3 space-y-1">
-        ${_rStep.map((s,i)=>`
-        <div class="text-xs text-slate-400">
-          <span class="text-slate-500">${esc(s.q.length>48?s.q.slice(0,45)+'…':s.q)}</span><br/>
-          <span class="font-medium text-indigo-600">→ ${esc(s.a)}</span>
-        </div>`).join('')}
+    <div class="mb-4">
+      <label class="block text-xs font-medium text-slate-600 mb-1.5">Solve for</label>
+      <div class="flex gap-2">
+        ${[['n','Sample size (N)'],['power','Power (1−β)'],['es','Effect size']].map(([s,lbl])=>`
+        <button onclick="_pwSolveFor='${s}';_rerenderRTool()"
+          class="flex-1 px-3 py-2 rounded-lg text-xs font-medium border transition-colors
+            ${_pwSolveFor===s?'bg-indigo-600 text-white border-indigo-600':'bg-white text-slate-600 border-slate-200 hover:border-indigo-300'}">
+          ${lbl}
+        </button>`).join('')}
       </div>
-      <button onclick="_rStep=[];_rResult=null;_rerenderRTool()"
-        class="text-xs text-slate-400 hover:text-slate-600 mb-3">↩ Start over</button>
-      ` : ''}
+    </div>
 
-      <!-- Current question or result -->
-      ${isResult && result ? `
-      <div class="bg-green-50 border border-green-200 rounded-xl p-4">
-        <p class="text-xs font-semibold text-green-700 mb-1">✓ Recommended test:</p>
-        <p class="text-sm font-bold text-green-900">${result.name}</p>
-        <p class="text-xs text-green-600 mt-1">Package: ${result.pkg}</p>
-        <button onclick="_rStep=[];_rResult=null;_rerenderRTool()"
-          class="mt-3 text-xs text-slate-500 hover:text-slate-700">↩ Start over</button>
-      </div>
-      ` : node ? `
-      <div class="bg-white border border-slate-200 rounded-xl p-4">
-        <p class="text-sm font-semibold text-slate-800 mb-3">${esc(node.q)}</p>
-        <div class="space-y-2">
-          ${node.opts.map(o=>`
-          <button onclick="rChoose(${JSON.stringify(node.q)}, ${JSON.stringify(o.label)}, ${JSON.stringify(o.next||'')}, ${JSON.stringify(o.result||'')})"
-            class="w-full text-left px-3 py-2.5 rounded-lg border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 text-xs text-slate-700 transition-colors">
-            ${esc(o.label)}
-          </button>`).join('')}
+    <div class="bg-white border border-slate-200 rounded-xl p-4 space-y-3 mb-4">
+      ${_pwSolveFor!=='es'?`
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">${t.esLabel}
+          <span class="text-slate-400 font-normal">(${t.bench})</span></label>
+        <input id="pw-es" type="number" step="0.01" min="0.001" value="${_pwGetES(t.esKey)}"
+          class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+      </div>`:''}
+
+      <div class="flex gap-3 flex-wrap">
+        <div class="flex-1" style="min-width:100px">
+          <label class="block text-xs font-medium text-slate-600 mb-1">α (significance)</label>
+          <select id="pw-alpha"
+            class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+            ${[0.001,0.01,0.05,0.1].map(a=>`<option value="${a}"${Math.abs(_pwAlpha-a)<0.0001?' selected':''}>${a}</option>`).join('')}
+          </select>
         </div>
-      </div>` : ''}
+        ${_pwSolveFor!=='power'?`
+        <div class="flex-1" style="min-width:100px">
+          <label class="block text-xs font-medium text-slate-600 mb-1">Power (1−β)</label>
+          <select id="pw-power"
+            class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+            ${[0.70,0.80,0.85,0.90,0.95,0.99].map(p=>`<option value="${p}"${Math.abs(_pwPower-p)<0.001?' selected':''}>${p}</option>`).join('')}
+          </select>
+        </div>`:''}
+        ${_pwSolveFor!=='n'?`
+        <div class="flex-1" style="min-width:100px">
+          <label class="block text-xs font-medium text-slate-600 mb-1">${nLabel}</label>
+          <input id="pw-n" type="number" min="2" step="1" value="${_pwN||20}"
+            class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+        </div>`:''}
+        ${_pwTest==='anova'||_pwTest==='reg'?`
+        <div style="width:110px">
+          <label class="block text-xs font-medium text-slate-600 mb-1">${_pwTest==='anova'?'Groups (k)':'Predictors (u)'}</label>
+          <input id="pw-k" type="number" min="${_pwTest==='anova'?3:1}" max="20" step="1" value="${_pwK}"
+            class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+        </div>`:''}
+        ${_pwTest==='chisq'?`
+        <div style="width:120px">
+          <label class="block text-xs font-medium text-slate-600 mb-1">df = (r−1)(c−1)</label>
+          <input id="pw-df" type="number" min="1" max="20" step="1" value="${_pwDF}"
+            class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+        </div>`:''}
+      </div>
     </div>
 
-    <!-- R code panel (right) -->
-    <div class="col-span-3">
-      <div class="flex items-center justify-between mb-3">
-        <h3 class="text-sm font-bold text-slate-700">R Code</h3>
-        ${result ? `<button onclick="rCopyCode()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs rounded-lg transition-colors">📋 Copy code</button>` : ''}
-      </div>
-      <div class="bg-slate-900 rounded-xl p-4 overflow-auto" style="max-height:420px">
-        <pre id="r-code-block" class="text-xs text-slate-200 leading-relaxed font-mono whitespace-pre">${
-          result
-            ? esc(result.code)
-            : `<span class="text-slate-500"># Answer the questions on the left to generate\n# the appropriate R code for your analysis.\n\n# The selector covers:\n# t-tests, ANOVA, Kruskal-Wallis, regression,\n# correlation, chi-squared, Fisher, PCA,\n# survival analysis, mixed effects models, and more.</span>`
-        }</pre>
-      </div>
-    </div>
+    <button onclick="_pwCalculate()"
+      class="w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors mb-4">
+      ⚡ Calculate
+    </button>
 
+    <div id="pw-result"></div>
+  </div>`
+}
+
+function _utilRenderR() {
+  const TABS = [['chat','💬 Chat'],['selector','📊 Test Selector'],['power','⚡ Power']]
+  const tabBar = `<div class="flex gap-1 mb-4 border-b border-slate-200 pb-0">
+    ${TABS.map(([id,lbl])=>`
+    <button onclick="_rTab='${id}';_rerenderRTool()"
+      class="px-3 py-2 text-xs font-medium border-b-2 transition-colors -mb-px
+        ${_rTab===id?'border-indigo-500 text-indigo-600':'border-transparent text-slate-500 hover:text-slate-700'}">
+      ${lbl}
+    </button>`).join('')}
+  </div>`
+
+  if (_rTab === 'power')    return tabBar + _utilRenderPower()
+  if (_rTab !== 'selector') return tabBar + _utilRenderChat()
+
+  const node     = _rGetCurrentNode()
+  const isResult = _rResult !== null
+  const rResult  = isResult ? R_RESULTS[_rResult] : null
+  const langRes  = isResult
+    ? (_rLang==='python' ? PYTHON_RESULTS[_rResult] : _rLang==='spss' ? SPSS_RESULTS[_rResult] : rResult)
+    : null
+  const langPkg  = langRes?.pkg || rResult?.pkg || ''
+  const codeText = langRes?.code || ''
+
+  const LANGS = [['r','R'],['python','Python'],['spss','SPSS']]
+  const langBar = `<div class="flex gap-1">
+    ${LANGS.map(([id,lbl])=>`
+    <button onclick="_rLang='${id}';_rerenderRTool()"
+      class="px-2.5 py-1 rounded text-xs font-medium transition-colors
+        ${_rLang===id?'bg-indigo-600 text-white':'bg-slate-100 text-slate-500 hover:bg-slate-200'}">
+      ${lbl}
+    </button>`).join('')}
+  </div>`
+
+  const placeholder = `<span class="text-slate-500"># Answer the questions on the left to get the code.\n\n# Covers: t-tests · ANOVA · Kruskal-Wallis · regression\n# correlation · chi-squared · Fisher · PCA\n# survival analysis · mixed effects · and more.</span>`
+
+  return tabBar + `
+  <div class="max-w-5xl mx-auto">
+    <div class="grid grid-cols-5 gap-6">
+
+      <!-- Decision tree (left) -->
+      <div class="col-span-2">
+        <!-- Breadcrumb -->
+        ${_rStep.length > 0 ? `
+        <div class="mb-3 space-y-1">
+          ${_rStep.map(s=>`
+          <div class="text-xs text-slate-400">
+            <span class="text-slate-500">${esc(s.q.length>48?s.q.slice(0,45)+'…':s.q)}</span><br/>
+            <span class="font-medium text-indigo-600">→ ${esc(s.a)}</span>
+          </div>`).join('')}
+        </div>
+        <button onclick="_rStep=[];_rResult=null;_rerenderRTool()"
+          class="text-xs text-slate-400 hover:text-slate-600 mb-3">↩ Start over</button>
+        ` : ''}
+
+        <!-- Current question or result -->
+        ${isResult && rResult ? `
+        <div class="bg-green-50 border border-green-200 rounded-xl p-4">
+          <p class="text-xs font-semibold text-green-700 mb-1">✓ Recommended test:</p>
+          <p class="text-sm font-bold text-green-900">${rResult.name}</p>
+          <button onclick="_rStep=[];_rResult=null;_rerenderRTool()"
+            class="mt-3 text-xs text-slate-500 hover:text-slate-700">↩ Start over</button>
+        </div>
+        ` : node ? `
+        <div class="bg-white border border-slate-200 rounded-xl p-4">
+          <p class="text-sm font-semibold text-slate-800 mb-3">${esc(node.q)}</p>
+          <div class="space-y-2">
+            ${node.opts.map(o=>`
+            <button onclick="rChoose(${JSON.stringify(node.q)}, ${JSON.stringify(o.label)}, ${JSON.stringify(o.next||'')}, ${JSON.stringify(o.result||'')})"
+              class="w-full text-left px-3 py-2.5 rounded-lg border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 text-xs text-slate-700 transition-colors">
+              ${esc(o.label)}
+            </button>`).join('')}
+          </div>
+        </div>` : ''}
+      </div>
+
+      <!-- Code panel (right) -->
+      <div class="col-span-3">
+        <div class="flex items-center justify-between mb-2">
+          ${langBar}
+          ${rResult ? `<button onclick="rCopyCode()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs rounded-lg transition-colors">📋 Copy</button>` : '<div></div>'}
+        </div>
+        ${langPkg ? `<p class="text-xs text-slate-400 mb-1.5">Package: ${esc(langPkg)}</p>` : ''}
+        <div class="bg-slate-900 rounded-xl p-4 overflow-auto" style="max-height:440px">
+          <pre id="r-code-block" class="text-xs text-slate-200 leading-relaxed font-mono whitespace-pre">${
+            rResult ? esc(codeText) : placeholder
+          }</pre>
+        </div>
+      </div>
+
+    </div>
   </div>`
 }
 
@@ -2047,4 +3025,196 @@ function rCopyCode() {
   if (!el) return
   navigator.clipboard.writeText(el.textContent)
     .then(() => showToast('R code copied ✓'))
+}
+
+// ══ Stats Chat Assistant ══════════════════════════════════════════════════════
+
+function _STATS_SYS(lang) {
+  const L = lang==='python' ? 'Python (scipy, statsmodels, pingouin, matplotlib)'
+          : lang==='spss'   ? 'SPSS syntax'
+          : 'R (base R + tidyverse/ggplot2 where appropriate)'
+  return `You are Dr. Stats, an expert biostatistician with broad experience across medicine, psychology, social sciences, biology, and engineering. You help researchers choose the right statistical test and plan well-powered studies.
+
+## Your approach
+- Ask ONE OR TWO targeted clarifying questions at a time — never fire a long list at once
+- Be conversational but precise; explain your reasoning in plain language
+- Once you have enough information, commit to a specific recommendation
+
+## Information you need to gather
+1. Research question + outcome variable type (continuous, binary, ordinal, count, time-to-event)
+2. Number of groups / conditions and whether they are independent or paired / repeated-measures
+3. Any covariates or confounders to adjust for
+4. Expected or minimum meaningful effect size — or use "medium" if unknown
+5. Desired significance level α (default 0.05) and power 1−β (default 80%)
+
+## When you have enough information, provide
+1. **Recommended test** — name it and give 1–2 sentences justifying the choice
+2. **Required sample size** — give a concrete number with brief reasoning, e.g. "d = 0.5, α = 0.05, 80% power → 64 per group"
+3. **Key assumptions** to verify before running the analysis
+4. **Ready-to-run code** in ${L} — always in a fenced code block with the language tag
+
+## Reference sample sizes (two-tailed, α = 0.05, 80% power)
+| Test | Effect | N per group or total |
+|---|---|---|
+| Independent t-test | d = 0.2 / 0.5 / 0.8 | 394 / 64 / 26 per group |
+| Paired t-test | d = 0.2 / 0.5 / 0.8 | 198 / 34 / 15 pairs |
+| One-way ANOVA (3 groups) | f = 0.1 / 0.25 / 0.4 | 322 / 52 / 21 per group |
+| Pearson r | r = 0.1 / 0.3 / 0.5 | 781 / 84 / 28 total |
+| Chi-squared (df = 1) | w = 0.1 / 0.3 / 0.5 | 785 / 88 / 32 total |
+
+If the researcher does not know the expected effect size, help them estimate from the literature, from the minimum clinically / practically meaningful difference in their field, or default to "medium."
+
+Use **bold** for key terms, \`backticks\` for variable names, and fenced code blocks for runnable code. Be concise — bullet points and short paragraphs over walls of text.`
+}
+
+function _statsGreeting() {
+  const L = _statsChatLang==='python'?'Python':_statsChatLang==='spss'?'SPSS':'R'
+  return `Hello! I'm **Dr. Stats**, your personal statistician.\n\nTell me about your study and I'll help you:\n- Choose the right statistical test for your design\n- Plan your sample size with proper power analysis\n- Identify assumptions to verify before the analysis\n- Write ready-to-run **${L}** code\n\nWhat's your research question?`
+}
+
+function _statsRenderMD(text) {
+  if (!text) return ''
+  try {
+    if (typeof marked !== 'undefined') {
+      const r = new marked.Renderer()
+      r.code      = (code, lang) => `<pre class="bg-slate-900 text-slate-200 rounded-lg p-3 my-2 overflow-x-auto text-xs font-mono leading-relaxed"><code>${code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</code></pre>`
+      r.codespan  = c => `<code class="bg-slate-100 text-indigo-700 rounded px-1 py-0.5 text-xs font-mono">${c}</code>`
+      r.heading   = (t) => `<p class="font-semibold text-slate-800 mt-3 mb-1">${t}</p>`
+      r.paragraph = t => `<p class="mb-2 last:mb-0 leading-relaxed">${t}</p>`
+      r.list      = (body, ordered) => ordered
+        ? `<ol class="list-decimal ml-5 mb-2 space-y-0.5">${body}</ol>`
+        : `<ul class="list-disc ml-5 mb-2 space-y-0.5">${body}</ul>`
+      r.listitem  = t => `<li>${t}</li>`
+      r.strong    = t => `<strong class="font-semibold text-slate-800">${t}</strong>`
+      r.em        = t => `<em class="italic">${t}</em>`
+      r.blockquote= t => `<blockquote class="border-l-2 border-indigo-300 pl-3 text-slate-500 italic my-2">${t}</blockquote>`
+      r.hr        = () => `<hr class="border-slate-200 my-3"/>`
+      r.table     = (header, body) => `<div class="overflow-x-auto my-2"><table class="text-xs border-collapse w-full">${header}${body}</table></div>`
+      r.tablerow  = c => `<tr class="border-b border-slate-200">${c}</tr>`
+      r.tablecell = (c, {header}) => header
+        ? `<th class="text-left px-2 py-1 font-semibold bg-slate-50">${c}</th>`
+        : `<td class="px-2 py-1">${c}</td>`
+      const parseFn = typeof marked.parse === 'function' ? marked.parse.bind(marked) : marked
+      return parseFn(text, { renderer: r })
+    }
+  } catch(e) {}
+  return esc(text).replace(/\n/g,'<br/>')
+}
+
+function _statsRenderMsgs() {
+  const msgs = [{ role:'assistant', content: _statsGreeting() }, ..._statsChatHistory]
+  if (_statsChatLoading) msgs.push({ role:'assistant', loading: true })
+  return msgs.map(m => {
+    if (m.role === 'user') return `
+      <div class="flex justify-end">
+        <div class="max-w-sm bg-indigo-600 text-white rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm leading-relaxed" style="white-space:pre-wrap">${esc(m.content)}</div>
+      </div>`
+    return `
+      <div class="flex gap-2.5 items-start">
+        <div class="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0 text-xs mt-0.5">🎓</div>
+        <div class="flex-1 bg-white border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3 text-sm text-slate-700 min-w-0" style="overflow-wrap:break-word">
+          ${m.loading
+            ? `<span class="text-slate-400 italic text-xs">Dr. Stats is thinking…</span>`
+            : _statsRenderMD(m.content)}
+        </div>
+      </div>`
+  }).join('')
+}
+
+function _utilRenderChat() {
+  const hasAI = typeof _aiAvailable === 'function' ? _aiAvailable() : false
+  return `
+  <div class="max-w-3xl mx-auto flex flex-col gap-3">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <span class="text-xs text-slate-400">Code:</span>
+        ${[['r','R'],['python','Python'],['spss','SPSS']].map(([id,lbl])=>`
+        <button onclick="_statsChatLang='${id}';_rerenderRTool()"
+          class="px-2.5 py-1 rounded text-xs font-medium transition-colors
+            ${_statsChatLang===id?'bg-indigo-600 text-white':'bg-slate-100 text-slate-500 hover:bg-slate-200'}">
+          ${lbl}
+        </button>`).join('')}
+      </div>
+      <button onclick="_statsNewConv()"
+        class="text-xs text-slate-400 hover:text-slate-600 transition-colors">
+        ↺ New conversation
+      </button>
+    </div>
+
+    <div id="stats-chat-msgs" class="space-y-3 overflow-y-auto pr-1"
+         style="height:min(calc(100vh - 340px),500px);min-height:280px">
+      ${_statsRenderMsgs()}
+    </div>
+
+    ${hasAI ? `
+    <div class="border border-slate-200 rounded-xl bg-white overflow-hidden shadow-sm">
+      <textarea id="stats-chat-inp" rows="3"
+        placeholder="Describe your study design, research question, or ask anything about statistics…"
+        onkeydown="if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){_statsSend();event.preventDefault()}"
+        class="w-full px-4 pt-3 pb-1 text-sm text-slate-700 resize-none focus:outline-none placeholder:text-slate-300"></textarea>
+      <div class="flex items-center justify-between px-3 pb-2.5 pt-1">
+        <span class="text-xs text-slate-300">Ctrl+Enter to send</span>
+        <button id="stats-send-btn" onclick="_statsSend()"
+          class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors">
+          Send →
+        </button>
+      </div>
+    </div>
+    ` : `
+    <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-700">
+      <strong>Odysseus AI required.</strong> Start Odysseus in Settings → AI to enable the chat assistant.
+    </div>
+    `}
+  </div>`
+}
+
+async function _statsSend() {
+  const inp  = document.getElementById('stats-chat-inp')
+  const text = inp?.value?.trim()
+  if (!text || _statsChatLoading) return
+  if (typeof _aiAvailable === 'function' && !_aiAvailable()) {
+    showToast('Start Odysseus in Settings to use AI chat', 'error'); return
+  }
+
+  _statsChatHistory.push({ role: 'user', content: text })
+  if (inp) inp.value = ''
+  _statsChatLoading = true
+
+  // Partial update — refresh messages only, preserves the textarea
+  const msgEl = document.getElementById('stats-chat-msgs')
+  if (msgEl) { msgEl.innerHTML = _statsRenderMsgs(); _statsScrollEnd() }
+  const btn = document.getElementById('stats-send-btn')
+  if (btn) { btn.disabled = true; btn.textContent = '…' }
+
+  try {
+    const messages = [
+      { role: 'system', content: _STATS_SYS(_statsChatLang) },
+      ..._statsChatHistory
+    ]
+    const res = await api.odysseusChat({ messages })
+    const reply = res?.response || res?.content || res?.message || '⚠️ No response received.'
+    _statsChatHistory.push({ role: 'assistant', content: reply })
+  } catch(e) {
+    _statsChatHistory.push({ role: 'assistant', content: '⚠️ Connection error — please try again.' })
+  }
+
+  _statsChatLoading = false
+
+  const msgEl2 = document.getElementById('stats-chat-msgs')
+  if (msgEl2) { msgEl2.innerHTML = _statsRenderMsgs(); _statsScrollEnd() }
+  const btn2 = document.getElementById('stats-send-btn')
+  if (btn2) { btn2.disabled = false; btn2.textContent = 'Send →' }
+}
+
+function _statsScrollEnd() {
+  setTimeout(() => {
+    const el = document.getElementById('stats-chat-msgs')
+    if (el) el.scrollTop = el.scrollHeight
+  }, 30)
+}
+
+function _statsNewConv() {
+  _statsChatHistory = []
+  _statsChatLoading = false
+  _rerenderRTool()
 }
