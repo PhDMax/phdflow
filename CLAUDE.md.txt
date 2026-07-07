@@ -1,3 +1,45 @@
+## Session summary — v0.25.1 (July 2026)
+
+### Released
+PhDFlow v0.25.1 — Stats Assistant overhaul + favorites deduplication.
+
+### Changes this session
+
+#### Fixed: Favorites deduplication
+Tools starred to the ⭐ Favorites section now appear **only** there and not
+again in their original sidebar section (Workspace/Tools/Feeds). Fixed by
+building a `favSet` in `renderSidebar()` before the section loop and
+filtering with `sectionIds.has(id) && !favSet.has(id)`.
+
+#### Added: Stats Assistant (replaces R Assistant)
+The "R Assistant" was fully reworked into a three-tab Stats Assistant:
+
+1. **💬 Chat tab** — Dr. Stats, a chat-based consulting statistician powered
+   by Odysseus. Maintains `_statsChatHistory` client-side and passes the full
+   history + a ~40-line system prompt on every call. Partial DOM updates
+   preserve the textarea while waiting for an AI response.
+
+2. **📊 Test Selector tab** — the original guided decision-tree wizard,
+   unchanged except for the new language toggle.
+
+3. **⚡ Power tab** — G*Power-style power calculator implemented in vanilla JS
+   (no external libraries). Supports independent t-test, one-sample/paired
+   t-test, one-way ANOVA, correlation, chi-squared, and multiple regression.
+   Solves for N, power, or effect size. Statistical math: regularized
+   incomplete beta (Lentz continued fraction), non-central chi-squared
+   (Poisson mixture series), exact t-quantiles (bisection).
+
+#### Added: Multi-language code output
+Code snippets in the Test Selector tab are now available in **R** (original),
+**Python** (scipy / pingouin / statsmodels / sklearn), and **SPSS** syntax.
+New `PYTHON_RESULTS` and `SPSS_RESULTS` objects cover all 20 test types.
+A language toggle (R | Python | SPSS) sits above the code panel.
+
+Wiki updated: `Utilities.md` (Stats Assistant section rewritten), `Home.md`
+(Utilities row description updated).
+
+---
+
 ## Session summary — v0.25.0 (June 2026)
 
 ### Released
