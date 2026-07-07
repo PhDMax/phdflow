@@ -227,9 +227,19 @@ The only outbound connections are:
     console.error('Usage: node scripts/release.mjs [patch|minor|major]'); process.exit(1)
   }
 
-  // 1. Load token early so we fail fast if missing
+  // 1. Load token early and validate it against the GitHub API before doing any work
   const token = loadToken()
   console.log('✓ GitHub token loaded')
+  const authCheck = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}`, {
+    headers: ghHeaders(token),
+  })
+  if (!authCheck.ok) {
+    const body = await authCheck.text()
+    console.error(`✗ GitHub token validation failed (${authCheck.status}): ${body}`)
+    console.error('  Update your GITHUB_TOKEN in .env and try again.')
+    process.exit(1)
+  }
+  console.log('✓ GitHub token validated')
 
   // 2. Check working tree (untracked files are fine, only block on modified/staged)
   const dirty = run('git status --porcelain', { silent: true })
@@ -327,7 +337,16 @@ ${changelog}
   ]
   for (const asset of assets) {
     if (!existsSync(asset)) { console.warn(`  ⚠  Not found, skipping: ${asset}`); continue }
-    await uploadAsset(release.upload_url, asset, token)
+    try {
+      await uploadAsset(release.upload_url, asset, token)
+    } catch (uploadErr) {
+      console.error(`\n✗  Asset upload failed: ${uploadErr.message}`)
+      console.error('  The release was created and the build is done.')
+      console.error('  To upload the remaining assets, run:')
+      console.error('    node scripts/publish.mjs')
+      console.error('  (reads .env automatically, skips assets already uploaded)')
+      process.exit(1)
+    }
   }
 
   console.log(`\n✅  PhDFlow v${newVersion} published!\n   ${release.html_url}\n`)
