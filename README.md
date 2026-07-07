@@ -23,7 +23,7 @@ All data stays on your device. No account required. No API keys needed.
 - 📄 **PDF Tools** — Merge, split, rotate, watermark, crop, OCR and more
 - ✏️ **Citations** — Format references and count words
 - ⚗️ **Unit Converter** — Convert scientific units with history
-- 📊 **R Assistant** — Step-by-step guide to R statistical tests
+- 📊 **Stats Assistant** — Statistical test selector + power analysis (R · Python · SPSS)
 
 ### Feeds
 - 📡 **Literature Feed** — Daily paper feed from arXiv & OpenAlex
@@ -34,13 +34,13 @@ All data stays on your device. No account required. No API keys needed.
 
 ## 📥 Installation
 
-1. Download **PhDFlow Setup 0.25.0.exe** from the [latest release](../../releases/latest) and run it
+1. Download **PhDFlow Setup 0.25.1.exe** from the [latest release](../../releases/latest) and run it
 2. Create your account on first launch — everything stays on your device
 
 > Windows SmartScreen may warn on first run — click **More info → Run anyway**
 
 ### Portable version
-**PhDFlow-Portable-0.25.0.exe** — runs without installing, useful for USB drives or restricted machines.
+**PhDFlow-Portable-0.25.1.exe** — runs without installing, useful for USB drives or restricted machines.
 
 ---
 
@@ -69,8 +69,18 @@ npm run build          # Produces dist/PhDFlow-Setup-x.x.x.exe
 
 ## 📋 Changelog
 
-### v0.25.0
-- feat: projects +2 views, app shell
+### v0.25.1
+- feat: utilities
+- chore: session updates
+- chore: remove agents/ from public repo
+- feat(agents): workspace + feed + implement workflow
+- feat(agents): rework all agents to ChatDev quality + add CTO & Principal Engineer
+- fix(agents): respect Ollama's VRAM safety margin, bound context + output
+- fix(agents): force full GPU offload + unicode-safe session save
+- feat(agents): switch dev agent CLI from Odysseus to local Ollama
+- feat: working multi-agent dev CLI via Odysseus
+- chore: ignore Playwright output and agent sessions
+- feat: Playwright test suite + multi-agent dev assistant
 - chore: session updates
 
 ---
